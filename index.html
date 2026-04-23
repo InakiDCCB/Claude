@@ -7,3 +7,1176 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 
   <style>
+  /* ════════════════════════════════════════════════════════════════════════
+     SECCIÓN 1 — DEFINICIÓN DE COLORES Y GENERALIDADES
+     Variables CSS globales, reset, body, fondo de rejilla y gradiente ambiental
+  ════════════════════════════════════════════════════════════════════════ */
+
+  :root {
+    /* Fondos */
+    --bg:      #08090c;       /* fondo principal (negro profundo) */
+    --bg2:     #0e1014;       /* fondo de tarjetas */
+    --border:  rgba(255,255,255,0.06);
+    --border2: rgba(255,255,255,0.10);
+
+    /* Tipografía */
+    --text:    #dde1ec;       /* texto principal */
+    --text2:   #6e7888;       /* subtítulos / texto secundario */
+    --white:   #ffffff;
+    --muted:   #3e4452;       /* texto muy tenue / etiquetas de fondo */
+
+    /* Colores de estado del mercado */
+    --green:   #3db87a;       /* mercado abierto */
+    --yellow:  #e8c130;       /* pre-market / after-hours */
+    --red:     #d95f5f;       /* cerrado */
+
+    /* Colores decorativos */
+    --gold:    #c9a84c;
+    --gold2:   #e8c97a;
+    --olive2:  #99ac78;
+    --dollar:  #85bb65;       /* verde dólar — se usa en "Exchange" del título */
+
+    /* Colores por mercado — sincronizados con los TRACKS del canvas (§5) */
+    --nyse:    #c8d4e8;       /* plateado acero */
+    --lse:     #5090e0;       /* azul real */
+    --hkex:    #cc1020;       /* rojo sangre */
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 3rem 1.5rem 4rem;
+    position: relative; overflow-x: hidden;
+  }
+
+  /* Rejilla de fondo sutil */
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(61,184,122,0.018) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(61,184,122,0.018) 1px, transparent 1px);
+    background-size: 44px 44px;
+    pointer-events: none; z-index: 0;
+  }
+
+  /* Gradiente ambiental verde en la parte superior */
+  body::after {
+    content: ''; position: fixed; top: -180px; left: 50%;
+    transform: translateX(-50%);
+    width: 700px; height: 380px;
+    background: radial-gradient(ellipse, rgba(61,184,122,0.05) 0%, transparent 70%);
+    pointer-events: none; z-index: 0;
+  }
+
+  .container { position: relative; z-index: 1; max-width: 900px; width: 100%; }
+
+  /* Animaciones de entrada */
+  @keyframes fadeDown { from { opacity: 0; transform: translateY(-14px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes fadeUp   { from { opacity: 0; transform: translateY(18px);  } to { opacity: 1; transform: translateY(0); } }
+  @keyframes pulse    { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+
+  /* ════════════════════════════════════════════════════════════════════════
+     SECCIÓN 2 — TÍTULO PRINCIPAL Y BADGE DE USO DE API KEY
+     Header centrado con tipografía Playfair + badge fijo Alpha Vantage
+  ════════════════════════════════════════════════════════════════════════ */
+
+  /* Header principal */
+  header { text-align: center; margin-bottom: 2.5rem; animation: fadeDown 0.8s ease both; }
+  .label-top { font-family: 'DM Mono', monospace; font-size: 0.68rem; letter-spacing: 0.28em; color: var(--olive2); text-transform: uppercase; margin-bottom: 0.75rem; }
+  header h1  { font-family: 'Playfair Display', serif; font-size: clamp(1.9rem, 5vw, 3rem); font-weight: 700; color: var(--white); line-height: 1.1; }
+  header h1 .word-exchange { color: var(--dollar); }   /* ← verde dólar */
+  header p   { margin-top: 0.75rem; color: var(--text2); font-size: 0.88rem; font-weight: 300; }
+
+
+  /* ════════════════════════════════════════════════════════════════════════
+     SECCIÓN 3 — TARJETA DE HORA DE MÉXICO
+     Mini-card con hora local de CDMX, fecha actual y acento dorado
+  ════════════════════════════════════════════════════════════════════════ */
+
+  .top-row { display: flex; justify-content: center; margin-bottom: 1.2rem; animation: fadeDown 0.8s 0.08s ease both; }
+
+  .mini-card { background: var(--bg2); border: 1px solid var(--border2); border-radius: 14px; padding: 1rem 1.25rem; position: relative; overflow: hidden; }
+
+  /* Acento vertical dorado a la izquierda */
+  .cdmx-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: linear-gradient(180deg, var(--gold), transparent); border-radius: 0 2px 2px 0; }
+  /* Brillo ambiental dorado en el lado derecho */
+  .cdmx-card::after  { content: ''; position: absolute; right: -20px; top: 50%; transform: translateY(-50%); width: 120px; height: 120px; background: radial-gradient(ellipse, rgba(201,168,76,0.10) 0%, transparent 70%); pointer-events: none; }
+
+  .cdmx-top       { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem; }
+  .cdmx-flag      { font-size: 1.2rem; line-height: 1; }
+  .cdmx-label-txt { font-family: 'DM Mono', monospace; font-size: 0.58rem; letter-spacing: 0.2em; color: var(--gold); text-transform: uppercase; }
+  .cdmx-name-txt  { font-size: 0.78rem; color: var(--text2); }
+  .cdmx-time      { font-family: 'DM Mono', monospace; font-size: 1.7rem; font-weight: 500; color: var(--gold2); letter-spacing: -0.02em; text-shadow: 0 0 18px rgba(201,168,76,0.35); line-height: 1; }
+  .cdmx-date      { font-family: 'DM Mono', monospace; font-size: 0.64rem; color: var(--text2); margin-top: 0.25rem; }
+
+
+  /* ════════════════════════════════════════════════════════════════════════
+     SECCIÓN 4 — FILA DE RELOJES: NEW YORK · LONDON · HONG KONG
+     Tres mini-cards side-by-side, cada una con la hora local de la ciudad
+     y un acento de color propio del mercado (NYSE plateado, LSE azul, HKEX rojo)
+  ════════════════════════════════════════════════════════════════════════ */
+
+  /* La fila de relojes usa el mismo .top-row pero con 4 columnas */
+  .clocks-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem; animation: fadeDown 0.8s 0.12s ease both; }
+  @media (max-width: 600px) { .clocks-row { grid-template-columns: 1fr; } }
+
+  /* Tarjeta genérica de reloj de ciudad */
+  .city-clock-card { background: var(--bg2); border: 1px solid var(--border2); border-radius: 14px; padding: 1rem 1.25rem; position: relative; overflow: hidden; }
+
+  /* Acento vertical izquierdo — color por mercado */
+  .city-clock-card.nyse-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: linear-gradient(180deg, var(--nyse), transparent); border-radius: 0 2px 2px 0; }
+  .city-clock-card.lse-card::before  { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: linear-gradient(180deg, var(--lse),  transparent); border-radius: 0 2px 2px 0; }
+  .city-clock-card.hkex-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: linear-gradient(180deg, var(--hkex), transparent); border-radius: 0 2px 2px 0; }
+
+  /* Brillo ambiental tenue en la esquina derecha */
+  .city-clock-card.nyse-card::after { content: ''; position: absolute; right: -20px; top: 50%; transform: translateY(-50%); width: 100px; height: 100px; background: radial-gradient(ellipse, rgba(200,212,232,0.07) 0%, transparent 70%); pointer-events: none; }
+  .city-clock-card.lse-card::after  { content: ''; position: absolute; right: -20px; top: 50%; transform: translateY(-50%); width: 100px; height: 100px; background: radial-gradient(ellipse, rgba(80,144,224,0.07) 0%, transparent 70%);  pointer-events: none; }
+  .city-clock-card.hkex-card::after { content: ''; position: absolute; right: -20px; top: 50%; transform: translateY(-50%); width: 100px; height: 100px; background: radial-gradient(ellipse, rgba(204,16,32,0.07)  0%, transparent 70%);  pointer-events: none; }
+
+  .city-top       { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem; }
+  .city-flag      { font-size: 1.2rem; line-height: 1; }
+  .city-label-txt { font-family: 'DM Mono', monospace; font-size: 0.56rem; letter-spacing: 0.2em; text-transform: uppercase; }
+  .nyse-card .city-label-txt { color: var(--nyse); }
+  .lse-card  .city-label-txt { color: var(--lse);  }
+  .hkex-card .city-label-txt { color: var(--hkex); }
+  .city-name-txt  { font-size: 0.76rem; color: var(--text2); }
+
+  /* Hora grande — color propio del mercado */
+  .city-time { font-family: 'DM Mono', monospace; font-size: 1.55rem; font-weight: 500; letter-spacing: -0.02em; line-height: 1; }
+  .nyse-card .city-time { color: var(--nyse); text-shadow: 0 0 18px rgba(200,212,232,0.25); }
+  .lse-card  .city-time { color: var(--lse);  text-shadow: 0 0 18px rgba(80,144,224,0.25);  }
+  .hkex-card .city-time { color: var(--hkex); text-shadow: 0 0 18px rgba(204,16,32,0.25);   }
+
+  .city-date { font-family: 'DM Mono', monospace; font-size: 0.62rem; color: var(--text2); margin-top: 0.25rem; }
+
+
+  /* ════════════════════════════════════════════════════════════════════════
+     SECCIÓN 5 — GRÁFICA CIRCULAR DE RELOJ (DIVER WATCH)
+     Canvas 480×480 con tres anillos (NYSE exterior · LSE medio · HKEX interior),
+     ticks de 15 min, numerales cada 3 h, manecilla GMT y tooltip interactivo.
+     Al pasar el cursor sobre un arco, ese arco se resalta y los demás se atenúan.
+  ════════════════════════════════════════════════════════════════════════ */
+
+  .chart-wrap {
+    margin-bottom: 2rem;
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 16px; padding: 1.75rem 1.75rem 1.5rem;
+    display: flex; flex-direction: column; align-items: center;
+    animation: fadeUp 0.8s 0.15s ease both;
+  }
+  .chart-title { font-family: 'DM Mono', monospace; font-size: 0.65rem; letter-spacing: 0.22em; color: var(--muted); text-transform: uppercase; margin-bottom: 1.25rem; }
+
+  /* Contenedor relativo del canvas — requerido para posicionar el tooltip */
+  .canvas-wrap  { position: relative; display: inline-block; }
+  #marketClock  { display: block; max-width: 100%; cursor: crosshair; }
+
+  /* Tooltip flotante al hacer hover sobre un arco del reloj */
+  #chartTooltip {
+    position: absolute; pointer-events: none;
+    background: #131720; border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px; padding: 0.5rem 0.75rem;
+    font-family: 'DM Mono', monospace; font-size: 0.7rem; color: var(--text);
+    white-space: nowrap; display: none; z-index: 10;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    transform: translate(-50%, -120%);
+  }
+  #chartTooltip .tt-market { font-weight: 700; font-size: 0.78rem; margin-bottom: 0.2rem; }
+  #chartTooltip .tt-status { margin-bottom: 0.15rem; }
+  #chartTooltip .tt-time   { color: var(--text2); }
+
+  /* Leyenda de tipos de sesión */
+  .chart-legend { display: flex; gap: 1.8rem; margin-top: 1.4rem; flex-wrap: wrap; justify-content: center; }
+  .legend-item  { display: flex; align-items: center; gap: 0.5rem; font-family: 'DM Mono', monospace; font-size: 0.68rem; color: var(--text2); }
+  .legend-dot   { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+
+  /* Leyenda de colores por mercado (sincronizada con los TRACKS del canvas) */
+  .chart-market-legend { display: flex; gap: 1.5rem; margin-top: 0.75rem; flex-wrap: wrap; justify-content: center; }
+  .market-legend-item  { display: flex; align-items: center; gap: 0.5rem; font-family: 'DM Mono', monospace; font-size: 0.68rem; }
+  .market-legend-bar   { width: 22px; height: 8px; border-radius: 3px; }
+
+
+  /* ════════════════════════════════════════════════════════════════════════
+     SECCIÓN 6 — TARJETAS DE HORARIOS (NYSE · LSE · HKEX)
+     Grid de tres tarjetas. Cada una muestra hora local en vivo, fecha,
+     horarios de sesiones y badge de estado. El hover emite un glow
+     del color correspondiente al estado actual del mercado.
+     6.1 NYSE / 6.2 LSE / 6.3 HKEX — generadas dinámicamente por buildCards()
+  ════════════════════════════════════════════════════════════════════════ */
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.2rem; }
+
+  .card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 16px; padding: 1.7rem;
+    position: relative; overflow: hidden;
+    transition: transform 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease;
+    animation: fadeUp 0.8s ease both;
+  }
+  .card:nth-child(1) { animation-delay: 0.15s; }
+  .card:nth-child(2) { animation-delay: 0.25s; }
+  .card:nth-child(3) { animation-delay: 0.35s; }
+
+  /* Barra superior de color — siempre visible, cambia según estado */
+  .card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, transparent, var(--yellow), transparent); /* default: amarillo */
+    transition: background 0.3s;
+  }
+  .card.open::before          { background: linear-gradient(90deg, transparent, var(--green),          transparent); }
+  .card.closed-market::before { background: linear-gradient(90deg, transparent, rgba(200,60,60,0.5),   transparent); }
+  .card.premarket-card::before { background: linear-gradient(90deg, transparent, var(--yellow),        transparent); }
+
+  /* Hover: la tarjeta sube y emite glow del color de su estado actual */
+  .card:hover                 { transform: translateY(-5px); border-color: rgba(255,255,255,0.12); }
+  .card.open:hover            { box-shadow: 0 16px 40px rgba(61,184,122,0.18),  0 0 0 1px rgba(61,184,122,0.2); }
+  .card.closed-market:hover   { box-shadow: 0 16px 40px rgba(200,60,60,0.14),   0 0 0 1px rgba(200,60,60,0.18); }
+  .card.premarket-card:hover  { box-shadow: 0 16px 40px rgba(232,193,48,0.18),  0 0 0 1px rgba(232,193,48,0.2); }
+
+  /* En hover, la barra cambia al color propio de ese mercado */
+  .card[data-market="NYSE"]:hover::before { background: linear-gradient(90deg, transparent, var(--nyse), transparent); }
+  .card[data-market="LSE"]:hover::before  { background: linear-gradient(90deg, transparent, var(--lse),  transparent); }
+  .card[data-market="HKEX"]:hover::before { background: linear-gradient(90deg, transparent, var(--hkex), transparent); }
+
+  /* Elementos internos de la tarjeta */
+  .card-flag    { font-size: 1.9rem; margin-bottom: 0.7rem; }
+  .card-city    { font-family: 'DM Mono', monospace; font-size: 0.62rem; letter-spacing: 0.2em; color: var(--muted); text-transform: uppercase; margin-bottom: 0.25rem; }
+  .card-name    { font-family: 'Playfair Display', serif; font-size: 1.32rem; font-weight: 600; color: var(--white); margin-bottom: 1.1rem; }
+  .local-time   { font-family: 'DM Mono', monospace; font-size: 2.1rem; font-weight: 500; color: var(--white); letter-spacing: -0.02em; margin-bottom: 0.2rem; }
+  .local-date   { font-size: 0.78rem; color: var(--text2); margin-bottom: 1.4rem; }
+  .divider      { height: 1px; background: var(--border); margin-bottom: 1.1rem; }
+
+  .schedule-row   { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.55rem; }
+  .schedule-label { font-size: 0.76rem; color: var(--text2); }
+  .schedule-time  { font-family: 'DM Mono', monospace; font-size: 0.8rem; color: var(--text); }
+
+  /* Badge de estado con punto pulsante */
+  .status     { display: inline-flex; align-items: center; gap: 0.4rem; margin-top: 1.2rem; padding: 0.38rem 0.85rem; border-radius: 99px; font-size: 0.73rem; font-weight: 500; letter-spacing: 0.05em; font-family: 'DM Mono', monospace; }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+  .status.open      { background: rgba(61,184,122,0.09);  color: var(--green);  border: 1px solid rgba(61,184,122,0.22); }
+  .status.open .status-dot      { background: var(--green);  box-shadow: 0 0 5px var(--green);           animation: pulse 1.5s infinite; }
+  .status.closed    { background: rgba(180,40,40,0.15);   color: #f07070;       border: 1px solid rgba(200,60,60,0.35); }
+  .status.closed .status-dot    { background: #e05050;    box-shadow: 0 0 6px rgba(220,60,60,0.7); }
+  .status.premarket { background: rgba(232,193,48,0.10);  color: var(--yellow); border: 1px solid rgba(232,193,48,0.25); }
+  .status.premarket .status-dot { background: var(--yellow);                                              animation: pulse 2s infinite; }
+
+  .tz-note { font-size: 0.67rem; color: var(--muted); margin-top: 0.45rem; font-family: 'DM Mono', monospace; }
+
+
+  /* ════════════════════════════════════════════════════════════════════════
+     SECCIÓN 7 — MARKET HOLIDAYS & EARLY CLOSES
+     Grid de tres tarjetas (una por mercado), cada una con dos pestañas:
+     "Holidays" (datos de la API Calendarific) y "Early closes" (hardcodeados).
+     Todo el contenido interior alineado a la derecha.
+     7.1 NYSE / 7.2 LSE / 7.3 HKEX — generadas por renderHolidayCards()
+  ════════════════════════════════════════════════════════════════════════ */
+
+  .holiday-section       { margin-top: 2rem; animation: fadeUp 0.8s 0.4s ease both; }
+  .holiday-section-title { font-family: 'DM Mono', monospace; font-size: 0.65rem; letter-spacing: 0.22em; color: var(--muted); text-transform: uppercase; margin-bottom: 1rem; }
+  .holiday-grid          { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 1rem; }
+
+  .holiday-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+
+  /* Cabecera de la tarjeta de festivos */
+  .holiday-card-header        { padding: 0.85rem 1.1rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 0.6rem; }
+  .holiday-card-header .hflag { font-size: 1.1rem; }
+  .holiday-card-header .hname { font-family: 'Playfair Display', serif; font-size: 0.95rem; color: var(--white); font-weight: 600; }
+  .holiday-card-header .hacro { font-family: 'DM Mono', monospace; font-size: 0.62rem; color: var(--muted); margin-left: auto; }
+
+  /* Pestañas Holidays / Early closes */
+  .holiday-tabs { display: flex; border-bottom: 1px solid var(--border); }
+  .holiday-tab  { flex: 1; padding: 0.5rem; font-family: 'DM Mono', monospace; font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); text-align: center; cursor: pointer; transition: color 0.2s, background 0.2s; border: none; background: none; }
+  .holiday-tab.active { color: var(--green); background: rgba(61,184,122,0.07); border-bottom: 2px solid var(--green); }
+
+  /* Lista de festivos — contenido alineado a la derecha */
+  .holiday-list { padding: 0.5rem 0; max-height: 340px; overflow-y: auto; }
+  .holiday-list::-webkit-scrollbar       { width: 4px; }
+  .holiday-list::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
+
+  .holiday-row { display: flex; justify-content: flex-end; align-items: center; padding: 0.45rem 1.1rem; gap: 0.6rem; transition: background 0.15s; }
+  .holiday-row:hover { background: rgba(255,255,255,0.02); }
+  .holiday-date  { font-family: 'DM Mono', monospace; font-size: 0.7rem; color: var(--text2); white-space: nowrap; }
+  .holiday-name  { font-size: 0.78rem; color: var(--text); text-align: right; flex: 1; }
+  .holiday-badge { font-family: 'DM Mono', monospace; font-size: 0.58rem; padding: 0.15rem 0.45rem; border-radius: 4px; flex-shrink: 0; }
+  .holiday-badge.closed { background: rgba(180,40,40,0.15); color: #f07070;       border: 1px solid rgba(200,60,60,0.2); }
+  .holiday-badge.early  { background: rgba(232,193,48,0.10); color: var(--yellow); border: 1px solid rgba(232,193,48,0.2); }
+  .holiday-loading { padding: 1rem 1.1rem; font-family: 'DM Mono', monospace; font-size: 0.72rem; color: var(--muted); animation: pulse 1.5s infinite; text-align: right; }
+
+
+  /* ════════════════════════════════════════════════════════════════════════
+     SECCIÓN 8 — TARJETA CON LINKS A PÁGINAS OFICIALES DE LAS BOLSAS
+     Grid con ticker, nombre completo y enlace externo al sitio de cada bolsa
+  ════════════════════════════════════════════════════════════════════════ */
+
+  .info-box { margin-top: 1.8rem; background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 1.2rem 1.5rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1rem; animation: fadeUp 0.8s 0.5s ease both; }
+  .info-item { display: flex; flex-direction: column; gap: 0.28rem; }
+  .info-item .info-label        { font-family: 'DM Mono', monospace; font-size: 0.6rem; letter-spacing: 0.15em; color: var(--muted); text-transform: uppercase; }
+  .info-item .info-label.ticker { color: var(--gold); }
+  .info-item .info-val { font-size: 0.83rem; color: var(--text); }
+  .info-item a { color: var(--text); text-decoration: none; border-bottom: 1px solid rgba(255,255,255,0.15); transition: color 0.2s, border-color 0.2s; }
+  .info-item a:hover { color: var(--white); border-bottom-color: rgba(255,255,255,0.5); }
+
+  .footer-note { text-align: center; margin-top: 1.8rem; font-size: 0.72rem; color: var(--muted); animation: fadeUp 0.8s 0.6s ease both; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+
+    <!-- ════════════════════════════════════════════════════════════════════
+         SECCIÓN 2 — TÍTULO PRINCIPAL
+    ════════════════════════════════════════════════════════════════════ -->
+    <header>
+      <div class="label-top">Global Financial Markets</div>
+      <h1>World <span class="word-exchange">Exchange</span> Hours</h1>
+      <p>Live local times and market status for the world's major exchanges</p>
+    </header>
+
+    <!-- ════════════════════════════════════════════════════════════════════
+         SECCIÓN 6 — TARJETAS DE HORARIOS (sobre la gráfica)
+         §6.1 NYSE · §6.2 LSE · §6.3 HKEX (generadas por buildCards en JS)
+    ════════════════════════════════════════════════════════════════════ -->
+    <div class="cards" id="cards" style="margin-bottom:2rem;">
+      <!-- Las tres tarjetas se insertan dinámicamente por buildCards() -->
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════════════
+         SECCIÓN 5 — GRÁFICA CIRCULAR DE RELOJ
+         Canvas + tooltip flotante + leyendas de sesión y de mercado
+    ════════════════════════════════════════════════════════════════════ -->
+    <div class="chart-wrap">
+      <div class="chart-title">Market Activity · Mexico City Time (24h)</div>
+
+      <div class="canvas-wrap">
+        <canvas id="marketClock" width="480" height="480"></canvas>
+        <!-- Tooltip que aparece al pasar el cursor sobre un arco del reloj -->
+        <div id="chartTooltip">
+          <div class="tt-market" id="ttMarket"></div>
+          <div class="tt-status" id="ttStatus"></div>
+          <div class="tt-time"   id="ttTime"></div>
+        </div>
+      </div>
+
+      <!-- Leyenda: tipos de sesión -->
+      <div class="chart-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#a8b8cc"></div>Regular session</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#5a6a7a"></div>Pre / After hours</div>
+        <div class="legend-item"><div class="legend-dot" style="background:rgba(255,255,255,0.06)"></div>Closed</div>
+      </div>
+
+      <!-- Leyenda: color por mercado (sincronizados con los TRACKS del canvas) -->
+      <div class="chart-market-legend">
+        <div class="market-legend-item">
+          <div class="market-legend-bar" style="background:#a8b8cc"></div>
+          <span style="color:#c8d4e8;font-family:'DM Mono',monospace;font-size:0.68rem;">NYSE</span>
+        </div>
+        <div class="market-legend-item">
+          <div class="market-legend-bar" style="background:#1a50b0"></div>
+          <span style="color:#5090e0;font-family:'DM Mono',monospace;font-size:0.68rem;">LSE</span>
+        </div>
+        <div class="market-legend-item">
+          <div class="market-legend-bar" style="background:#8b0000"></div>
+          <span style="color:#cc1020;font-family:'DM Mono',monospace;font-size:0.68rem;">HKEX</span>
+        </div>
+      </div>
+    </div><!-- /chart-wrap -->
+
+    <!-- ════════════════════════════════════════════════════════════════════
+         SECCIÓN 7 — MARKET HOLIDAYS & EARLY CLOSES
+         §7.1 NYSE · §7.2 LSE · §7.3 HKEX (generadas por renderHolidayCards en JS)
+    ════════════════════════════════════════════════════════════════════ -->
+    <div class="holiday-section">
+      <div class="holiday-section-title">Market Holidays &amp; Early Closes</div>
+      <div class="holiday-grid" id="holidayGrid">
+        <!-- Las tres tarjetas se insertan dinámicamente por renderHolidayCards() -->
+        <div class="holiday-loading">Loading holidays...</div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════════════
+         SECCIÓN 8 — LINKS A PÁGINAS OFICIALES DE LAS BOLSAS
+    ════════════════════════════════════════════════════════════════════ -->
+    <div class="info-box">
+      <div class="info-item">
+        <span class="info-label ticker">NYSE</span>
+        <span class="info-val"><a href="https://www.nyse.com" target="_blank" rel="noopener">New York Stock Exchange</a></span>
+      </div>
+      <div class="info-item">
+        <span class="info-label ticker">LSE</span>
+        <span class="info-val"><a href="https://www.londonstockexchange.com" target="_blank" rel="noopener">London Stock Exchange</a></span>
+      </div>
+      <div class="info-item">
+        <span class="info-label ticker">HKEX</span>
+        <span class="info-val"><a href="https://www.hkex.com.hk" target="_blank" rel="noopener">Hong Kong Exchanges &amp; Clearing</a></span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Note</span>
+        <span class="info-val">Hours may vary on public holidays</span>
+      </div>
+    </div>
+
+    <p class="footer-note">Clocks auto-update every second</p>
+
+  </div><!-- /container -->
+
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       JAVASCRIPT — ORGANIZADO EN SECCIONES PARALELAS AL HTML/CSS
+
+       §A  Datos de mercados (exchanges[])             → alimenta §6, §7 y §5
+       §B  Funciones de utilidad / helpers             → usadas en todo
+       §C  Festivos — API Calendarific                → §7 (holidays cards)
+       §D  Cálculo de estado del mercado              → §6 (badges) y §5 (canvas)
+       §E  Gráfica circular de reloj (canvas)         → §5
+       §F  Tarjetas de horarios (buildCards)           → §6
+       §G  Tarjetas de festivos (renderHolidayCards)  → §7
+       §H  Tick — actualización cada segundo           → §3, §6, §5
+       §I  Tipo de cambio — Alpha Vantage             → §4
+       §J  Inicialización — arranca toda la app
+  ════════════════════════════════════════════════════════════════════════ -->
+  <script>
+
+  /* ── §A · DATOS DE MERCADOS ───────────────────────────────────────────────
+     Array exchanges[]: cada objeto describe un mercado con:
+       sessions:      horarios en hora LOCAL (para getStatus §D)
+       cdmxSessions:  horarios en hora CDMX (CST = UTC-6) para el canvas §E
+       schedule:      filas de horario para la tarjeta §6
+       earlyCloses:   cierres anticipados hardcodeados
+     ─
+     Offsets de zona horaria usados en cdmxSessions:
+       NYSE (ET)   → CDMX: -1 h (invierno) / 0 h (verano cuando ambos cambian)
+       LSE (GMT)   → CDMX: -6 h (invierno) / -5 h (verano BST)
+       HKEX (HKT)  → CDMX: -14 h (siempre; HKT = UTC+8)
+  ─────────────────────────────────────────────────────────────────────────── */
+  const exchanges = [
+
+    /* §A.1 — NYSE ─────────────────────────────────────────────────────────── */
+    {
+      flag: '🇺🇸', city: 'New York, USA',
+      name: 'New York Stock Exchange', acronym: 'NYSE',
+      tz: 'America/New_York', countryCode: 'US',
+
+      sessions: [
+        { open: { h: 4,  m: 0  }, close: { h: 9,  m: 30 }, key: 'pre'   },
+        { open: { h: 9,  m: 30 }, close: { h: 16, m: 0  }, key: 'open'  },
+        { open: { h: 16, m: 0  }, close: { h: 20, m: 0  }, key: 'after' },
+      ],
+      cdmxSessions: [
+        { oH: 3,  oM: 0,  cH: 8,  cM: 30, key: 'pre'   }, // 04:00–09:30 ET → 03:00–08:30 CDMX
+        { oH: 8,  oM: 30, cH: 15, cM: 0,  key: 'open'  }, // 09:30–16:00 ET → 08:30–15:00 CDMX
+        { oH: 15, oM: 0,  cH: 19, cM: 0,  key: 'after' }, // 16:00–20:00 ET → 15:00–19:00 CDMX
+      ],
+      schedule: [
+        { label: 'Pre-market',      time: '04:00 – 09:30' },
+        { label: 'Regular session', time: '09:30 – 16:00' },
+        { label: 'After-hours',     time: '16:00 – 20:00' },
+        { label: 'Trading days',    time: 'Mon – Fri'      },
+      ],
+      tzLabel: 'Eastern Time (New York)',
+      earlyCloses: [
+        { date: '2025-07-03', name: 'Independence Day Eve', closeTime: '13:00' },
+        { date: '2025-11-28', name: 'Thanksgiving Day',     closeTime: '13:00' },
+        { date: '2025-12-24', name: 'Christmas Eve',        closeTime: '13:00' },
+        { date: '2026-07-03', name: 'Independence Day Eve', closeTime: '13:00' },
+        { date: '2026-11-27', name: 'Thanksgiving Day',     closeTime: '13:00' },
+        { date: '2026-12-24', name: 'Christmas Eve',        closeTime: '13:00' },
+      ],
+    },
+
+    /* §A.2 — LSE ───────────────────────────────────────────────────────────── */
+    {
+      flag: '🇬🇧', city: 'London, United Kingdom',
+      name: 'London Stock Exchange', acronym: 'LSE',
+      tz: 'Europe/London', countryCode: 'GB',
+
+      sessions: [
+        { open: { h: 5,  m: 5  }, close: { h: 7,  m: 50 }, key: 'pre'   }, // Pre-trading
+        { open: { h: 8,  m: 0  }, close: { h: 16, m: 30 }, key: 'open'  }, // Regular
+        { open: { h: 16, m: 40 }, close: { h: 17, m: 15 }, key: 'after' }, // Post-trading
+      ],
+      cdmxSessions: [
+        { oH: 23, oM: 5,  cH: 25, cM: 50, key: 'pre'   }, // 05:05 GMT → 23:05 CDMX (25=01:50 next day)
+        { oH: 2,  oM: 0,  cH: 10, cM: 30, key: 'open'  }, // 08:00 GMT → 02:00 CDMX
+        { oH: 10, oM: 40, cH: 11, cM: 15, key: 'after' }, // 16:40 GMT → 10:40 CDMX
+      ],
+      schedule: [
+        { label: 'Pre-trading',     time: '05:05 – 07:50' },
+        { label: 'Regular session', time: '08:00 – 16:30' },
+        { label: 'Post-trading',    time: '16:40 – 17:15' },
+        { label: 'Trading days',    time: 'Mon – Fri'      },
+      ],
+      tzLabel: 'London Time',
+      earlyCloses: [
+        { date: '2025-12-24', name: 'Christmas Eve', closeTime: '12:30' },
+        { date: '2026-12-24', name: 'Christmas Eve', closeTime: '12:30' },
+      ],
+    },
+
+    /* §A.3 — HKEX ──────────────────────────────────────────────────────────── */
+    {
+      flag: '🇭🇰', city: 'Hong Kong',
+      name: 'Hong Kong Stock Exchange', acronym: 'HKEX',
+      tz: 'Asia/Hong_Kong', countryCode: 'HK',
+
+      sessions: [
+        { open: { h: 9,  m: 30 }, close: { h: 12, m: 0 }, key: 'open' },
+        { open: { h: 13, m: 0  }, close: { h: 16, m: 0 }, key: 'open' },
+      ],
+      // HKEX equities no tienen pre/after hours oficiales
+      // (solo el mercado de futuros tiene sesión nocturna 17:15–23:45 HKT)
+      cdmxSessions: [
+        { oH: 19, oM: 30, cH: 22, cM: 0,  key: 'open' }, // 09:30 HKT → 19:30 CDMX
+        { oH: 23, oM: 0,  cH: 26, cM: 0,  key: 'open' }, // 13:00 HKT → 23:00 CDMX (26=02:00 next day)
+      ],
+      schedule: [
+        { label: 'Morning session',   time: '09:30 – 12:00' },
+        { label: 'Lunch break',       time: '12:00 – 13:00' },
+        { label: 'Afternoon session', time: '13:00 – 16:00' },
+        { label: 'Trading days',      time: 'Mon – Fri'      },
+      ],
+      tzLabel: 'Hong Kong Time',
+      earlyCloses: [],
+    },
+
+  ]; // fin exchanges[]
+
+
+  /* ── §B · FUNCIONES DE UTILIDAD ──────────────────────────────────────────
+     Helpers reutilizados a lo largo de todo el código.
+  ─────────────────────────────────────────────────────────────────────────── */
+
+  /** Devuelve un Date interpretado en la zona horaria indicada */
+  function getLocalDate(tz) {
+    return new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
+  }
+
+  /** Convierte horas y minutos a minutos totales (para comparar rangos) */
+  function toMins(h, m) { return h * 60 + m; }
+
+  /** Devuelve "YYYY-MM-DD" de un objeto Date */
+  function dateKey(d) {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+
+  /** Formatea "YYYY-MM-DD" → "Feb 20, 2026" */
+  function formatDateEn(isoStr) {
+    const [y, m, d] = isoStr.split('-');
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${months[parseInt(m)-1]} ${parseInt(d)}, ${y}`;
+  }
+
+  /** Hora local formateada HH:MM:SS */
+  function formatLocalTime(tz) {
+    return new Date().toLocaleTimeString('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  }
+
+  /** Fecha local formateada "Monday, February 20" */
+  function formatLocalDate(tz) {
+    return new Date().toLocaleDateString('en-US', { timeZone: tz, weekday: 'long', month: 'long', day: 'numeric' });
+  }
+
+
+  /* ── §C · FESTIVOS — Calendarific API ────────────────────────────────────
+     Descarga festivos nacionales de US, GB y HK para el año actual.
+     Los guarda en holidays[cc] (Map de "YYYY-MM-DD" → nombre del festivo).
+     Al terminar dispara renderHolidayCards() para poblar §7.
+  ─────────────────────────────────────────────────────────────────────────── */
+  const CAL_KEY  = 'tkyP91VQoE9UVncvovQhEZ5t7AjEH2cn';
+  const holidays = { US: new Map(), GB: new Map(), HK: new Map() };
+
+  async function fetchHolidays() {
+    const year = new Date().getFullYear();
+    await Promise.all(['US','GB','HK'].map(async cc => {
+      try {
+        const res  = await fetch(`https://calendarific.com/api/v2/holidays?api_key=${CAL_KEY}&country=${cc}&year=${year}&type=national`);
+        const data = await res.json();
+        if (data.response?.holidays) {
+          data.response.holidays.forEach(h =>
+            holidays[cc].set(h.date.iso.substring(0,10), h.name)
+          );
+        }
+      } catch { /* si la API falla los festivos simplemente no se muestran */ }
+    }));
+    renderHolidayCards(); // §G
+  }
+
+  /** Devuelve el nombre del festivo para esa fecha, o null si no lo es */
+  function getHolidayName(cc, localDate) {
+    return holidays[cc]?.get(dateKey(localDate)) ?? null;
+  }
+
+
+  /* ── §D · CÁLCULO DE ESTADO DEL MERCADO ─────────────────────────────────
+     getStatus(ex) → { key: 'open'|'premarket'|'closed', label: string }
+     Considera: horarios de sesión, fines de semana, festivos y cierres anticipados.
+  ─────────────────────────────────────────────────────────────────────────── */
+  function getStatus(ex) {
+    const d   = getLocalDate(ex.tz);
+    const day = d.getDay(); // 0 = domingo, 6 = sábado
+
+    if (day === 0 || day === 6)
+      return { key: 'closed', label: 'Closed (weekend)' };
+
+    const holidayName = getHolidayName(ex.countryCode, d);
+    if (holidayName)
+      return { key: 'closed', label: `Closed — ${holidayName}` };
+
+    const now       = toMins(d.getHours(), d.getMinutes());
+    const todayStr  = dateKey(d);
+    const early     = ex.earlyCloses?.find(e => e.date === todayStr);
+    const earlyMins = early ? toMins(...early.closeTime.split(':').map(Number)) : null;
+
+    for (const s of ex.sessions) {
+      const open  = toMins(s.open.h, s.open.m);
+      const close = (earlyMins && s.key === 'open') ? earlyMins : toMins(s.close.h, s.close.m);
+      if (now >= open && now < close) {
+        if (s.key === 'pre')   return { key: 'premarket', label: 'Pre-market active' };
+        if (s.key === 'after') return { key: 'premarket', label: 'After-hours active' };
+        return { key: 'open', label: early ? `Open · Early close ${early.closeTime}` : 'Open now' };
+      }
+    }
+    return { key: 'closed', label: 'Closed' };
+  }
+
+
+  /* ── §E · GRÁFICA CIRCULAR DE RELOJ (canvas) ────────────────────────────
+     Reloj de 24 h estilo diver-watch centrado en hora CDMX.
+     Tres anillos: NYSE (exterior) · LSE (medio) · HKEX (interior).
+     Incluye: ticks de tiempo, numerales cada 3 h, arcos de sesión,
+     manecilla GMT, etiquetas pill y tooltip interactivo con highlight.
+
+     §E.1  Setup y constantes del canvas
+     §E.2  Definición de los TRACKS (anillos)
+     §E.3  Funciones auxiliares de dibujo
+     §E.4  drawClock() — función principal de renderizado
+     §E.5  Hit-testing y tooltip con highlight al hover
+  ─────────────────────────────────────────────────────────────────────────── */
+
+  /* §E.1 — Setup del canvas con DPR para nitidez en pantallas retina */
+  const canvas = document.getElementById('marketClock');
+  const ctx    = canvas.getContext('2d');
+  const DPR    = window.devicePixelRatio || 1;
+  const SIZE   = 480;
+  canvas.width  = SIZE * DPR;
+  canvas.height = SIZE * DPR;
+  canvas.style.width  = SIZE + 'px';
+  canvas.style.height = SIZE + 'px';
+  ctx.scale(DPR, DPR);
+  const CX = SIZE / 2, CY = SIZE / 2;
+
+  /* §E.2 — Definición de los tres anillos del reloj
+     colorOpen: color intenso → sesión regular
+     colorPre:  color oscuro  → pre-market / after-hours
+     label:     color de la píldora del nombre y del tooltip */
+  const TRACKS = [
+    { acronym: 'NYSE', ex: exchanges[0], rOut: 192, rIn: 150,
+      colorOpen: '#a8b8cc', colorPre: '#3a4858', label: '#c8d4e8' }, // plateado acero
+    { acronym: 'LSE',  ex: exchanges[1], rOut: 145, rIn: 103,
+      colorOpen: '#1a50b0', colorPre: '#0a2050', label: '#5090e0' }, // azul real
+    { acronym: 'HKEX', ex: exchanges[2], rOut: 98,  rIn: 58,
+      colorOpen: '#8b0000', colorPre: '#380000', label: '#cc1020' }, // rojo sangre
+  ];
+  const R_CENTER = 50; // radio del círculo central con el reloj digital
+
+  /* Estado del hover: qué segmento está bajo el cursor (null si ninguno) */
+  let hoveredSeg = null;
+
+  /* §E.3 — Funciones auxiliares de dibujo */
+
+  /** Convierte una hora CDMX en ángulo de canvas (0h=arriba, sentido horario) */
+  function hourAngle(h, m) {
+    return ((h + m / 60) / 24) * Math.PI * 2 - Math.PI / 2;
+  }
+
+  /** Dibuja un arco anular relleno entre dos horas CDMX */
+  function drawArcSegment(rOut, rIn, oH, oM, cH, cM, color) {
+    const a1 = hourAngle(oH, oM);
+    let   a2 = hourAngle(cH % 24, cM);
+    if (a2 <= a1) a2 += Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(CX, CY, rOut, a1, a2, false);
+    ctx.arc(CX, CY, rIn,  a2, a1, true);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+
+  /** Devuelve true si hoy es día hábil para el mercado dado */
+  function isTradingDay(ex) {
+    const cdmxDay = getLocalDate('America/Mexico_City').getDay();
+    if (cdmxDay === 0 || cdmxDay === 6) return false;
+    const localD = getLocalDate(ex.tz);
+    if (getHolidayName(ex.countryCode, localD)) return false;
+    return true;
+  }
+
+  /* §E.4 — drawClock(): renderiza el reloj completo cada segundo */
+  function drawClock() {
+    ctx.clearRect(0, 0, SIZE, SIZE);
+    const R_TICK_OUT = 200; // borde exterior del anillo de ticks
+    const R_TICK_IN  = 196; // borde interior del anillo de ticks
+
+    /* ── Fondo oscuro principal ── */
+    ctx.beginPath();
+    ctx.arc(CX, CY, R_TICK_OUT, 0, Math.PI * 2);
+    ctx.fillStyle = '#08090c'; ctx.fill();
+
+    /* ── Anillo de ticks (ligeramente más claro que el fondo) ── */
+    ctx.beginPath();
+    ctx.arc(CX, CY, R_TICK_OUT, 0, Math.PI * 2);
+    ctx.arc(CX, CY, R_TICK_IN,  0, Math.PI * 2, true);
+    ctx.fillStyle = '#0d0f14'; ctx.fill();
+
+    /* Bordes del anillo */
+    [[R_TICK_OUT, 1.5, 0.18], [R_TICK_IN + 1, 1, 0.12]].forEach(([r, lw, op]) => {
+      ctx.beginPath(); ctx.arc(CX, CY, r, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255,255,255,${op})`; ctx.lineWidth = lw; ctx.stroke();
+    });
+
+    /* ── Ticks de tiempo: 96 posiciones (24 h × 4 = cada 15 min)
+       Hora completa: larga y gruesa | Media hora: media | Cuarto: corta ── */
+    for (let q = 0; q < 96; q++) {
+      const angle  = (q / 96) * Math.PI * 2 - Math.PI / 2;
+      const isHour = q % 4 === 0;
+      const isHalf = q % 2 === 0 && !isHour;
+      const [len, w, col] = isHour ? [32, 3, '#dce8f8']
+                          : isHalf ? [14, 1.5, '#5a6478']
+                          :          [ 6, 0.8, '#333a48'];
+      ctx.beginPath();
+      ctx.moveTo(CX + Math.cos(angle) * (R_TICK_OUT - 1 - len), CY + Math.sin(angle) * (R_TICK_OUT - 1 - len));
+      ctx.lineTo(CX + Math.cos(angle) * (R_TICK_OUT - 1),       CY + Math.sin(angle) * (R_TICK_OUT - 1));
+      ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = 'butt'; ctx.stroke();
+    }
+
+    /* ── Numerales de hora fuera del anillo: 00 03 06 09 12 15 18 21 ── */
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    [0,3,6,9,12,15,18,21].forEach(h => {
+      const angle = (h / 24) * Math.PI * 2 - Math.PI / 2;
+      ctx.font = 'bold 13px DM Mono, monospace'; ctx.fillStyle = '#c8d8ee';
+      ctx.fillText(String(h).padStart(2,'0'),
+        CX + Math.cos(angle) * (R_TICK_OUT + 16),
+        CY + Math.sin(angle) * (R_TICK_OUT + 16));
+    });
+
+    /* ── Fondo del dial con gradiente radial oscuro ── */
+    const dialGrad = ctx.createRadialGradient(CX-20, CY-20, 10, CX, CY, R_TICK_IN);
+    dialGrad.addColorStop(0, '#181c22'); dialGrad.addColorStop(0.6, '#10131a'); dialGrad.addColorStop(1, '#0a0c12');
+    ctx.beginPath(); ctx.arc(CX, CY, R_TICK_IN, 0, Math.PI * 2);
+    ctx.fillStyle = dialGrad; ctx.fill();
+
+    /* ── Slots vacíos de cada anillo (fondo muy tenue para días no hábiles) ── */
+    TRACKS.forEach(t => {
+      ctx.beginPath();
+      ctx.arc(CX, CY, t.rOut, 0, Math.PI * 2);
+      ctx.arc(CX, CY, t.rIn,  0, Math.PI * 2, true);
+      ctx.fillStyle = 'rgba(255,255,255,0.03)'; ctx.fill();
+    });
+
+    /* ── Arcos de sesión con efecto de highlight al hover ──
+       Si hoveredSeg !== null:
+         - el arco hovered se EXPANDE (rOut+8, rIn-8) y se dibuja más brillante
+         - los demás se atenúan al ~20% de alpha para que el resalte destaque */
+    TRACKS.forEach(t => {
+      if (!isTradingDay(t.ex)) return;
+      t.ex.cdmxSessions.forEach(s => {
+        const isHovered = hoveredSeg &&
+          hoveredSeg.market === t.acronym &&
+          hoveredSeg.oH === s.oH && hoveredSeg.oM === s.oM;
+
+        // Decidir radios: expandir si está hovered
+        const expand = isHovered ? 8 : 0;
+        const rO = t.rOut + expand;
+        const rI = t.rIn  - expand;
+
+        // Color base: intenso para open, oscuro para pre/after
+        let color = s.key === 'open' ? t.colorOpen : t.colorPre;
+
+        // Si hay un arco hovered y este NO es el hovered: atenuar mucho
+        if (hoveredSeg && !isHovered) {
+          color = (s.key === 'open' ? t.colorOpen : t.colorPre) + '28'; // ~16% alpha
+        }
+
+        // Dibujar el arco (con posible cruce de medianoche)
+        if (s.cH > 24) {
+          drawArcSegment(rO, rI, s.oH, s.oM, 24, 0, color);
+          drawArcSegment(rO, rI, 0,    0,    s.cH - 24, s.cM, color);
+        } else {
+          drawArcSegment(rO, rI, s.oH, s.oM, s.cH, s.cM, color);
+        }
+
+        // Borde brillante adicional en el arco hovered
+        if (isHovered) {
+          ctx.globalAlpha = 0.45;
+          if (s.cH > 24) {
+            drawArcSegment(rO, rI, s.oH, s.oM, 24, 0, '#ffffff');
+            drawArcSegment(rO, rI, 0,    0,    s.cH - 24, s.cM, '#ffffff');
+          } else {
+            drawArcSegment(rO, rI, s.oH, s.oM, s.cH, s.cM, '#ffffff');
+          }
+          ctx.globalAlpha = 1.0;
+        }
+      });
+    });
+
+    /* ── Ranuras separadoras entre anillos (líneas negras finas) ── */
+    TRACKS.forEach(t => {
+      [t.rOut, t.rIn].forEach(r => {
+        ctx.beginPath(); ctx.arc(CX, CY, r, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 2; ctx.stroke();
+      });
+    });
+
+    /* ── Etiquetas pill giratorias por mercado (en el hueco de cada anillo)
+       Se posicionan en el arco donde no hay sesiones para no taparlas:
+       NYSE: ~23h (gap nocturno) · LSE: ~17h (tarde) · HKEX: ~11h (mañana) ── */
+    [{ t: TRACKS[0], posH: 23 }, { t: TRACKS[1], posH: 17 }, { t: TRACKS[2], posH: 11 }]
+    .forEach(({ t, posH }) => {
+      const rMid  = (t.rOut + t.rIn) / 2;
+      const angle = (posH / 24) * Math.PI * 2 - Math.PI / 2;
+      ctx.save();
+      ctx.translate(CX + Math.cos(angle) * rMid, CY + Math.sin(angle) * rMid);
+      ctx.rotate(angle + Math.PI / 2); // el texto sigue la curvatura del anillo
+      ctx.font = 'bold 13px DM Mono, monospace';
+      const tw = ctx.measureText(t.acronym).width;
+      const pw = tw + 18, ph = 20;
+      ctx.beginPath(); ctx.roundRect(-pw/2, -ph/2, pw, ph, ph/2);
+      ctx.fillStyle = 'rgba(8,9,12,0.88)'; ctx.fill();
+      ctx.strokeStyle = t.label; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = t.label; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(t.acronym, 0, 0.5);
+      ctx.restore();
+    });
+
+    /* ── Manecilla de hora estilo GMT diver (24 h) ──
+       Cuerpo blanco-acero · contrapeso rojo · franja lume central ── */
+    const cdmxNow = getLocalDate('America/Mexico_City');
+    const hh = cdmxNow.getHours(), mm = cdmxNow.getMinutes(), ss = cdmxNow.getSeconds();
+    const nowAngle = (hh * 3600 + mm * 60 + ss) / 86400 * Math.PI * 2 - Math.PI / 2;
+    const handTip  = TRACKS[0].rOut - 6;
+    ctx.save();
+
+    // Contrapeso rojo (cola)
+    ctx.beginPath();
+    ctx.moveTo(CX, CY);
+    ctx.lineTo(CX + Math.cos(nowAngle + Math.PI) * 18, CY + Math.sin(nowAngle + Math.PI) * 18);
+    ctx.strokeStyle = '#ff3c3c'; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.stroke();
+
+    // Cuerpo principal blanco-acero
+    ctx.beginPath();
+    ctx.moveTo(CX + Math.cos(nowAngle + Math.PI) * 18, CY + Math.sin(nowAngle + Math.PI) * 18);
+    ctx.lineTo(CX + Math.cos(nowAngle) * handTip,       CY + Math.sin(nowAngle) * handTip);
+    ctx.strokeStyle = '#e8edf5'; ctx.lineWidth = 3; ctx.stroke();
+
+    // Franja lume (verde pálido semitransparente)
+    ctx.beginPath();
+    ctx.moveTo(CX + Math.cos(nowAngle) * 20,            CY + Math.sin(nowAngle) * 20);
+    ctx.lineTo(CX + Math.cos(nowAngle) * (handTip - 8), CY + Math.sin(nowAngle) * (handTip - 8));
+    ctx.strokeStyle = 'rgba(210,230,200,0.5)'; ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.restore();
+
+    // Pip central
+    ctx.beginPath(); ctx.arc(CX, CY, 6, 0, Math.PI * 2);
+    ctx.fillStyle = '#c8d4e8'; ctx.fill();
+    ctx.strokeStyle = '#1a1e26'; ctx.lineWidth = 2; ctx.stroke();
+
+    /* ── Círculo central con hora digital CDMX ── */
+    const capGrad = ctx.createRadialGradient(CX-3, CY-3, 1, CX, CY, R_CENTER);
+    capGrad.addColorStop(0, '#2e3340'); capGrad.addColorStop(0.6, '#181c22'); capGrad.addColorStop(1, '#0e1014');
+    ctx.beginPath(); ctx.arc(CX, CY, R_CENTER, 0, Math.PI * 2);
+    ctx.fillStyle = capGrad; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.14)'; ctx.lineWidth = 1.5; ctx.stroke();
+
+    const timeStr = `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+    ctx.shadowBlur = 0;
+    ctx.font = 'bold 13px DM Mono, monospace'; ctx.fillStyle = '#e8c97a';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(timeStr, CX, CY - 7);
+    ctx.font = '500 9px DM Sans, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.38)';
+    ctx.fillText('CDMX', CX, CY + 8);
+  } // fin drawClock()
+
+  /* §E.5 — Hit-testing y tooltip con highlight
+     Al mover el ratón sobre el canvas:
+       1. Se calcula si el cursor cae dentro de algún arco de sesión
+       2. Se actualiza hoveredSeg (usado por drawClock para highlight)
+       3. Se muestra/oculta el tooltip con los datos del arco */
+
+  /** Lista plana de todos los segmentos dibujables con sus metadatos */
+  function buildArcSegments() {
+    const segs = [];
+    TRACKS.forEach(t => {
+      t.ex.cdmxSessions.forEach(s => {
+        const sessionLabel = s.key === 'open'  ? 'Regular session'
+                           : s.key === 'pre'   ? 'Pre-market'
+                           :                     'After-hours';
+        segs.push({
+          market:    t.acronym,
+          color:     t.label,
+          rOut:      t.rOut,
+          rIn:       t.rIn,
+          oH: s.oH, oM: s.oM, cH: s.cH, cM: s.cM,
+          label:     sessionLabel,
+          startTxt:  `${String(s.oH % 24).padStart(2,'0')}:${String(s.oM).padStart(2,'0')}`,
+          endTxt:    `${String(s.cH > 24 ? s.cH - 24 : s.cH).padStart(2,'0')}:${String(s.cM).padStart(2,'0')}`,
+          crossesMidnight: s.cH > 24,
+        });
+      });
+    });
+    return segs;
+  }
+
+  /** Devuelve true si el ángulo `a` cae dentro del arco [a1Rad, a2Rad] */
+  function angleInArc(a, a1Rad, a2Rad) {
+    const TAU  = Math.PI * 2;
+    const norm = v => ((v % TAU) + TAU) % TAU;
+    const na  = norm(a), na1 = norm(a1Rad);
+    let   na2 = norm(a2Rad);
+    if (na2 <= na1) na2 += TAU;
+    const nna = na < na1 ? na + TAU : na;
+    return nna >= na1 && nna <= na2;
+  }
+
+  canvas.addEventListener('mousemove', e => {
+    const rect   = canvas.getBoundingClientRect();
+    const mx     = (e.clientX - rect.left) * (SIZE / rect.width);
+    const my     = (e.clientY - rect.top)  * (SIZE / rect.height);
+    const dx     = mx - CX, dy = my - CY;
+    const dist   = Math.sqrt(dx*dx + dy*dy);
+    const tip    = document.getElementById('chartTooltip');
+    const mouseAngle = Math.atan2(dy, dx);
+    let   hit    = null;
+
+    for (const seg of buildArcSegments()) {
+      if (dist < seg.rIn || dist > seg.rOut) continue;
+      const exObj = exchanges.find(ex => ex.acronym === seg.market);
+      if (!exObj || !isTradingDay(exObj)) continue;
+
+      const a1 = (seg.oH + seg.oM / 60) / 24 * Math.PI * 2 - Math.PI / 2;
+      const a2 = ((seg.cH > 24 ? seg.cH - 24 : seg.cH) + seg.cM / 60) / 24 * Math.PI * 2 - Math.PI / 2;
+
+      if (angleInArc(mouseAngle, a1, a2)) { hit = seg; break; }
+
+      // Caso especial: sesión que cruza la medianoche
+      if (seg.crossesMidnight) {
+        const aEnd = ((seg.cH - 24 + seg.cM / 60) / 24) * Math.PI * 2 - Math.PI / 2;
+        if (angleInArc(mouseAngle, a1, Math.PI * 1.5) || angleInArc(mouseAngle, -Math.PI / 2, aEnd)) {
+          hit = seg; break;
+        }
+      }
+    }
+
+    hoveredSeg = hit; // drawClock() leerá esto en el próximo frame
+
+    if (hit) {
+      document.getElementById('ttMarket').textContent = hit.market;
+      document.getElementById('ttMarket').style.color = hit.color;
+      document.getElementById('ttStatus').textContent = hit.label;
+      document.getElementById('ttTime').textContent   = `${hit.startTxt} – ${hit.endTxt} CDMX`;
+      tip.style.display = 'block';
+      const wrapRect = canvas.parentElement.getBoundingClientRect();
+      tip.style.left = (e.clientX - wrapRect.left) + 'px';
+      tip.style.top  = (e.clientY - wrapRect.top)  + 'px';
+    } else {
+      tip.style.display = 'none';
+    }
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    hoveredSeg = null;
+    document.getElementById('chartTooltip').style.display = 'none';
+  });
+
+  /* §E.6 — Loop de animación independiente a 60 fps via requestAnimationFrame
+     El canvas se redibuja en cada frame, desacoplado del tick() de 1 segundo.
+     Esto elimina el retraso del hover: la respuesta visual es inmediata. */
+  function clockLoop() {
+    drawClock();
+    requestAnimationFrame(clockLoop);
+  }
+  requestAnimationFrame(clockLoop);
+
+
+  /* ── §F · TARJETAS DE HORARIOS — buildCards() ────────────────────────────
+     Genera las tarjetas §6.1 NYSE, §6.2 LSE, §6.3 HKEX en el DOM.
+     Cada tarjeta incluye: bandera, hora local en vivo, fecha, schedule
+     y badge de estado. tick() actualiza los valores dinámicos cada segundo.
+  ─────────────────────────────────────────────────────────────────────────── */
+  function buildCards() {
+    const container = document.getElementById('cards');
+    container.innerHTML = '';
+
+    exchanges.forEach((ex, i) => {
+      const status = getStatus(ex);
+      const div    = document.createElement('div');
+      div.className = [
+        'card',
+        status.key === 'open'      ? 'open'          : '',
+        status.key === 'closed'    ? 'closed-market'  : '',
+        status.key === 'premarket' ? 'premarket-card' : '',
+      ].join(' ').trim();
+      div.setAttribute('data-market', ex.acronym);
+      div.id = `card-${i}`;
+
+      const scheduleRows = ex.schedule.map(s => `
+        <div class="schedule-row">
+          <span class="schedule-label">${s.label}</span>
+          <span class="schedule-time">${s.time}</span>
+        </div>`).join('');
+
+      div.innerHTML = `
+        <div class="card-flag">${ex.flag}</div>
+        <div class="card-city">${ex.city}</div>
+        <div class="card-name">${ex.name}
+          <span style="color:var(--muted);font-size:0.88rem;">(${ex.acronym})</span>
+        </div>
+        <div class="local-time" id="time-${i}">--:--:--</div>
+        <div class="local-date" id="date-${i}">--</div>
+        <div class="divider"></div>
+        ${scheduleRows}
+        <div class="status ${status.key}" id="status-${i}">
+          <span class="status-dot"></span>${status.label}
+        </div>
+        <div class="tz-note">${ex.tzLabel}</div>
+      `;
+      container.appendChild(div);
+    });
+  }
+
+
+  /* ── §G · TARJETAS DE FESTIVOS — renderHolidayCards() ───────────────────
+     Genera §7.1 NYSE, §7.2 LSE, §7.3 HKEX.
+     Cada tarjeta tiene dos pestañas:
+       "Holidays"     → festivos de la API Calendarific (futuros únicamente)
+       "Early closes" → cierres anticipados hardcodeados en exchanges[]
+     switchTab() maneja el cambio de pestaña sin recargar nada.
+  ─────────────────────────────────────────────────────────────────────────── */
+  function renderHolidayCards() {
+    const grid = document.getElementById('holidayGrid');
+    grid.innerHTML = '';
+    const todayStr = dateKey(new Date());
+
+    exchanges.forEach(ex => {
+      const cc = ex.countryCode;
+
+      /* §7.x.1 — Festivos futuros de la API */
+      const futureHolidays = Array.from(holidays[cc].entries())
+        .map(([date, name]) => ({ date, name }))
+        .filter(h => h.date >= todayStr)
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      /* §7.x.2 — Cierres anticipados futuros (hardcodeados en §A) */
+      const futureEarly = (ex.earlyCloses || [])
+        .filter(e => e.date >= todayStr)
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      const card = document.createElement('div');
+      card.className = 'holiday-card';
+      card.innerHTML = `
+        <div class="holiday-card-header">
+          <span class="hflag">${ex.flag}</span>
+          <span class="hname">${ex.name}</span>
+          <span class="hacro">${ex.acronym}</span>
+        </div>
+        <div class="holiday-tabs">
+          <button class="holiday-tab active" onclick="switchTab(this,'h-${cc}','holidays')">
+            Holidays (${futureHolidays.length})
+          </button>
+          <button class="holiday-tab" onclick="switchTab(this,'h-${cc}','early')">
+            Early closes (${futureEarly.length})
+          </button>
+        </div>
+        <div class="holiday-list" id="h-${cc}-holidays">
+          ${futureHolidays.length
+            ? futureHolidays.map(h => `
+              <div class="holiday-row">
+                <span class="holiday-date">${formatDateEn(h.date)}</span>
+                <span class="holiday-name">${h.name}</span>
+                <span class="holiday-badge closed">Closed</span>
+              </div>`).join('')
+            : '<div class="holiday-loading">No upcoming holidays</div>'}
+        </div>
+        <div class="holiday-list" id="h-${cc}-early" style="display:none">
+          ${futureEarly.length
+            ? futureEarly.map(e => `
+              <div class="holiday-row">
+                <span class="holiday-date">${formatDateEn(e.date)}</span>
+                <span class="holiday-name">${e.name} · ${e.closeTime}</span>
+                <span class="holiday-badge early">Early</span>
+              </div>`).join('')
+            : '<div class="holiday-loading">No upcoming early closes</div>'}
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+  }
+
+  /** Cambia la pestaña activa dentro de una tarjeta de festivos */
+  window.switchTab = function(btn, prefix, tab) {
+    const parent = btn.closest('.holiday-card');
+    parent.querySelectorAll('.holiday-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    parent.querySelectorAll('.holiday-list').forEach(l => l.style.display = 'none');
+    document.getElementById(`${prefix}-${tab}`).style.display = 'block';
+  };
+
+
+  /* ── §H · TICK — actualización cada segundo ──────────────────────────────
+     Actualiza el estado y hora local de las tarjetas de horarios (§6).
+     El canvas (§5) lo actualiza clockLoop() vía requestAnimationFrame.
+  ─────────────────────────────────────────────────────────────────────────── */
+  function tick() {
+    /* §6 — Tarjetas de horarios: hora local, fecha y estado */
+    exchanges.forEach((ex, i) => {
+      const timeEl   = document.getElementById(`time-${i}`);
+      const dateEl   = document.getElementById(`date-${i}`);
+      const statusEl = document.getElementById(`status-${i}`);
+      const cardEl   = document.getElementById(`card-${i}`);
+      if (!timeEl) return;
+
+      timeEl.textContent = formatLocalTime(ex.tz);
+      dateEl.textContent = formatLocalDate(ex.tz);
+
+      const status = getStatus(ex);
+      statusEl.className = `status ${status.key}`;
+      statusEl.innerHTML = `<span class="status-dot"></span>${status.label}`;
+      cardEl.classList.toggle('open',           status.key === 'open');
+      cardEl.classList.toggle('closed-market',  status.key === 'closed');
+      cardEl.classList.toggle('premarket-card', status.key === 'premarket');
+    });
+
+    /* §5 — El canvas lo actualiza clockLoop() vía requestAnimationFrame */
+  }
+
+
+  /* ── §I · (eliminado) — Tipo de cambio reemplazado por relojes de ciudad ── */
+
+
+  /* ── §J · INICIALIZACIÓN ─────────────────────────────────────────────────
+     Orden de arranque:
+       1. fetchHolidays() — descarga festivos de la API; al terminar llama
+          renderHolidayCards() para poblar §7
+       2. buildCards()    — genera las tarjetas de horarios §6
+       3. tick()          — primer frame del reloj y tarjetas
+       4. fetchFX()       — primera llamada al tipo de cambio §4
+       5. Intervalos:
+            tick    cada 1 s  → actualiza hora, estado y canvas
+            fetchFX cada 1 h  → actualiza el tipo de cambio
+  ─────────────────────────────────────────────────────────────────────────── */
+  async function init() {
+    await fetchHolidays(); // §C → llama §G internamente
+    buildCards();          // §F
+    tick();                // §H — primer render
+
+    setInterval(tick, 1000); // actualiza cada segundo
+  }
+
+  init();
+  </script>
+</body>
+</html>
