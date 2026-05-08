@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "alpaca": {
+      "type": "stdio",
+      "command": "C:\\Users\\inaki\\AppData\\Local\\Microsoft\\WinGet\\Packages\\astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe\\uvx.exe",
+      "args": ["alpaca-mcp-server"],
+      "env": {
+        "ALPACA_API_KEY": "PKJVFD2EKF5FO7DTM3X3WW5NOX",
+        "ALPACA_SECRET_KEY": "FUVLLkBqgMvAdHF8qvsFxbNAh17VJ4ZBmEEzXuTzAS6g"
+      }
+    }
+  }
+}
