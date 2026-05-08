@@ -2,7 +2,7 @@
   "mcpServers": {
     "alpaca": {
       "type": "stdio",
-      "command": "uvx",
+      "command": "/root/.local/bin/uvx",
       "args": ["alpaca-mcp-server"],
       "env": {
         "ALPACA_API_KEY": "PKJVFD2EKF5FO7DTM3X3WW5NOX",
