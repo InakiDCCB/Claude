@@ -5,9 +5,11 @@ Loads credentials from .env at the project root on first import.
 Both order_executor and run_live import from this module — single source of truth for
 all HTTP logic and credentials.
 """
-import json, os, urllib.parse, urllib.request
+import json, os, time, urllib.parse, urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from trading.connection import with_retry
 
 
 def _load_env():
@@ -23,6 +25,7 @@ _load_env()
 
 ALPACA_BASE = "https://paper-api.alpaca.markets"
 ALPACA_DATA = "https://data.alpaca.markets"
+_FALLBACK   = Path(__file__).parent / "fallback_trades.jsonl"
 
 
 def _alpaca_headers() -> dict:
@@ -51,15 +54,53 @@ def _raw_request(method: str, url: str, headers: dict, data=None, timeout: int =
         return json.loads(raw) if raw else {}
 
 
+@with_retry()
 def alpaca_request(method: str, path: str, data=None, timeout: int = 15):
     """Authenticated request to the Alpaca broker REST API."""
     return _raw_request(method, f"{ALPACA_BASE}{path}", _alpaca_headers(), data, timeout)
 
 
+@with_retry()
 def supabase_upsert(table: str, rows: list):
     """Upsert rows into a Supabase table. Raises on network errors."""
     url = f"{os.environ['SUPABASE_URL']}/rest/v1/{table}"
     _raw_request("POST", url, _supabase_headers(), rows)
+
+
+def _supabase_select_exists(table: str, order_id: str) -> bool:
+    """Returns True if a row with this order_id exists in the table."""
+    url = (
+        f"{os.environ['SUPABASE_URL']}/rest/v1/{table}"
+        f"?order_id=eq.{urllib.parse.quote(order_id)}&limit=1"
+    )
+    hdrs = {
+        "apikey":        os.environ["SUPABASE_ANON_KEY"],
+        "Authorization": f"Bearer {os.environ['SUPABASE_ANON_KEY']}",
+        "Accept":        "application/json",
+    }
+    result = _raw_request("GET", url, hdrs)
+    return bool(result)
+
+
+def supabase_upsert_verified(table: str, rows: list):
+    """
+    Upsert + SELECT verification. On persistent failure, appends to local fallback file.
+    Never loses a trade record.
+    """
+    order_id = rows[0].get("order_id") if rows else None
+    for attempt in range(3):
+        try:
+            supabase_upsert(table, rows)
+            if not order_id or _supabase_select_exists(table, order_id):
+                return
+        except Exception:
+            pass
+        if attempt < 2:
+            time.sleep(2 ** (attempt + 1))
+
+    with open(_FALLBACK, "a", encoding="utf-8") as f:
+        for row in rows:
+            f.write(json.dumps(row) + "\n")
 
 
 def get_clock() -> dict:
@@ -67,6 +108,7 @@ def get_clock() -> dict:
     return alpaca_request("GET", "/v2/clock")
 
 
+@with_retry()
 def get_bars(symbol: str, timeframe: str, start_iso: str, end_iso: str) -> list:
     """Fetch stock bars from Alpaca data API with auto-pagination."""
     bars, params = [], {
@@ -84,7 +126,7 @@ def get_bars(symbol: str, timeframe: str, start_iso: str, end_iso: str) -> list:
     while True:
         url = f"{ALPACA_DATA}/v2/stocks/{symbol}/bars?" + urllib.parse.urlencode(params)
         req = urllib.request.Request(url, headers=hdrs)
-        with urllib.request.urlopen(req, timeout=15) as r:
+        with urllib.request.urlopen(req, timeout=30) as r:
             data = json.loads(r.read())
         bars.extend(data.get("bars") or [])
         token = data.get("next_page_token")

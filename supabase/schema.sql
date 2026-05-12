@@ -9,17 +9,30 @@ create table if not exists trades (
   id            uuid primary key default gen_random_uuid(),
   created_at    timestamptz not null default now(),
   filled_at     timestamptz,
-  asset         text not null,              -- e.g. 'SPY', 'BTC/USD'
+  asset         text not null,              -- e.g. 'TQQQ', 'QQQ'
   side          text not null check (side in ('buy','sell')),
   quantity      numeric not null,
-  price         numeric not null,           -- fill price
+  price         numeric not null,           -- entry fill price
+  exit_price    numeric,                    -- exit fill price
+  exit_type     text check (exit_type in ('TP','SL','TIME','MANUAL')),
   total_value   numeric generated always as (quantity * price) stored,
-  order_id      text,                       -- Alpaca order ID
+  order_id      text,                       -- Alpaca parent order ID
   status        text not null default 'pending'
                   check (status in ('pending','filled','cancelled','rejected')),
   strategy      text,                       -- strategy name that triggered the trade
   pnl           numeric,                    -- realized P&L (filled on position close)
   notes         text
+);
+
+-- AGENT_STATUS
+-- Heartbeat table for monitoring running agents from the dashboard
+create table if not exists agent_status (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null,
+  status      text not null default 'idle' check (status in ('running','idle','error')),
+  description text,
+  updated_at  timestamptz not null default now(),
+  metadata    jsonb
 );
 
 -- MARKET_SNAPSHOTS

@@ -2,20 +2,22 @@
 trading/run_live.py — TOB-V2 TQQQ live execution entry point.
 
 Launched daily by Windows Task Scheduler at 7:25 AM local (Mexico UTC-6).
-Pipeline: market check → wait for ORB → signal evaluation → bracket order → reconcile.
+Pipeline: health check → market check → wait for ORB → signal evaluation
+          → bracket order → event-driven monitoring → time stop.
 """
 import atexit, logging, os, sys, time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from trading.alpaca_client    import get_bars, get_prev_close, get_clock, alpaca_request
-from trading.regime_agent     import MarketRegimeAgent
+from trading.alpaca_client     import get_bars, get_prev_close, get_clock, alpaca_request
+from trading.connection        import check_all
+from trading.regime_agent      import MarketRegimeAgent
 from trading.exhaustion_filter import ExhaustionGapFilter
-from trading.market_learner   import MarketLearner
-from trading.allocation       import AllocationEngine
-from trading.order_executor   import OrderExecutor
-from trading.agent_reporter   import report
+from trading.market_learner    import MarketLearner
+from trading.allocation        import AllocationEngine
+from trading.order_executor    import OrderExecutor
+from trading.agent_reporter    import report
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 SYMBOL       = "TQQQ"
@@ -52,11 +54,49 @@ def compute_vwap(bars: list) -> float:
         return (b["h"] + b["l"] + b["c"]) / 3
     return sum(b.get("vw", (b["h"] + b["l"] + b["c"]) / 3) * b["v"] for b in bars) / total_vol
 
+
 def wait_until(target: datetime, log: logging.Logger):
     secs = (target - datetime.now(timezone.utc)).total_seconds()
     if secs > 2:
         log.info(f"Waiting {secs / 60:.1f} min → {target.strftime('%H:%M UTC')} ...")
         time.sleep(max(0.0, secs - 0.5))
+
+
+def _validate_bars(bars: list, symbol: str, expected: int,
+                   session_start: datetime, log: logging.Logger) -> bool:
+    """Verify bar count and that first bar aligns with session open (±5 min)."""
+    if len(bars) < expected:
+        log.warning(f"{symbol}: only {len(bars)}/{expected} bars returned")
+        return False
+    first_ts = datetime.fromisoformat(bars[0]["t"].replace("Z", "+00:00"))
+    drift = abs((first_ts - session_start).total_seconds())
+    if drift > 300:
+        log.warning(f"{symbol}: first bar {first_ts.strftime('%H:%M')} UTC, "
+                    f"expected near {session_start.strftime('%H:%M')} UTC (drift={drift:.0f}s)")
+        return False
+    return True
+
+
+def _force_close(executor: OrderExecutor, symbol: str, log: logging.Logger):
+    """Cancel open orders and close position with exponential-backoff retry."""
+    for pid in list(executor._positions):
+        for attempt in range(3):
+            try:
+                alpaca_request("DELETE", f"/v2/orders/{pid}")
+                log.info(f"Canceled order {pid[:8]}")
+                break
+            except Exception as e:
+                log.warning(f"Cancel {pid[:8]} attempt {attempt + 1}: {e}")
+                time.sleep(2 ** attempt)
+
+    for attempt in range(3):
+        try:
+            alpaca_request("DELETE", f"/v2/positions/{symbol}")
+            log.info(f"Closed {symbol} position.")
+            break
+        except Exception as e:
+            log.warning(f"Close position attempt {attempt + 1}: {e}")
+            time.sleep(2 ** attempt)
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 def main():
@@ -65,12 +105,24 @@ def main():
     report("TOB-V2 Opening Monitor", "running")
     log.info("=== TOB-V2 Opening Monitor started ===")
 
+    # ── 0. Pre-flight health check ─────────────────────────────────────────────
+    health = check_all()
+    if not health["alpaca"]:
+        log.error("Alpaca API unreachable — aborting.")
+        return
+    if not health["supabase"]:
+        log.warning("Supabase unreachable — trade records will go to fallback file.")
+
     # ── 1. Market clock ────────────────────────────────────────────────────────
-    clock   = get_clock()
+    try:
+        clock = get_clock()
+    except Exception as e:
+        log.error(f"Could not fetch market clock: {e}")
+        return
+
     now_utc = datetime.now(timezone.utc)
 
     if clock["is_open"]:
-        # Arrived after open — infer open from next_close (6h30m standard session)
         next_close = datetime.fromisoformat(clock["next_close"]).astimezone(timezone.utc)
         today_open = next_close - timedelta(hours=6, minutes=30)
     else:
@@ -81,8 +133,8 @@ def main():
         today_open = next_open
 
     orb_end    = today_open + timedelta(minutes=14, seconds=59)
-    entry_time = today_open + timedelta(minutes=15)            # 9:45 ET
-    time_stop  = today_open + timedelta(hours=6, minutes=20)   # 3:50 PM ET
+    entry_time = today_open + timedelta(minutes=15)           # 9:45 ET
+    time_stop  = today_open + timedelta(hours=6, minutes=20)  # 3:50 PM ET
 
     log.info(
         f"Session: open={today_open.strftime('%H:%M')} "
@@ -98,33 +150,42 @@ def main():
     wait_until(orb_end + timedelta(seconds=30), log)
 
     # ── 3. Fetch bars ──────────────────────────────────────────────────────────
-    orb_start = today_open.strftime("%Y-%m-%dT%H:%M:%SZ")
-    after_orb = entry_time.strftime("%Y-%m-%dT%H:%M:%SZ")
-    # 24-hour lookback gives enough data for all regime resolutions (5m, 15m, 1h)
+    orb_start    = today_open.strftime("%Y-%m-%dT%H:%M:%SZ")
+    after_orb    = entry_time.strftime("%Y-%m-%dT%H:%M:%SZ")
     regime_start = (today_open - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    tqqq_orb_bars   = get_bars(SYMBOL, "5Min", orb_start, after_orb)
-    qqq_regime_bars = get_bars(QQQ,    "5Min", regime_start, after_orb)
-    qqq_orb_bars    = [b for b in qqq_regime_bars if b["t"] >= orb_start][:ORB_BARS]
+    try:
+        tqqq_orb_bars   = get_bars(SYMBOL, "5Min", orb_start, after_orb)
+        qqq_regime_bars = get_bars(QQQ,    "5Min", regime_start, after_orb)
+    except Exception as e:
+        log.error(f"Failed to fetch bars: {e}")
+        return
 
-    orb_tqqq = tqqq_orb_bars[:ORB_BARS]
+    qqq_orb_bars = [b for b in qqq_regime_bars if b["t"] >= orb_start][:ORB_BARS]
+    orb_tqqq     = tqqq_orb_bars[:ORB_BARS]
+
     log.info(f"Bars — TQQQ ORB: {len(orb_tqqq)}, QQQ total: {len(qqq_regime_bars)}, QQQ ORB: {len(qqq_orb_bars)}")
 
-    if len(orb_tqqq) < ORB_BARS or len(qqq_orb_bars) < ORB_BARS:
-        log.info("Insufficient ORB bars — exiting.")
+    if not _validate_bars(orb_tqqq, SYMBOL, ORB_BARS, today_open, log):
+        log.info("TQQQ bar validation failed — exiting.")
+        return
+    if not _validate_bars(qqq_orb_bars, QQQ, ORB_BARS, today_open, log):
+        log.info("QQQ bar validation failed — exiting.")
         return
 
     # ── 4. Signal filters ──────────────────────────────────────────────────────
-    prev_qqq_close = get_prev_close(QQQ, today_open)
+    try:
+        prev_qqq_close = get_prev_close(QQQ, today_open)
+    except Exception as e:
+        log.error(f"Failed to fetch QQQ prev close: {e}")
+        return
 
-    # QQQ gap filter
     qqq_gap_pct = (qqq_orb_bars[0]["o"] - prev_qqq_close) / prev_qqq_close
     log.info(f"QQQ gap: {qqq_gap_pct * 100:.2f}%  (need ≥ 0.0%)")
     if qqq_gap_pct < QQQ_GAP_MIN:
         log.info("QQQ gap FAILED — no trade.")
         return
 
-    # TQQQ ORB filter
     tqqq_open_price = orb_tqqq[0]["o"]
     tqqq_orb_high   = max(b["h"] for b in orb_tqqq)
     tqqq_orb_pct    = (orb_tqqq[-1]["c"] - tqqq_open_price) / tqqq_open_price
@@ -133,7 +194,6 @@ def main():
         log.info("TQQQ ORB FAILED — no trade.")
         return
 
-    # Regime (uses full 24h QQQ bars for signal strength)
     regime_result = MarketRegimeAgent().classify(qqq_regime_bars)
     log.info(
         f"Regime: {regime_result['regime']} | "
@@ -144,18 +204,16 @@ def main():
         log.info("Regime not MOMENTUM — no trade.")
         return
 
-    # Exhaustion gap filter
     ex = ExhaustionGapFilter().detect(qqq_orb_bars, prev_qqq_close)
     log.info(f"Exhaustion: score={ex['score']:.2f} | is_exhaustion={ex['is_exhaustion']}")
     if ex["is_exhaustion"]:
         log.info("Exhaustion gap detected — no trade.")
         return
 
-    # Allocation gate
     learner = MarketLearner()
     quality = learner.get_entry_quality_score(regime_result)
     alloc   = AllocationEngine().compute(
-        tsla_bars      = tqqq_orb_bars,       # TQQQ in the execution-asset slot
+        tsla_bars      = tqqq_orb_bars,
         qqq_bars       = qqq_regime_bars,
         entry_time_utc = entry_time.strftime("%H:%M"),
         quality        = quality,
@@ -168,7 +226,7 @@ def main():
         log.info("Allocation gate closed (Y < 0.05 or A ≤ 0.05) — no trade.")
         return
 
-    # ── 5. Compute order parameters ────────────────────────────────────────────
+    # ── 5. Compute order parameters and place order ────────────────────────────
     entry_price = round(compute_vwap(orb_tqqq), 2)
     target      = round(tqqq_orb_high, 2)
     stop        = round(entry_price - STOP_DOLLARS, 2)
@@ -181,40 +239,38 @@ def main():
 
     log.info(f"SIGNAL → {SYMBOL} x{qty}  entry={entry_price}  target={target}  stop={stop}")
 
-    # Wait for 9:45 ET before placing
     wait_until(entry_time, log)
 
     executor = OrderExecutor()
-    executor.place_bracket_order(
-        symbol=SYMBOL, qty=qty,
-        entry=entry_price, target=target, stop=stop,
-        strategy="TOB-V2", notes=notes,
-    )
+    placed   = False
+    for attempt in range(3):
+        try:
+            executor.place_bracket_order(
+                symbol=SYMBOL, qty=qty,
+                entry=entry_price, target=target, stop=stop,
+                strategy="TOB-V2", notes=notes,
+            )
+            placed = True
+            break
+        except Exception as e:
+            log.warning(f"Order placement attempt {attempt + 1}/3: {e}")
+            time.sleep(2 ** attempt)
 
-    # ── 6. Reconciliation loop until time stop ─────────────────────────────────
-    log.info(f"Reconciliation loop until {time_stop.strftime('%H:%M UTC')} ...")
-    while datetime.now(timezone.utc) < time_stop:
-        executor.reconcile()
-        if not executor._positions:
-            log.info("All positions closed — done.")
-            return
-        time.sleep(30)
+    if not placed:
+        log.error("Order placement failed after 3 attempts — exiting.")
+        return
+
+    # ── 6. Event-driven monitoring until time stop ─────────────────────────────
+    log.info(f"Monitoring until {time_stop.strftime('%H:%M UTC')} ...")
+    executor.run_until(time_stop)
+
+    if executor.positions_count == 0:
+        log.info("All positions closed — done.")
+        return
 
     # ── 7. Time stop — force close ─────────────────────────────────────────────
     log.info("Time stop reached — canceling orders and closing position.")
-    for pid in list(executor._positions):
-        try:
-            alpaca_request("DELETE", f"/v2/orders/{pid}")
-            log.info(f"Canceled order {pid}")
-        except Exception as e:
-            log.warning(f"Cancel {pid}: {e}")
-
-    try:
-        alpaca_request("DELETE", f"/v2/positions/{SYMBOL}")
-        log.info(f"Closed {SYMBOL} position.")
-    except Exception as e:
-        log.warning(f"Close position: {e}")
-
+    _force_close(executor, SYMBOL, log)
     log.info("=== TOB-V2 Opening Monitor complete ===")
 
 
