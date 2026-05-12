@@ -54,7 +54,7 @@ function HitRatioGauge({ trades }: { trades: Trade[] }) {
     <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4">
       <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1">Hit Ratio</p>
       <div className="flex flex-col items-center gap-1">
-        <svg viewBox="0 0 100 54" className="w-full max-w-[130px]">
+        <svg viewBox="0 0 100 60" className="w-full max-w-[130px]">
           <path d="M 14 50 A 36 36 0 0 1 86 50" fill="none" stroke="#1f2937" strokeWidth="7" strokeLinecap="round" />
           <path
             d="M 14 50 A 36 36 0 0 1 86 50"
@@ -66,6 +66,9 @@ function HitRatioGauge({ trades }: { trades: Trade[] }) {
           />
           <text x="50" y="43" textAnchor="middle" fill="white" fontSize="13" fontWeight="700" fontFamily="ui-monospace,monospace">
             {total === 0 ? '—' : `${pct}%`}
+          </text>
+          <text x="50" y="54" textAnchor="middle" fill="#6b7280" fontSize="7" fontFamily="ui-monospace,monospace">
+            {total > 0 ? `${total} trades` : ''}
           </text>
         </svg>
         <div className="grid grid-cols-3 gap-1 w-full text-center">
@@ -96,7 +99,7 @@ function TopPerformers({ trades }: { trades: Trade[] }) {
   const winners = Object.entries(byAsset)
     .filter(([, pnl]) => pnl > 0)
     .sort(([, a], [, b]) => b - a)
-    .slice(0, 4)
+    .slice(0, 6)
   const max = winners[0]?.[1] ?? 1
 
   return (
@@ -121,6 +124,50 @@ function TopPerformers({ trades }: { trades: Trade[] }) {
   )
 }
 
+function DollarPnL({ trades }: { trades: Trade[] }) {
+  const closed    = trades.filter(t => t.pnl != null)
+  const winsTotal = closed.filter(t => (t.pnl ?? 0) > 0).reduce((s, t) => s + (t.pnl ?? 0), 0)
+  const lossTotal = closed.filter(t => (t.pnl ?? 0) < 0).reduce((s, t) => s + Math.abs(t.pnl ?? 0), 0)
+  const net       = winsTotal - lossTotal
+  const ratio     = lossTotal > 0 ? (winsTotal / lossTotal).toFixed(2) : winsTotal > 0 ? '∞' : '—'
+  const maxBar    = Math.max(winsTotal, lossTotal, 1)
+
+  return (
+    <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4">
+      <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-3">P&L en $</p>
+
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="text-[10px] text-gray-500 w-10 shrink-0">Wins</span>
+        <div className="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+          <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${(winsTotal / maxBar) * 100}%` }} />
+        </div>
+        <span className="text-[10px] font-mono text-emerald-400 w-16 text-right shrink-0">
+          {winsTotal > 0 ? `+${fmtUSD(winsTotal)}` : '—'}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-[10px] text-gray-500 w-10 shrink-0">Loss</span>
+        <div className="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+          <div className="h-full bg-red-500 rounded-full" style={{ width: `${(lossTotal / maxBar) * 100}%` }} />
+        </div>
+        <span className="text-[10px] font-mono text-red-400 w-16 text-right shrink-0">
+          {lossTotal > 0 ? `-${fmtUSD(lossTotal)}` : '—'}
+        </span>
+      </div>
+
+      <div className="flex justify-between text-[10px]">
+        <span className="text-gray-600">
+          Ratio $: <span className="text-white font-mono">{ratio}×</span>
+        </span>
+        <span className={`font-mono ${net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+          Neto {net >= 0 ? '+' : ''}{fmtUSD(net)}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 export default function AccountSummary({ trades }: { trades: Trade[] }) {
   const [account, setAccount] = useState<AlpacaAccount | null>(null)
   const [loading, setLoading] = useState(true)
@@ -132,10 +179,7 @@ export default function AccountSummary({ trades }: { trades: Trade[] }) {
       .catch(() => setLoading(false))
   }, [])
 
-  const filled      = trades.filter(t => t.status === 'filled')
-  const numTrades   = filled.length
-  const totalTraded = filled.reduce((s, t) => s + (t.total_value ?? t.quantity * t.price), 0)
-  const totalPnL    = filled.reduce((s, t) => s + (t.pnl ?? 0), 0)
+  const filled = trades.filter(t => t.status === 'filled')
 
   const equity     = account ? parseFloat(account.equity) : null
   const lastEquity = account ? parseFloat(account.last_equity) : null
@@ -174,12 +218,8 @@ export default function AccountSummary({ trades }: { trades: Trade[] }) {
         loading={loading}
         valueColor="text-emerald-400"
       />
-      <StatCard
-        label="# Trades"
-        value={String(numTrades)}
-        sub="en el período"
-      />
       <HitRatioGauge trades={trades} />
+      <DollarPnL trades={trades} />
 
       <StatCard
         label="Market Value"
@@ -193,13 +233,9 @@ export default function AccountSummary({ trades }: { trades: Trade[] }) {
         sub={closedTrades.length > 0 ? `sobre ${closedTrades.length} trade${closedTrades.length !== 1 ? 's' : ''} cerrado${closedTrades.length !== 1 ? 's' : ''}` : 'sin trades cerrados'}
         valueColor={closedTrades.length === 0 ? 'text-white' : avgPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}
       />
-      <StatCard
-        label="$ Tradeado"
-        value={fmtUSD(totalTraded)}
-        sub={`P&L: ${totalPnL >= 0 ? '+' : ''}${fmtUSD(totalPnL)}`}
-        valueColor={numTrades === 0 ? 'text-white' : totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}
-      />
-      <TopPerformers trades={trades} />
+      <div className="col-span-2">
+        <TopPerformers trades={trades} />
+      </div>
     </div>
   )
 }
