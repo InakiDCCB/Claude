@@ -4,13 +4,13 @@ Uses only stdlib (urllib) — no external dependencies.
 
 Usage:
     from trading.agent_reporter import report
-    report('Backtesting Engine', 'running')
-    report('Backtesting Engine', 'idle')
+    report('TOB-V2 Opening Monitor', 'running')
+    report('TOB-V2 Opening Monitor', 'idle')
 
 For automatic cleanup on exit (including crashes):
     import atexit
-    atexit.register(report, 'Backtesting Engine', 'idle')
-    report('Backtesting Engine', 'running')
+    atexit.register(report, 'TOB-V2 Opening Monitor', 'idle')
+    report('TOB-V2 Opening Monitor', 'running')
 """
 import json
 import os

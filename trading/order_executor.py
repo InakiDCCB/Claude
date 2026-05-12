@@ -277,8 +277,6 @@ class OrderExecutor:
 
     def run(self, interval: int = POLL_INTERVAL):
         """Blocking REST-only reconciliation loop (standalone / legacy use)."""
-        atexit.register(report, "Order Execution", "idle")
-        report("Order Execution", "running")
         self._log(f"REST reconciliation loop — polling every {interval}s.")
         try:
             while True:
