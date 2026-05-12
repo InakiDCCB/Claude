@@ -1,0 +1,68 @@
+{
+  "name": "TOB-V2 (TQQQ Opening Break — VWAP Entry)",
+  "version": "2.1",
+  "created": "2026-05-10",
+  "updated": "2026-05-12",
+  "status": "active",
+
+  "universe": {
+    "primary": "TQQQ",
+    "market_filter": "QQQ"
+  },
+
+  "regime": {
+    "required": "MOMENTUM",
+    "detector": "MarketRegimeAgent",
+    "signal": "M_t = sum(r_{t-i}) / (sigma_t * sqrt(N))",
+    "resolutions": ["5m", "15m", "1h"],
+    "thresholds": {"momentum": 0.5, "mean_reversion": -0.5}
+  },
+
+  "entry_rules": {
+    "step_1_qqq_filter": "QQQ open must be >= previous day close (gap >= 0%)",
+    "step_2_orb_signal": "TSLA first 15-min candle (9:30-9:44 AM ET) must close >= 0.75% above TSLA open",
+    "step_3_entry_time": "9:45 AM ET — enter at VWAP of the first post-ORB bar",
+    "step_4_entry_price": "Limit order at VWAP value of the 9:45 AM bar"
+  },
+
+  "exit_rules": {
+    "target": "ORB high (max price of first 15-min candle)",
+    "stop_loss": "Entry price - $3.00 (fixed, hard stop)",
+    "time_stop": "Market close at 3:50 PM ET if neither target nor stop hit"
+  },
+
+  "parameters": {
+    "orb_threshold_pct": 0.75,
+    "qqq_gap_min_pct": 0.0,
+    "stop_dollars": 3.00,
+    "orb_bars": 3,
+    "orb_timeframe_min": 5,
+    "entry_bar_time_et": "09:45",
+    "time_stop_et": "15:50"
+  },
+
+  "backtest_summary": {
+    "period": "2026-04-01 to 2026-05-08",
+    "days_analyzed": 27,
+    "signals": 6,
+    "wins": 5,
+    "losses": 1,
+    "hit_rate_pct": 83.3,
+    "total_pnl_per_share": 9.25,
+    "avg_win": 2.45,
+    "avg_loss": -3.00,
+    "expected_value_per_trade": 1.54,
+    "avg_rr": 0.86
+  },
+
+  "excluded_assets": [
+    "BA", "LMT", "TXN", "NOC", "RTX", "GD", "HII", "MRNA", "PFE"
+  ],
+
+  "notes": [
+    "Strategy is regime-dependent — works best in bull markets (QQQ trending up)",
+    "May 5 was the only loss: reversal after exhaustion gap. Watch for this pattern.",
+    "Sample size is small (6 trades). Re-evaluate after 30 real trades.",
+    "Entry at VWAP gives better R:R than raw ORB entry (V1 comparison: -$0.56 vs +$9.25 PnL)"
+  ]
+}

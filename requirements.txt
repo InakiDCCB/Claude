@@ -1,0 +1,6 @@
+# No external dependencies — stdlib only (Python 3.9+)
+# dict union operator (|=) and zoneinfo require Python 3.9+
+#
+# Run the live strategy:   python trading/run_live.py
+# Run the backtest:        python backtest_v2.py
+# Calibrate allocation:    python trading/calibrate_allocation.py

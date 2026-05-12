@@ -1,0 +1,30 @@
+# Secrets & MCP config (API keys must never be committed)
+.mcp.json
+.env
+.env.local
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+
+# Trading runtime state (changes every session — not for VCS)
+trading/open_positions.json
+trading/trade_log.json
+trading/logs/*.log
+
+# Dashboard build artifacts
+dashboard/node_modules/
+dashboard/.next/
+dashboard/.vercel/
+dashboard/.env.local
+
+# Claude Code local settings
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
