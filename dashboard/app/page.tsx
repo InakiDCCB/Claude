@@ -1,4 +1,5 @@
 import { createSupabase } from '@/lib/supabase'
+import type { ChampionConfig } from '@/lib/supabase'
 import TradingPanel from '@/components/TradingPanel'
 import DateFilter from '@/components/DateFilter'
 import MarketStatus from '@/components/MarketStatus'
@@ -16,7 +17,7 @@ export default async function Page({
 
   const sb = createSupabase()
 
-  const [tradesRes, analysisRes, agentsRes] = await Promise.all([
+  const [tradesRes, analysisRes, agentsRes, championRes] = await Promise.all([
     sb.from('trades')
       .select('*')
       .gte('created_at', `${from}T00:00:00Z`)
@@ -28,11 +29,13 @@ export default async function Page({
       .lte('created_at', `${to}T23:59:59Z`)
       .order('created_at', { ascending: false }),
     sb.from('agent_status').select('*').order('name'),
+    sb.from('champion_strategy').select('*').eq('key', 'current').single(),
   ])
 
   const trades   = tradesRes.data   ?? []
   const analysis = analysisRes.data ?? []
   const agents   = agentsRes.data   ?? []
+  const champion = (championRes.data ?? null) as ChampionConfig | null
 
   return (
     <main className="min-h-screen bg-gray-950">
@@ -53,6 +56,7 @@ export default async function Page({
           initialTrades={trades}
           initialAnalysis={analysis}
           agents={agents}
+          champion={champion}
         />
       </div>
     </main>

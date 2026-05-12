@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { createSupabase } from '@/lib/supabase'
-import type { Trade, AnalysisEntry, AgentStatus } from '@/lib/supabase'
+import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig } from '@/lib/supabase'
 import AccountSummary from './AccountSummary'
 import AgentGrid from './AgentGrid'
+import ChampionCard from './ChampionCard'
 import DataTabs from './DataTabs'
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
@@ -70,10 +71,12 @@ export default function TradingPanel({
   initialTrades,
   initialAnalysis,
   agents,
+  champion,
 }: {
   initialTrades:   Trade[]
   initialAnalysis: AnalysisEntry[]
   agents:          AgentStatus[]
+  champion:        ChampionConfig | null
 }) {
   const [trades,      setTrades]      = useState<Trade[]>(initialTrades)
   const [newTradeId,  setNewTradeId]  = useState<string | null>(null)
@@ -125,6 +128,10 @@ export default function TradingPanel({
       {toast && <TradeToast trade={toast} onClose={() => setToast(null)} />}
 
       <AccountSummary trades={trades} />
+
+      <section>
+        <ChampionCard champion={champion} />
+      </section>
 
       <section>
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
