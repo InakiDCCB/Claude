@@ -20,6 +20,7 @@ export type Trade = {
   status: string
   strategy: string | null
   exit_price: number | null
+  exit_type: string | null
   pnl: number | null
   notes: string | null
 }

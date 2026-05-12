@@ -1,7 +1,5 @@
 import { createSupabase } from '@/lib/supabase'
-import AccountSummary from '@/components/AccountSummary'
-import AgentGrid from '@/components/AgentGrid'
-import DataTabs from '@/components/DataTabs'
+import TradingPanel from '@/components/TradingPanel'
 import DateFilter from '@/components/DateFilter'
 import MarketStatus from '@/components/MarketStatus'
 
@@ -51,21 +49,11 @@ export default async function Page({
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-8">
-        {/* Account stats */}
-        <AccountSummary trades={trades} />
-
-        {/* Agents */}
-        <section>
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
-            Agentes
-          </h2>
-          <AgentGrid agents={agents} />
-        </section>
-
-        {/* Data tables */}
-        <section>
-          <DataTabs trades={trades} analysis={analysis} />
-        </section>
+        <TradingPanel
+          initialTrades={trades}
+          initialAnalysis={analysis}
+          agents={agents}
+        />
       </div>
     </main>
   )

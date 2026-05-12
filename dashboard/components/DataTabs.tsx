@@ -99,9 +99,9 @@ function Td({ children, className = '' }: { children: React.ReactNode; className
   return <td className={`px-3 py-2.5 ${className}`}>{children}</td>
 }
 
-function Row({ children, odd }: { children: React.ReactNode; odd: boolean }) {
+function Row({ children, odd, flash }: { children: React.ReactNode; odd: boolean; flash?: boolean }) {
   return (
-    <tr className={`border-b border-gray-800/40 hover:bg-gray-800/20 transition-colors ${odd ? 'bg-gray-900/10' : ''}`}>
+    <tr className={`border-b border-gray-800/40 hover:bg-gray-800/20 transition-colors ${odd ? 'bg-gray-900/10' : ''} ${flash ? 'animate-row-flash' : ''}`}>
       {children}
     </tr>
   )
@@ -125,7 +125,7 @@ const STRATEGY_COLORS: Record<string, string> = {
   'TOB-V2 Pipeline': 'bg-violet-500/10 text-violet-400',
 }
 
-function TradesTable({ trades }: { trades: Trade[] }) {
+function TradesTable({ trades, newTradeId }: { trades: Trade[]; newTradeId?: string | null }) {
   if (!trades.length) return <Empty text="No hay trades en este período." />
 
   function exportCSV() {
@@ -167,7 +167,7 @@ function TradesTable({ trades }: { trades: Trade[] }) {
             const exitPrice = resolveExitPrice(t)
             const notional  = t.total_value ?? t.quantity * t.price
             return (
-              <Row key={t.id} odd={i % 2 === 1}>
+              <Row key={t.id} odd={i % 2 === 1} flash={t.id === newTradeId}>
                 <Td className="font-mono text-[11px] text-gray-600 whitespace-nowrap">
                   T-{t.id.slice(0, 6).toUpperCase()}
                 </Td>
@@ -356,9 +356,11 @@ function AnalysisLog({ entries }: { entries: AnalysisEntry[] }) {
 
 type TabId = 'trades' | 'pnl' | 'analysis'
 
-export default function DataTabs({ trades, analysis }: {
-  trades: Trade[]
-  analysis: AnalysisEntry[]
+export default function DataTabs({ trades, analysis, newTradeId, isLive }: {
+  trades:      Trade[]
+  analysis:    AnalysisEntry[]
+  newTradeId?: string | null
+  isLive?:     boolean
 }) {
   const [tab, setTab] = useState<TabId>('trades')
 
@@ -376,13 +378,15 @@ export default function DataTabs({ trades, analysis }: {
             <TabBtn key={t.id} label={t.label} active={tab === t.id} count={t.count} onClick={() => setTab(t.id)} />
           ))}
         </div>
-        <div className="flex items-center gap-1.5 text-[11px] text-gray-600 pr-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
-          stream en vivo
+        <div className="flex items-center gap-1.5 text-[11px] pr-1">
+          <span className={`w-1.5 h-1.5 rounded-full inline-block ${isLive ? 'bg-emerald-500 animate-pulse' : 'bg-gray-700'}`} />
+          <span className={isLive ? 'text-emerald-600' : 'text-gray-700'}>
+            {isLive ? 'en vivo' : 'conectando…'}
+          </span>
         </div>
       </div>
 
-      {tab === 'trades'   && <TradesTable trades={trades} />}
+      {tab === 'trades'   && <TradesTable trades={trades} newTradeId={newTradeId} />}
       {tab === 'pnl'      && <PnLChart trades={trades} />}
       {tab === 'analysis' && <AnalysisLog entries={analysis} />}
     </div>
