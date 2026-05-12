@@ -18,15 +18,7 @@ from trading.market_learner    import MarketLearner
 from trading.allocation        import AllocationEngine
 from trading.order_executor    import OrderExecutor
 from trading.agent_reporter    import report
-
-# ── Config ─────────────────────────────────────────────────────────────────────
-SYMBOL       = "TQQQ"
-QQQ          = "QQQ"
-MAX_SHARES   = 10
-STOP_DOLLARS = 3.00
-ORB_BARS     = 3        # 3 × 5-min = first 15 min
-ORB_PCT_MIN  = 0.0075   # TQQQ ORB must close ≥ 0.75% above open
-QQQ_GAP_MIN  = 0.0      # QQQ must gap ≥ 0% vs prior close
+from trading.strategy_schema   import load_champion
 
 LOG_DIR = Path(__file__).parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
@@ -104,6 +96,21 @@ def main():
     atexit.register(report, "TOB-V2 Opening Monitor", "idle")
     report("TOB-V2 Opening Monitor", "running")
     log.info("=== TOB-V2 Opening Monitor started ===")
+
+    # ── Load strategy config ───────────────────────────────────────────────────
+    cfg          = load_champion()
+    SYMBOL       = cfg["symbol"]
+    QQQ          = cfg["signal_asset"]
+    MAX_SHARES   = cfg["position"]["max_shares"]
+    ORB_BARS     = cfg["entry"]["orb_bars"]
+    ORB_PCT_MIN  = cfg["entry"]["orb_threshold_pct"]
+    QQQ_GAP_MIN  = cfg["entry"]["qqq_gap_min_pct"]
+    STOP_DOLLARS = cfg["exit"]["sl_value"]
+    log.info(
+        f"Config: {cfg['id']} | "
+        f"orb={ORB_PCT_MIN:.3f} bars={ORB_BARS} "
+        f"gap={QQQ_GAP_MIN:+.3f} sl=${STOP_DOLLARS:.2f}"
+    )
 
     # ── 0. Pre-flight health check ─────────────────────────────────────────────
     health = check_all()
@@ -241,11 +248,12 @@ def main():
 
     wait_until(entry_time, log)
 
-    executor = OrderExecutor()
-    placed   = False
+    executor   = OrderExecutor()
+    placed     = False
+    parent_id  = None
     for attempt in range(3):
         try:
-            executor.place_bracket_order(
+            parent_id = executor.place_bracket_order(
                 symbol=SYMBOL, qty=qty,
                 entry=entry_price, target=target, stop=stop,
                 strategy="TOB-V2", notes=notes,
@@ -259,6 +267,9 @@ def main():
     if not placed:
         log.error("Order placement failed after 3 attempts — exiting.")
         return
+
+    if parent_id:
+        executor.set_trade_context(parent_id, regime_result)
 
     # ── 6. Event-driven monitoring until time stop ─────────────────────────────
     log.info(f"Monitoring until {time_stop.strftime('%H:%M UTC')} ...")

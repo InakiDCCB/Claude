@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from trading.agent_reporter import report
 from trading.alpaca_client  import alpaca_request, supabase_upsert_verified
+from trading.market_learner import MarketLearner
 from trading.ws_client      import AlpacaTradeStream
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -63,6 +64,12 @@ class OrderExecutor:
     @property
     def positions_count(self) -> int:
         return len(self._positions)
+
+    def set_trade_context(self, parent_id: str, regime_result: dict) -> None:
+        """Store regime context so _record_trade can call MarketLearner.record_outcome."""
+        if parent_id in self._positions:
+            self._positions[parent_id]["regime_result"] = regime_result
+            _save_state(self._positions)
 
     # ── Order placement ───────────────────────────────────────────────────────
 
@@ -225,6 +232,21 @@ class OrderExecutor:
             f"entry={entry_fill:.2f}  exit={exit_price:.2f}  "
             f"pnl={pnl:+.2f}  [{outcome}]  [{parent_id[:8]}]"
         )
+
+        regime_result = pos.get("regime_result")
+        if regime_result:
+            ml_outcome = "WIN" if pnl > 0 else "LOSS"
+            date_str   = filled_at[:10] if filled_at else datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            try:
+                MarketLearner().record_outcome(
+                    date         = date_str,
+                    regime_result = regime_result,
+                    outcome      = ml_outcome,
+                    pnl          = pnl,
+                    strategy     = pos.get("strategy", "TOB-V2"),
+                )
+            except Exception as e:
+                self._log(f"MarketLearner.record_outcome failed: {e}")
 
     # ── WebSocket + REST monitoring ───────────────────────────────────────────
 

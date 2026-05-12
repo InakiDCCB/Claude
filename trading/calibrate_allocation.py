@@ -11,7 +11,7 @@ Objective: maximize A(MOMENTUM wins) > A(NEUTRAL wins) > 0.05, consistently.
 Output: trading/allocation_params.json
 Run:    python trading/calibrate_allocation.py
 """
-import atexit, json, math, os, sys, itertools
+import json, math, os, sys, itertools
 from collections import defaultdict
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -19,10 +19,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from trading.regime_agent import MarketRegimeAgent
 from trading.allocation import _normalized_time, _realized_vol, _correlation, _historical_vol
-from trading.agent_reporter import report
-
-atexit.register(report, 'Backtesting Engine', 'idle')
-report('Backtesting Engine', 'running')
 
 # ── Data loading ──────────────────────────────────────────────────────────────
 _BASE = r"C:\Users\inaki\.claude\projects\C--Users-inaki-Claude\4b6a44fd-17b7-46ba-af07-660060a6e957\tool-results"
