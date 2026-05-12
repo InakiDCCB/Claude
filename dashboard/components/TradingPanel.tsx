@@ -5,7 +5,7 @@ import { createSupabase } from '@/lib/supabase'
 import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig } from '@/lib/supabase'
 import AccountSummary from './AccountSummary'
 import AgentGrid from './AgentGrid'
-import ChampionCard from './ChampionCard'
+import ChampionCard, { IncomingSlot } from './ChampionCard'
 import DataTabs from './DataTabs'
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
@@ -130,7 +130,15 @@ export default function TradingPanel({
       <AccountSummary trades={trades} />
 
       <section>
-        <ChampionCard champion={champion} />
+        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+          Estrategias
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+          <ChampionCard champion={champion} />
+          <IncomingSlot />
+          <IncomingSlot />
+          <IncomingSlot />
+        </div>
       </section>
 
       <section>

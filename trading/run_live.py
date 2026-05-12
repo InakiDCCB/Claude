@@ -6,11 +6,13 @@ Pipeline: health check → market check → wait for ORB → signal evaluation
           → bracket order → event-driven monitoring → time stop.
 """
 import atexit, logging, os, sys, time
+
+_exit_status = ["idle"]   # mutable so atexit lambda reads the updated value
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from trading.alpaca_client     import get_bars, get_prev_close, get_clock, alpaca_request
+from trading.alpaca_client     import get_bars, get_prev_close, get_clock, alpaca_request, sync_fallback_to_supabase
 from trading.connection        import check_all
 from trading.regime_agent      import MarketRegimeAgent
 from trading.exhaustion_filter import ExhaustionGapFilter
@@ -93,9 +95,9 @@ def _force_close(executor: OrderExecutor, symbol: str, log: logging.Logger):
 # ── Main ───────────────────────────────────────────────────────────────────────
 def main():
     log = _setup_log()
-    atexit.register(report, "TOB-V2 Opening Monitor", "idle")
-    report("TOB-V2 Opening Monitor", "running")
-    log.info("=== TOB-V2 Opening Monitor started ===")
+    atexit.register(lambda: report("TechQQQ", _exit_status[0]))
+    report("TechQQQ", "running")
+    log.info("=== TechQQQ (Stratech) started ===")
 
     # ── Load strategy config ───────────────────────────────────────────────────
     cfg          = load_champion()
@@ -112,13 +114,24 @@ def main():
         f"gap={QQQ_GAP_MIN:+.3f} sl=${STOP_DOLLARS:.2f}"
     )
 
-    # ── 0. Pre-flight health check ─────────────────────────────────────────────
-    health = check_all()
-    if not health["alpaca"]:
-        log.error("Alpaca API unreachable — aborting.")
+    # ── 0. Pre-flight health check — wait up to 5 min for network ────────────
+    for _attempt in range(6):
+        health = check_all()
+        if health["alpaca"]:
+            break
+        if _attempt < 5:
+            log.warning(f"Red no disponible — reintentando en 60 s ({_attempt + 1}/6)")
+            time.sleep(60)
+    else:
+        log.error("Alpaca API inalcanzable tras 5 reintentos — abortando.")
         return
+
     if not health["supabase"]:
         log.warning("Supabase unreachable — trade records will go to fallback file.")
+
+    n = sync_fallback_to_supabase()
+    if n:
+        log.info(f"Reenviados {n} trade(s) pendiente(s) del archivo fallback a Supabase.")
 
     # ── 1. Market clock ────────────────────────────────────────────────────────
     try:
@@ -161,12 +174,18 @@ def main():
     after_orb    = entry_time.strftime("%Y-%m-%dT%H:%M:%SZ")
     regime_start = (today_open - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    try:
-        tqqq_orb_bars   = get_bars(SYMBOL, "5Min", orb_start, after_orb)
-        qqq_regime_bars = get_bars(QQQ,    "5Min", regime_start, after_orb)
-    except Exception as e:
-        log.error(f"Failed to fetch bars: {e}")
-        return
+    for _attempt in range(2):
+        try:
+            tqqq_orb_bars   = get_bars(SYMBOL, "5Min", orb_start, after_orb)
+            qqq_regime_bars = get_bars(QQQ,    "5Min", regime_start, after_orb)
+            break
+        except Exception as e:
+            if _attempt == 0:
+                log.warning(f"Fallo al obtener barras ({e}) — reintentando en 30 s")
+                time.sleep(30)
+            else:
+                log.error(f"No se pudieron obtener barras tras reintento: {e}")
+                return
 
     qqq_orb_bars = [b for b in qqq_regime_bars if b["t"] >= orb_start][:ORB_BARS]
     orb_tqqq     = tqqq_orb_bars[:ORB_BARS]
@@ -273,16 +292,20 @@ def main():
 
     # ── 6. Event-driven monitoring until time stop ─────────────────────────────
     log.info(f"Monitoring until {time_stop.strftime('%H:%M UTC')} ...")
-    executor.run_until(time_stop)
+    exit_reason = executor.run_until(time_stop)
 
-    if executor.positions_count == 0:
+    if exit_reason == "disconnection":
+        _exit_status[0] = "disconnected"
+        log.warning("Corte de red > 1 h — ejecutando cierre forzado.")
+        _force_close(executor, SYMBOL, log)
+    elif exit_reason == "closed":
         log.info("All positions closed — done.")
-        return
+    else:
+        # time_stop
+        log.info("Time stop reached — canceling orders and closing position.")
+        _force_close(executor, SYMBOL, log)
 
-    # ── 7. Time stop — force close ─────────────────────────────────────────────
-    log.info("Time stop reached — canceling orders and closing position.")
-    _force_close(executor, SYMBOL, log)
-    log.info("=== TOB-V2 Opening Monitor complete ===")
+    log.info("=== TechQQQ complete ===")
 
 
 if __name__ == "__main__":

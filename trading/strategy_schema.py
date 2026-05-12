@@ -18,8 +18,8 @@ _ARCHIVE_DIR   = Path(__file__).parent / "strategy_archive"
 def _tob_v2_default() -> dict:
     return {
         "version": "1.0.0",
-        "id": "tob-v2-default",
-        "strategy": "TOB-V2",
+        "id": "stratech-default",
+        "strategy": "Stratech",
         "symbol": "TQQQ",
         "signal_asset": "QQQ",
         "entry": {
@@ -48,7 +48,7 @@ def _tob_v2_default() -> dict:
 
 
 def load_champion() -> dict:
-    """Load active champion strategy. Falls back to TOB-V2 default if absent."""
+    """Load active champion strategy. Falls back to Stratech default if absent."""
     if _CHAMPION_PATH.exists():
         return json.loads(_CHAMPION_PATH.read_text(encoding="utf-8"))
     return _tob_v2_default()
@@ -68,7 +68,7 @@ def archive_strategy(config: dict, reason: str) -> Path:
     return path
 
 
-def make_mutation_id(base: str = "tob-v2") -> str:
+def make_mutation_id(base: str = "stratech") -> str:
     ts    = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     short = str(uuid.uuid4())[:8]
     return f"{base}-{ts}-{short}"

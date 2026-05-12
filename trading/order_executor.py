@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from trading.agent_reporter import report
-from trading.alpaca_client  import alpaca_request, supabase_upsert_verified
+from trading.alpaca_client  import alpaca_request, supabase_upsert_verified, get_clock
 from trading.market_learner import MarketLearner
 from trading.ws_client      import AlpacaTradeStream
 
@@ -260,10 +260,11 @@ class OrderExecutor:
         )
         self.reconcile()
 
-    def run_until(self, until: datetime):
+    def run_until(self, until: datetime) -> str:
         """
         Monitor open positions until `until` (UTC datetime) or all positions are closed.
         WebSocket events are the primary trigger; REST reconcile is the fallback/audit.
+        Returns: "closed" | "time_stop" | "disconnection"
         """
         event_q = queue.Queue()
         ws = AlpacaTradeStream(event_q)
@@ -274,7 +275,11 @@ class OrderExecutor:
         else:
             self._log("WebSocket unavailable — REST fallback mode.")
 
-        last_rest = datetime.now(timezone.utc)
+        last_rest      = datetime.now(timezone.utc)
+        last_connected = datetime.now(timezone.utc)
+        last_probe     = datetime.now(timezone.utc)
+        _OUTAGE_LIMIT  = 3600  # 1 hour
+        exit_reason    = "closed"
 
         try:
             while datetime.now(timezone.utc) < until and self._positions:
@@ -291,9 +296,26 @@ class OrderExecutor:
                     self.reconcile()
                     last_rest = now
 
+                if (now - last_probe).total_seconds() >= 60:
+                    last_probe = now
+                    try:
+                        get_clock()
+                        last_connected = now
+                    except Exception:
+                        outage_min = (now - last_connected).total_seconds() / 60
+                        self._log(f"Sonda de red fallida — {outage_min:.0f} min sin conexión.")
+                        if (now - last_connected).total_seconds() >= _OUTAGE_LIMIT:
+                            self._log("Corte > 1 h — saliendo del loop para cierre forzado.")
+                            exit_reason = "disconnection"
+                            break
+
                 time.sleep(10)
         finally:
             ws.stop()
+
+        if exit_reason == "closed" and self._positions:
+            exit_reason = "time_stop"
+        return exit_reason
 
     # ── Standalone REST loop ──────────────────────────────────────────────────
 

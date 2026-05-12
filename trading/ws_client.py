@@ -152,8 +152,9 @@ class AlpacaTradeStream(threading.Thread):
     """
     HOST        = "paper-api.alpaca.markets"
     PATH        = "/stream"
-    MAX_RETRIES = 3
-    HB_INTERVAL = 25   # seconds between heartbeat pings
+    MAX_RETRIES  = 12
+    _MAX_BACKOFF = 60   # cap between reconnect attempts
+    HB_INTERVAL  = 25  # seconds between heartbeat pings
 
     def __init__(self, event_queue: queue.Queue):
         super().__init__(daemon=True, name="AlpacaWS")
@@ -175,12 +176,14 @@ class AlpacaTradeStream(threading.Thread):
             try:
                 self._connected.clear()
                 self._run_session()
-                retries = 0            # clean session → reset counter
+                retries = 0             # clean session → reset counter
+                self.has_failed = False  # clear on successful reconnect
             except Exception:
                 retries += 1
+                self.has_failed = True   # signal degraded immediately
                 self._connected.clear()
                 if not self._stop.is_set():
-                    time.sleep(2 ** retries)
+                    time.sleep(min(2 ** retries, self._MAX_BACKOFF))
 
         if not self._stop.is_set():
             self.has_failed = True
@@ -248,8 +251,9 @@ class AlpacaTradeStream(threading.Thread):
             if opcode in (0x1, 0x2):   # Text or binary
                 try:
                     self._handle(json.loads(payload))
-                except json.JSONDecodeError:
-                    pass
+                except json.JSONDecodeError as exc:
+                    import logging
+                    logging.getLogger("ws_client").warning("WS: JSON decode error — %s", exc)
 
     # ── Message parsing ───────────────────────────────────────────────────────
 

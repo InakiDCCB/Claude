@@ -55,7 +55,7 @@ export type MarketSnapshot = {
 export type AgentStatus = {
   id: string
   name: string
-  status: 'running' | 'idle' | 'error'
+  status: 'running' | 'idle' | 'error' | 'disconnected'
   description: string | null
   updated_at: string
   metadata: Record<string, unknown> | null

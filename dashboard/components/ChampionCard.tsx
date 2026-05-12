@@ -1,5 +1,21 @@
 import type { ChampionConfig } from '@/lib/supabase'
 
+export function IncomingSlot() {
+  return (
+    <div className="rounded-xl border border-dashed border-gray-800 bg-gray-950/40 p-5 flex flex-col items-center justify-center gap-3 min-h-[220px]">
+      <div className="w-10 h-10 rounded-full border-2 border-dashed border-gray-700 flex items-center justify-center">
+        <svg className="w-4 h-4 text-gray-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+          <path d="M12 5v14M5 12h14" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </div>
+      <div className="text-center">
+        <p className="text-[11px] font-semibold text-gray-600 uppercase tracking-widest">Próximo campeón</p>
+        <p className="text-[10px] text-gray-700 mt-1 font-mono">Incoming</p>
+      </div>
+    </div>
+  )
+}
+
 function pct(v: number, decimals = 2) {
   const sign = v > 0 ? '+' : ''
   return `${sign}${(v * 100).toFixed(decimals)}%`

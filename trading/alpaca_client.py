@@ -108,6 +108,27 @@ def get_clock() -> dict:
     return alpaca_request("GET", "/v2/clock")
 
 
+def sync_fallback_to_supabase() -> int:
+    """Replay locally-saved fallback trades to Supabase. Returns count synced."""
+    if not _FALLBACK.exists():
+        return 0
+    lines = [l.strip() for l in _FALLBACK.read_text(encoding="utf-8").splitlines() if l.strip()]
+    if not lines:
+        return 0
+    synced, remaining = 0, []
+    for line in lines:
+        try:
+            supabase_upsert("trades", [json.loads(line)])
+            synced += 1
+        except Exception:
+            remaining.append(line)
+    if remaining:
+        _FALLBACK.write_text("\n".join(remaining) + "\n", encoding="utf-8")
+    else:
+        _FALLBACK.unlink(missing_ok=True)
+    return synced
+
+
 @with_retry()
 def get_bars(symbol: str, timeframe: str, start_iso: str, end_iso: str) -> list:
     """Fetch stock bars from Alpaca data API with auto-pagination."""

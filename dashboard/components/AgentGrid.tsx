@@ -24,10 +24,17 @@ const STATUS_CFG = {
     text:  'text-red-400',
     bar:   'bg-red-500',
   },
+  disconnected: {
+    dot:   'bg-orange-400',
+    ping:  false,
+    label: 'Detenido · sin red',
+    text:  'text-orange-400',
+    bar:   'bg-orange-500',
+  },
 } as const
 
 function AgentCard({ agent }: { agent: AgentStatus }) {
-  const cfg = STATUS_CFG[agent.status]
+  const cfg = STATUS_CFG[agent.status] ?? STATUS_CFG.idle
 
   const meta          = agent.metadata
   const progress      = meta != null && typeof meta['progress'] === 'number' ? (meta['progress'] as number) : null

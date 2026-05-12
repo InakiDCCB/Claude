@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "id": "tob-v2-default",
-  "strategy": "TOB-V2",
+  "id": "stratech-default",
+  "strategy": "Stratech",
   "symbol": "TQQQ",
   "signal_asset": "QQQ",
   "entry": {
