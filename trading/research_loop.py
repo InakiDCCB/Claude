@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from trading.bar_cache         import get_bars_cached
 from trading.backtester        import run_backtest
 from trading.strategy_explorer import generate_random_level_a, is_better_than_champion
-from trading.strategy_schema   import load_champion, save_champion, archive_strategy
+from trading.strategy_schema   import load_champion, save_champion, archive_strategy, sync_champion_to_supabase
 
 CANDIDATES_PER_RUN = 20
 BACKTEST_START     = "2025-01-01"
@@ -49,6 +49,7 @@ def run_nightly():
 
     champion = load_champion()
     log.info(f"Champion: {champion['id']}")
+    sync_champion_to_supabase(champion)  # keep dashboard in sync
 
     symbol = champion["symbol"]
     signal = champion["signal_asset"]
@@ -111,7 +112,8 @@ def run_nightly():
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         save_champion(best_candidate)
-        log.info("Champion saved to active_strategy.json")
+        sync_champion_to_supabase(best_candidate)
+        log.info("Champion saved to active_strategy.json and synced to Supabase")
     else:
         log.info("No improvement found - champion unchanged.")
 

@@ -72,3 +72,33 @@ def make_mutation_id(base: str = "tob-v2") -> str:
     ts    = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     short = str(uuid.uuid4())[:8]
     return f"{base}-{ts}-{short}"
+
+
+def sync_champion_to_supabase(config: dict) -> None:
+    """
+    Push current champion config to Supabase champion_strategy table.
+    Silently ignores all errors — dashboard sync is best-effort.
+    """
+    import json as _json, os as _os, urllib.request as _ur
+    try:
+        url = _os.environ["SUPABASE_URL"]
+        key = _os.environ["SUPABASE_ANON_KEY"]
+        payload = _json.dumps([{
+            "key":        "current",
+            "config":     config,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }]).encode()
+        req = _ur.Request(
+            f"{url}/rest/v1/champion_strategy",
+            data=payload,
+            method="POST",
+            headers={
+                "apikey":        key,
+                "Authorization": f"Bearer {key}",
+                "Content-Type":  "application/json",
+                "Prefer":        "resolution=merge-duplicates",
+            },
+        )
+        _ur.urlopen(req, timeout=5)
+    except Exception:
+        pass
