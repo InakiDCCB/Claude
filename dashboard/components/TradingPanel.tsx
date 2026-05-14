@@ -127,27 +127,36 @@ export default function TradingPanel({
     <>
       {toast && <TradeToast trade={toast} onClose={() => setToast(null)} />}
 
+      {/* Niveles 1–3: Portfolio · Métricas · Top Performers */}
       <AccountSummary trades={trades} />
 
+      {/* Nivel 4: Agente */}
       <section>
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
-          Estrategias
+          Agente
         </h2>
+        <AgentGrid agents={agents} />
+      </section>
+
+      {/* Nivel 5: Estrategias */}
+      <section>
+        <div className="flex items-baseline gap-3 mb-3">
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest">
+            Estrategias
+          </h2>
+          <span className="text-[10px] text-gray-700">
+            Objetivo: maximizar P&L · prioridad Hit Ratio &gt; 50%
+          </span>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-          <ChampionCard champion={champion} />
+          <ChampionCard champion={champion} isBestPerformer={champion != null} />
           <IncomingSlot />
           <IncomingSlot />
           <IncomingSlot />
         </div>
       </section>
 
-      <section>
-        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
-          Agentes
-        </h2>
-        <AgentGrid agents={agents} />
-      </section>
-
+      {/* Nivel 6: Trades · P&L · Analysis Log */}
       <section>
         <DataTabs
           trades={trades}

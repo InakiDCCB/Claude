@@ -61,7 +61,7 @@ function safeRecord(v: unknown): Record<string, unknown> {
   return {}
 }
 
-export default function ChampionCard({ champion }: { champion: ChampionConfig | null }) {
+export default function ChampionCard({ champion, isBestPerformer = false }: { champion: ChampionConfig | null; isBestPerformer?: boolean }) {
   if (!champion) return null
 
   const c       = champion.config
@@ -99,9 +99,16 @@ export default function ChampionCard({ champion }: { champion: ChampionConfig | 
       {/* Header */}
       <div className="flex items-start justify-between gap-4 mb-4">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-1">
-            Estrategia Activa
-          </p>
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">
+              Estrategia Activa
+            </p>
+            {isBestPerformer && (
+              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-800/40 font-semibold">
+                ★ Mejor rendimiento
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-white font-semibold">{name}</span>
             {version && (

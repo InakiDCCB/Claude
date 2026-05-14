@@ -9,6 +9,7 @@ type AlpacaAccount = {
   last_equity: string
   long_market_value: string
   short_market_value: string
+  cash: string
   positions_count: number
 }
 
@@ -85,41 +86,7 @@ function HitRatioGauge({ trades }: { trades: Trade[] }) {
             <p className="text-xs font-mono font-semibold text-white">{wl}</p>
           </div>
         </div>
-        <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-800 text-gray-500 font-mono">TOB-V2</span>
       </div>
-    </div>
-  )
-}
-
-function TopPerformers({ trades }: { trades: Trade[] }) {
-  const byAsset: Record<string, number> = {}
-  for (const t of trades) {
-    if (t.pnl != null) byAsset[t.asset] = (byAsset[t.asset] ?? 0) + t.pnl
-  }
-  const winners = Object.entries(byAsset)
-    .filter(([, pnl]) => pnl > 0)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 6)
-  const max = winners[0]?.[1] ?? 1
-
-  return (
-    <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4">
-      <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-3">Top Performers</p>
-      {!winners.length ? (
-        <p className="text-xs text-gray-600">Sin operaciones ganadoras</p>
-      ) : (
-        <div className="space-y-2">
-          {winners.map(([asset, pnl]) => (
-            <div key={asset} className="flex items-center gap-2">
-              <span className="text-xs font-mono text-white w-10 shrink-0">{asset}</span>
-              <div className="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${(pnl / max) * 100}%` }} />
-              </div>
-              <span className="text-xs font-mono text-emerald-400 w-20 text-right shrink-0">+{fmtUSD(pnl)}</span>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   )
 }
@@ -168,6 +135,63 @@ function DollarPnL({ trades }: { trades: Trade[] }) {
   )
 }
 
+function PositionsCard({ account, loading }: { account: AlpacaAccount | null; loading: boolean }) {
+  const count   = account?.positions_count ?? 0
+  const longVal = account ? parseFloat(account.long_market_value) : null
+
+  return (
+    <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4">
+      <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">Positions</p>
+      {loading ? (
+        <div className="h-7 w-16 bg-gray-800 rounded animate-pulse" />
+      ) : (
+        <p className="text-xl font-mono font-semibold text-white">{count}</p>
+      )}
+      <p className="text-[11px] text-gray-600 mt-0.5">
+        {count > 0
+          ? `${count} posición${count !== 1 ? 'es' : ''} abierta${count !== 1 ? 's' : ''}`
+          : 'sin posiciones abiertas'}
+      </p>
+      {longVal != null && longVal > 0 && (
+        <p className="text-[11px] font-mono text-emerald-500 mt-1">{fmtUSD(longVal)} expuesto</p>
+      )}
+    </div>
+  )
+}
+
+function TopPerformers({ trades }: { trades: Trade[] }) {
+  const byAsset: Record<string, number> = {}
+  for (const t of trades) {
+    if (t.pnl != null) byAsset[t.asset] = (byAsset[t.asset] ?? 0) + t.pnl
+  }
+  const winners = Object.entries(byAsset)
+    .filter(([, pnl]) => pnl > 0)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 6)
+  const max = winners[0]?.[1] ?? 1
+
+  return (
+    <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4">
+      <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-3">Top Performers</p>
+      {!winners.length ? (
+        <p className="text-xs text-gray-600">Sin operaciones ganadoras aún</p>
+      ) : (
+        <div className="space-y-2">
+          {winners.map(([asset, pnl]) => (
+            <div key={asset} className="flex items-center gap-2">
+              <span className="text-xs font-mono text-white w-10 shrink-0">{asset}</span>
+              <div className="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${(pnl / max) * 100}%` }} />
+              </div>
+              <span className="text-xs font-mono text-emerald-400 w-20 text-right shrink-0">+{fmtUSD(pnl)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function AccountSummary({ trades }: { trades: Trade[] }) {
   const [account, setAccount] = useState<AlpacaAccount | null>(null)
   const [loading, setLoading] = useState(true)
@@ -179,63 +203,63 @@ export default function AccountSummary({ trades }: { trades: Trade[] }) {
       .catch(() => setLoading(false))
   }, [])
 
-  const filled = trades.filter(t => t.status === 'filled')
-
-  const equity     = account ? parseFloat(account.equity) : null
-  const lastEquity = account ? parseFloat(account.last_equity) : null
-  const portVal    = account ? parseFloat(account.portfolio_value) : null
-  const delta      = equity != null && lastEquity != null && lastEquity > 0 ? equity - lastEquity : null
-  const deltaPct   = delta != null && lastEquity ? (delta / lastEquity) * 100 : null
-  const longVal    = account ? parseFloat(account.long_market_value) : null
-  const longPct    = longVal != null && portVal != null && portVal > 0 ? (longVal / portVal) * 100 : null
-
+  const filled       = trades.filter(t => t.status === 'filled')
   const closedTrades = filled.filter(t => t.pnl != null)
   const avgPnL       = closedTrades.length > 0
     ? closedTrades.reduce((s, t) => s + (t.pnl ?? 0), 0) / closedTrades.length
     : 0
 
-  const deltaStr = deltaPct != null
-    ? `${delta! >= 0 ? '▲' : '▼'} ${fmtUSD(Math.abs(delta!))} (${deltaPct >= 0 ? '+' : ''}${deltaPct.toFixed(2)}%)`
-    : undefined
-
-  const posStr = account
-    ? `${account.positions_count} posición${account.positions_count !== 1 ? 'es' : ''}`
-    : undefined
+  const portDelta    = account ? parseFloat(account.equity) - parseFloat(account.last_equity) : null
+  const portDeltaPct = portDelta != null && account && parseFloat(account.last_equity) > 0
+    ? (portDelta / parseFloat(account.last_equity)) * 100
+    : null
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-      <StatCard
-        label="Portfolio Value"
-        value={fmtUSD(account?.portfolio_value)}
-        sub={deltaStr}
-        loading={loading}
-        valueColor={delta == null ? 'text-white' : delta >= 0 ? 'text-emerald-400' : 'text-red-400'}
-      />
-      <StatCard
-        label="Long Value"
-        value={fmtUSD(account?.long_market_value)}
-        sub={longPct != null ? `${longPct.toFixed(1)}% del NAV` : undefined}
-        loading={loading}
-        valueColor="text-emerald-400"
-      />
-      <HitRatioGauge trades={trades} />
-      <DollarPnL trades={trades} />
-
-      <StatCard
-        label="Market Value"
-        value={fmtUSD(account?.equity)}
-        sub={posStr}
-        loading={loading}
-      />
-      <StatCard
-        label="P&L Promedio"
-        value={closedTrades.length > 0 ? `${avgPnL >= 0 ? '+' : ''}${fmtUSD(avgPnL)}` : '—'}
-        sub={closedTrades.length > 0 ? `sobre ${closedTrades.length} trade${closedTrades.length !== 1 ? 's' : ''} cerrado${closedTrades.length !== 1 ? 's' : ''}` : 'sin trades cerrados'}
-        valueColor={closedTrades.length === 0 ? 'text-white' : avgPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}
-      />
-      <div className="col-span-2">
-        <TopPerformers trades={trades} />
+    <div className="space-y-3">
+      {/* Nivel 1: Portfolio Value · Market Value · Cash · P&L Promedio */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard
+          label="Portfolio Value"
+          value={fmtUSD(account?.portfolio_value)}
+          sub={portDeltaPct != null
+            ? `${portDeltaPct >= 0 ? '▲' : '▼'} ${portDeltaPct >= 0 ? '+' : ''}${portDeltaPct.toFixed(2)}% vs ayer`
+            : undefined}
+          loading={loading}
+          valueColor={portDelta == null ? 'text-white' : portDelta >= 0 ? 'text-emerald-400' : 'text-red-400'}
+        />
+        <StatCard
+          label="Market Value"
+          value={fmtUSD(account?.long_market_value)}
+          sub={account
+            ? (parseFloat(account.long_market_value) > 0 ? 'posiciones largas' : 'sin exposición')
+            : undefined}
+          loading={loading}
+        />
+        <StatCard
+          label="Cash"
+          value={fmtUSD(account?.cash)}
+          sub="disponible para operar"
+          loading={loading}
+        />
+        <StatCard
+          label="P&L Promedio"
+          value={closedTrades.length > 0 ? `${avgPnL >= 0 ? '+' : ''}${fmtUSD(avgPnL)}` : '—'}
+          sub={closedTrades.length > 0
+            ? `${closedTrades.length} trade${closedTrades.length !== 1 ? 's' : ''} cerrado${closedTrades.length !== 1 ? 's' : ''}`
+            : 'sin trades cerrados'}
+          valueColor={closedTrades.length === 0 ? 'text-white' : avgPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}
+        />
       </div>
+
+      {/* Nivel 2: Hit Ratio · P&L en $ · Positions */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <HitRatioGauge trades={trades} />
+        <DollarPnL trades={trades} />
+        <PositionsCard account={account} loading={loading} />
+      </div>
+
+      {/* Nivel 3: Top Performers */}
+      <TopPerformers trades={trades} />
     </div>
   )
 }
