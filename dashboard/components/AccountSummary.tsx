@@ -48,7 +48,7 @@ function HitRatioGauge({ trades }: { trades: Trade[] }) {
   const wl      = losses > 0 ? (wins / losses).toFixed(2) : wins > 0 ? '∞' : '—'
   const color   = total === 0 ? '#374151' : pct >= 50 ? '#34d399' : '#f87171'
   const ARC     = Math.PI * 36
-  const filled  = total > 0 ? (wins / total) * ARC : 0
+  const filled  = total === 0 ? 0 : pct >= 50 ? (wins / total) * ARC : (losses / total) * ARC
 
   return (
     <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4">
@@ -64,7 +64,7 @@ function HitRatioGauge({ trades }: { trades: Trade[] }) {
             strokeLinecap="round"
             strokeDasharray={`${filled} ${ARC - filled}`}
           />
-          <text x="50" y="43" textAnchor="middle" fill="white" fontSize="13" fontWeight="700" fontFamily="ui-monospace,monospace">
+          <text x="50" y="43" textAnchor="middle" fill={color} fontSize="13" fontWeight="700" fontFamily="ui-monospace,monospace">
             {total === 0 ? '—' : `${pct}%`}
           </text>
           <text x="50" y="54" textAnchor="middle" fill="#6b7280" fontSize="7" fontFamily="ui-monospace,monospace">
