@@ -16,21 +16,6 @@ export function IncomingSlot() {
   )
 }
 
-function pct(v: number, decimals = 2) {
-  const sign = v > 0 ? '+' : ''
-  return `${sign}${(v * 100).toFixed(decimals)}%`
-}
-
-function Tag({ on, label }: { on: boolean; label: string }) {
-  return (
-    <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium
-      ${on ? 'bg-emerald-900/50 text-emerald-400' : 'bg-gray-800 text-gray-500'}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${on ? 'bg-emerald-400' : 'bg-gray-600'}`} />
-      {label}
-    </span>
-  )
-}
-
 function Row({ label, value, mono = true }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex items-baseline justify-between gap-2 py-[3px]">
@@ -40,20 +25,55 @@ function Row({ label, value, mono = true }: { label: string; value: string; mono
   )
 }
 
+function Tag({ label, active = true }: { label: string; active?: boolean }) {
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium
+      ${active ? 'bg-emerald-900/50 text-emerald-400' : 'bg-gray-800 text-gray-500'}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-emerald-400' : 'bg-gray-600'}`} />
+      {label}
+    </span>
+  )
+}
+
+function str(v: unknown): string {
+  if (v == null) return '—'
+  if (typeof v === 'number') return String(v)
+  if (typeof v === 'string') return v
+  if (Array.isArray(v)) return v.join(', ')
+  return JSON.stringify(v)
+}
+
+function num(v: unknown, decimals = 2): string {
+  if (v == null || v === '') return '—'
+  const n = Number(v)
+  return isNaN(n) ? '—' : n.toFixed(decimals)
+}
+
 export default function ChampionCard({ champion }: { champion: ChampionConfig | null }) {
   if (!champion) return null
 
-  const { config } = champion
-  const { entry, exit: exitCfg, position, performance } = config
+  const c = champion.config
+  const perf = (c.performance ?? {}) as Record<string, unknown>
 
-  const hasPerf  = performance.trades > 0 && performance.win_rate != null && performance.avg_pnl != null
-  const pnlColor = hasPerf && (performance.avg_pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'
-  const missing  = Math.max(0, 100 - performance.trades)
+  const trades    = Number(perf.trades ?? 0)
+  const wins      = Number(perf.wins   ?? 0)
+  const losses    = Number(perf.losses ?? 0)
+  const totalPnl  = Number(perf.total_pnl ?? 0)
+  const hitRate   = perf.hit_rate != null ? Number(perf.hit_rate) : (trades > 0 ? wins / trades : null)
 
-  // Friendly version of the ID: strip timestamp noise after the base
-  const displayId = config.id.length > 28
-    ? `…${config.id.slice(-20)}`
-    : config.id
+  const hasPerf  = trades > 0
+  const pnlColor = totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'
+
+  const name      = str(c.name ?? c.strategy ?? 'Estrategia')
+  const version   = c.version != null ? `v${c.version}` : ''
+  const assets    = str(c.assets ?? c.symbol ?? '—')
+  const timeframe = str(c.timeframe ?? '—')
+
+  const rules     = (c.rules ?? {}) as Record<string, unknown>
+  const entryLong = Array.isArray(rules.entry_long) ? rules.entry_long as string[] : []
+  const avoid     = Array.isArray(rules.avoid)      ? rules.avoid      as string[] : []
+
+  const sizing    = (c.position_sizing ?? {}) as Record<string, unknown>
 
   return (
     <div className="rounded-xl border border-gray-800 bg-gray-900/60 p-5">
@@ -64,13 +84,13 @@ export default function ChampionCard({ champion }: { champion: ChampionConfig | 
             Estrategia Activa
           </p>
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-white font-semibold">{config.strategy}</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-300 font-mono">
-              {config.symbol}
-            </span>
-            <span className="text-[10px] text-gray-600 font-mono truncate">
-              {displayId}
-            </span>
+            <span className="text-white font-semibold">{name}</span>
+            {version && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-300 font-mono">
+                {version}
+              </span>
+            )}
+            <span className="text-[10px] text-gray-600 font-mono">{assets}</span>
           </div>
         </div>
 
@@ -78,57 +98,68 @@ export default function ChampionCard({ champion }: { champion: ChampionConfig | 
         {hasPerf ? (
           <div className="shrink-0 text-right">
             <p className={`text-lg font-mono font-semibold ${pnlColor}`}>
-              {(performance.avg_pnl ?? 0) >= 0 ? '+' : ''}${(performance.avg_pnl ?? 0).toFixed(2)}
+              {totalPnl >= 0 ? '+' : ''}${num(totalPnl)}
             </p>
             <p className="text-[10px] text-gray-500">
-              {((performance.win_rate ?? 0) * 100).toFixed(0)}% win · {performance.trades}T
+              {hitRate != null ? `${(hitRate * 100).toFixed(0)}% hit` : '—'} · {trades}T
             </p>
           </div>
         ) : (
           <div className="shrink-0 text-right">
-            <p className="text-[11px] text-gray-600">Sin performance</p>
-            <p className="text-[10px] text-gray-700">{missing} trades más</p>
+            <p className="text-[11px] text-gray-600">Sin trades aún</p>
+            <p className="text-[10px] text-gray-700">Aprendiendo…</p>
           </div>
         )}
       </div>
 
-      {/* Params grid */}
-      <div className="grid grid-cols-2 gap-x-6 gap-y-0 text-sm">
-        {/* Entry column */}
-        <div>
-          <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-1">
-            Entrada
-          </p>
-          <Row label="ORB mínimo"   value={pct(entry.orb_threshold_pct)} />
-          <Row label="Velas ORB"    value={`${entry.orb_bars} × 5 min`} />
-          <Row label="Gap QQQ"      value={`≥ ${pct(entry.qqq_gap_min_pct, 1)}`} />
-          <Row label="Señal desde"  value={config.signal_asset} mono={false} />
-          <div className="flex gap-1.5 mt-1.5">
-            <Tag on={entry.use_regime}     label="Régimen" />
-            <Tag on={entry.use_exhaustion} label="Agotamiento" />
-          </div>
-        </div>
-
-        {/* Exit column */}
-        <div>
-          <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-1">
-            Salida
-          </p>
-          <Row label="Take Profit"   value="Máximo del ORB" mono={false} />
-          <Row label="Stop Loss"     value={`Entrada − $${exitCfg.sl_value.toFixed(2)}`} />
-          <Row label="Time stop"     value={`${exitCfg.time_stop_et} ET`} />
-          <Row label="Tamaño máx."   value={`${position.max_shares} acc.`} />
-        </div>
+      {/* Params */}
+      <div className="space-y-0.5 mb-3">
+        <Row label="Timeframe"  value={timeframe} />
+        <Row label="Trades"     value={`${wins}W / ${losses}L`} />
+        {sizing.risk_per_trade_usd != null && (
+          <Row label="Riesgo/trade" value={`$${num(sizing.risk_per_trade_usd, 0)}`} />
+        )}
+        {sizing.max_daily_loss_usd != null && (
+          <Row label="Max pérdida día" value={`$${num(sizing.max_daily_loss_usd, 0)}`} />
+        )}
+        {(c.rules as Record<string, unknown>)?.stop_loss && (
+          <Row label="Stop loss"  value={str((c.rules as Record<string, unknown>).stop_loss)} mono={false} />
+        )}
+        {(c.rules as Record<string, unknown>)?.take_profit && (
+          <Row label="Take profit" value={str((c.rules as Record<string, unknown>).take_profit)} mono={false} />
+        )}
       </div>
 
-      {/* How it works */}
-      <p className="mt-4 text-[11px] text-gray-600 leading-relaxed border-t border-gray-800/60 pt-3">
-        Espera que TQQQ rompa al alza en los primeros {entry.orb_bars * 5} min (≥&nbsp;{pct(entry.orb_threshold_pct)})
-        con QQQ sin gap negativo.
-        Si el régimen de mercado es momentum y no hay señal de agotamiento,
-        entra al VWAP del ORB con TP en el máximo y SL a ${exitCfg.sl_value.toFixed(2)} de distancia.
-        Cierra todo a las {exitCfg.time_stop_et} ET si no se alcanzó antes.
-      </p>
+      {/* Entry rules */}
+      {entryLong.length > 0 && (
+        <div className="mb-2">
+          <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-1.5">
+            Condiciones entrada
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {entryLong.map((r, i) => <Tag key={i} label={r} />)}
+          </div>
+        </div>
+      )}
+
+      {/* Avoid rules */}
+      {avoid.length > 0 && (
+        <div className="mt-2">
+          <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-1.5">
+            Evitar
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {avoid.map((r, i) => <Tag key={i} label={r} active={false} />)}
+          </div>
+        </div>
+      )}
+
+      {/* Notes */}
+      {c.notes && (
+        <p className="mt-3 text-[11px] text-gray-600 leading-relaxed border-t border-gray-800/60 pt-3">
+          {str(c.notes)}
+        </p>
+      )}
     </div>
   )
 }

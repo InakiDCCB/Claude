@@ -64,30 +64,5 @@ export type AgentStatus = {
 export type ChampionConfig = {
   key: string
   updated_at: string
-  config: {
-    id: string
-    strategy: string
-    symbol: string
-    signal_asset: string
-    entry: {
-      orb_bars: number
-      orb_threshold_pct: number
-      qqq_gap_min_pct: number
-      use_regime: boolean
-      use_exhaustion: boolean
-    }
-    exit: {
-      tp_method: string
-      sl_method: string
-      sl_value: number
-      time_stop_et: string
-    }
-    position: { max_shares: number }
-    performance: {
-      trades: number
-      win_rate: number | null
-      avg_pnl: number | null
-      created_at: string
-    }
-  }
+  config: Record<string, unknown>
 }
