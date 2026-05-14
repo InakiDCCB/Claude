@@ -35,45 +35,64 @@ function Tag({ label, active = true }: { label: string; active?: boolean }) {
   )
 }
 
-function str(v: unknown): string {
+function safeStr(v: unknown): string {
   if (v == null) return '—'
   if (typeof v === 'number') return String(v)
   if (typeof v === 'string') return v
-  if (Array.isArray(v)) return v.join(', ')
+  if (Array.isArray(v)) return (v as unknown[]).map(String).join(', ')
   return JSON.stringify(v)
 }
 
-function num(v: unknown, decimals = 2): string {
-  if (v == null || v === '') return '—'
+function safeNum(v: unknown, decimals = 2): string {
+  if (v == null) return '—'
   const n = Number(v)
   return isNaN(n) ? '—' : n.toFixed(decimals)
+}
+
+function safeStringArray(v: unknown): string[] {
+  if (!Array.isArray(v)) return []
+  return v.filter((x): x is string => typeof x === 'string')
+}
+
+function safeRecord(v: unknown): Record<string, unknown> {
+  if (v != null && typeof v === 'object' && !Array.isArray(v)) {
+    return v as Record<string, unknown>
+  }
+  return {}
 }
 
 export default function ChampionCard({ champion }: { champion: ChampionConfig | null }) {
   if (!champion) return null
 
-  const c = champion.config
-  const perf = (c.performance ?? {}) as Record<string, unknown>
+  const c       = champion.config
+  const perf    = safeRecord(c.performance)
+  const rules   = safeRecord(c.rules)
+  const sizing  = safeRecord(c.position_sizing)
 
-  const trades    = Number(perf.trades ?? 0)
-  const wins      = Number(perf.wins   ?? 0)
-  const losses    = Number(perf.losses ?? 0)
-  const totalPnl  = Number(perf.total_pnl ?? 0)
-  const hitRate   = perf.hit_rate != null ? Number(perf.hit_rate) : (trades > 0 ? wins / trades : null)
+  const trades   = Number(perf.trades   ?? 0)
+  const wins     = Number(perf.wins     ?? 0)
+  const losses   = Number(perf.losses   ?? 0)
+  const totalPnl = Number(perf.total_pnl ?? 0)
+  const hitRate  = perf.hit_rate != null
+    ? Number(perf.hit_rate)
+    : trades > 0 ? wins / trades : null
 
   const hasPerf  = trades > 0
   const pnlColor = totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'
 
-  const name      = str(c.name ?? c.strategy ?? 'Estrategia')
-  const version   = c.version != null ? `v${c.version}` : ''
-  const assets    = str(c.assets ?? c.symbol ?? '—')
-  const timeframe = str(c.timeframe ?? '—')
+  const name      = safeStr(c.name      ?? c.strategy  ?? 'Estrategia')
+  const version   = c.version != null   ? `v${safeStr(c.version)}`  : ''
+  const assets    = safeStr(c.assets    ?? c.symbol    ?? '—')
+  const timeframe = safeStr(c.timeframe ?? '—')
+  const notes     = typeof c.notes === 'string' ? c.notes : ''
 
-  const rules     = (c.rules ?? {}) as Record<string, unknown>
-  const entryLong = Array.isArray(rules.entry_long) ? rules.entry_long as string[] : []
-  const avoid     = Array.isArray(rules.avoid)      ? rules.avoid      as string[] : []
+  const entryLong  = safeStringArray(rules.entry_long)
+  const avoidRules = safeStringArray(rules.avoid)
 
-  const sizing    = (c.position_sizing ?? {}) as Record<string, unknown>
+  const riskPerTrade   = sizing.risk_per_trade_usd   != null ? safeNum(sizing.risk_per_trade_usd, 0)   : ''
+  const maxDailyLoss   = sizing.max_daily_loss_usd   != null ? safeNum(sizing.max_daily_loss_usd, 0)   : ''
+  const stopLossLabel  = typeof rules.stop_loss  === 'string' ? rules.stop_loss  : ''
+  const takeProfitLbl  = typeof rules.take_profit === 'string' ? rules.take_profit : ''
 
   return (
     <div className="rounded-xl border border-gray-800 bg-gray-900/60 p-5">
@@ -94,11 +113,10 @@ export default function ChampionCard({ champion }: { champion: ChampionConfig | 
           </div>
         </div>
 
-        {/* Performance badge */}
         {hasPerf ? (
           <div className="shrink-0 text-right">
             <p className={`text-lg font-mono font-semibold ${pnlColor}`}>
-              {totalPnl >= 0 ? '+' : ''}${num(totalPnl)}
+              {totalPnl >= 0 ? '+' : ''}${safeNum(totalPnl)}
             </p>
             <p className="text-[10px] text-gray-500">
               {hitRate != null ? `${(hitRate * 100).toFixed(0)}% hit` : '—'} · {trades}T
@@ -116,18 +134,10 @@ export default function ChampionCard({ champion }: { champion: ChampionConfig | 
       <div className="space-y-0.5 mb-3">
         <Row label="Timeframe"  value={timeframe} />
         <Row label="Trades"     value={`${wins}W / ${losses}L`} />
-        {sizing.risk_per_trade_usd != null && (
-          <Row label="Riesgo/trade" value={`$${num(sizing.risk_per_trade_usd, 0)}`} />
-        )}
-        {sizing.max_daily_loss_usd != null && (
-          <Row label="Max pérdida día" value={`$${num(sizing.max_daily_loss_usd, 0)}`} />
-        )}
-        {(c.rules as Record<string, unknown>)?.stop_loss && (
-          <Row label="Stop loss"  value={str((c.rules as Record<string, unknown>).stop_loss)} mono={false} />
-        )}
-        {(c.rules as Record<string, unknown>)?.take_profit && (
-          <Row label="Take profit" value={str((c.rules as Record<string, unknown>).take_profit)} mono={false} />
-        )}
+        {riskPerTrade  && <Row label="Riesgo/trade"   value={`$${riskPerTrade}`} />}
+        {maxDailyLoss  && <Row label="Max pérdida día" value={`$${maxDailyLoss}`} />}
+        {stopLossLabel && <Row label="Stop loss"       value={stopLossLabel} mono={false} />}
+        {takeProfitLbl && <Row label="Take profit"     value={takeProfitLbl} mono={false} />}
       </div>
 
       {/* Entry rules */}
@@ -143,21 +153,21 @@ export default function ChampionCard({ champion }: { champion: ChampionConfig | 
       )}
 
       {/* Avoid rules */}
-      {avoid.length > 0 && (
+      {avoidRules.length > 0 && (
         <div className="mt-2">
           <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-1.5">
             Evitar
           </p>
           <div className="flex flex-wrap gap-1">
-            {avoid.map((r, i) => <Tag key={i} label={r} active={false} />)}
+            {avoidRules.map((r, i) => <Tag key={i} label={r} active={false} />)}
           </div>
         </div>
       )}
 
       {/* Notes */}
-      {c.notes && (
+      {notes && (
         <p className="mt-3 text-[11px] text-gray-600 leading-relaxed border-t border-gray-800/60 pt-3">
-          {str(c.notes)}
+          {notes}
         </p>
       )}
     </div>
