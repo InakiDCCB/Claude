@@ -4,67 +4,68 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A paper trading research system for studying market behavior and developing strategies. Execution and market data go through **Alpaca** (paper account, configured in `.mcp.json`). All trade records and analysis are stored in **Supabase**. The active strategy is **TOB-V2** (TQQQ Opening Break — VWAP Entry, signal analysis on QQQ).
+A paper trading research system for studying market behavior and developing strategies. Execution and market data go through **Alpaca** (paper account, configured in `.mcp.json`). All trade records and analysis are stored in **Supabase**.
 
-## Commands
+## Key Principle
+
+Claude uses the `mcp__alpaca__*` MCP tools directly for market data and order execution. No separate Python agent scripts — Claude IS the agent.
+
+## Dashboard (`dashboard/`)
+
+Next.js 14 app deployed to Vercel. Server components fetch all data from Supabase in parallel and pass it to client components as props.
 
 ```bash
-# Run the full TOB-V2 backtest + regime/exhaustion analysis
-python backtest_v2.py
-
-# Calibrate AllocationEngine hyperparameters (run after 30+ live trades)
-python trading/calibrate_allocation.py
+cd dashboard && npm run dev      # dev server (port 3000)
+cd dashboard && npm run build    # production build
+cd dashboard && npm run start    # run production build locally
 ```
 
-## Architecture
+**Key files:**
+- `app/page.tsx` — server component; parallel-fetches trades, analysis_log, agent_status, champion_strategy filtered by date range (`from`/`to` search params)
+- `app/actions.ts` — `toggleAgentStatus()` server action; updates agent_status and revalidates page cache
+- `app/api/account/route.ts` — proxies Alpaca `/v2/account` + `/v2/positions` with 30s revalidation
+- `app/api/ping/route.ts` — health check
+- `components/TradingPanel.tsx` — root client component; owns trade-event toast notifications
+- `lib/supabase.ts` — `createSupabase()` factory + all TypeScript types
 
-### Strategy pipeline (per trade decision)
+**Env vars required:**
 
-```
-1. MarketRegimeAgent   → classify QQQ (+ VOO) as MOMENTUM / MEAN_REVERSION / NEUTRAL
-2. ExhaustionGapFilter → detect exhaustion gaps from first 15-min ORB (no lookahead)
-3. TOB-V2 entry rules  → TQQQ ORB ≥ 0.75%, QQQ gap ≥ 0%, enter TQQQ long at VWAP on first post-ORB bar
-4. MarketLearner       → compute regime-adjusted quality score Y
-5. AllocationEngine    → compute position fraction A ∈ [0, 1]; hard gate if Y < 0.05
-6. Execute via Alpaca MCP; record to Supabase
-```
+| Variable | Used by |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase client (all data fetching) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase client (all data fetching) |
+| `ALPACA_API_KEY` | `/api/account` route (server-side proxy) |
+| `ALPACA_SECRET_KEY` | `/api/account` route (server-side proxy) |
 
-### `trading/` module map
+## Alpaca MCP
 
-| File | Class | Role |
+Configured in `.mcp.json` (use `.mcp.json.example` as a template). Use `mcp__alpaca__*` tools for all market data and order execution. Must run from local machine — Alpaca endpoints are blocked in cloud/web environments.
+
+## Supabase Schema
+
+Defined in `supabase/schema.sql`. Five tables:
+
+| Table | Purpose | Key details |
 |---|---|---|
-| `strategy_base.py` | `BaseStrategy` | ABC defining the strategy interface |
-| `regime_agent.py` | `MarketRegimeAgent` | Multi-resolution M_t classifier using QQQ/VOO 5-min bars |
-| `exhaustion_filter.py` | `ExhaustionGapFilter` | Detects broad-market exhaustion gaps using only pre-entry data |
-| `market_learner.py` | `MarketLearner` | Regime-conditional win rates; persists to `regime_history.json` |
-| `allocation.py` | `AllocationEngine` | Dynamic position sizing via the A formula; loads from `allocation_params.json` |
-| `calibrate_allocation.py` | — | Grid search to calibrate AllocationEngine hyperparameters |
+| `trades` | Paper trade ledger | `exit_type` ∈ {TP, SL, TIME, MANUAL}; `total_value` is a generated column |
+| `market_snapshots` | OHLCV captures | `timeframe` ∈ {1m, 5m, 1h, 1d} |
+| `analysis_log` | Signals + indicator readings | `indicators` is JSONB; `signal` ∈ {bullish, bearish, neutral, watching} |
+| `agent_status` | Agent heartbeats | `status` ∈ {running, idle, error}; `metadata` is JSONB |
+| `champion_strategy` | Active strategy config | Single row keyed `"current"`; full config stored as JSONB in `config` column |
 
-### Key invariants
+TypeScript types for all tables live in `lib/supabase.ts` (`Trade`, `AnalysisEntry`, `MarketSnapshot`, `AgentStatus`, `ChampionConfig`).
 
-- **Regime uses QQQ (and VOO), not TQQQ.** The `MarketRegimeAgent` and `ExhaustionGapFilter` always take QQQ bars as primary. VOO is optional and pending data availability — when absent, correlation defaults to `0.5` and blending is skipped. TQQQ is the execution vehicle; QQQ is the signal asset.
-- **No lookahead in exhaustion filter.** `ExhaustionGapFilter.detect()` uses only `prev_close` + first 3 bars (first 15 min). Never pass intraday data beyond that window.
-- **Hard gate at Y < 0.05.** When regime quality is below this threshold (regime incompatible with strategy direction), `AllocationEngine.compute()` returns `A = 0.0, should_trade = False`. Exhaustion days also zero out quality before allocation.
-- **`allocation_params.json` is calibrated output.** Generated by `calibrate_allocation.py`; `AllocationEngine` loads it automatically on startup. Re-calibrate after every ~30 live trades.
-- **`backtest_v2.py` has hardcoded data paths.** It reads cached Alpaca tool-result JSON files from `.claude/projects/.../tool-results/`. These are used for TSLA and QQQ historical bars.
+## Backtesting (`backtest_v2.py`)
 
-### Supabase schema (`supabase/schema.sql`)
+Python script at the repo root for offline strategy analysis.
 
-Three tables:
-- **`trades`** — every paper trade with order_id, strategy, fill price, P&L
-- **`market_snapshots`** — OHLCV captures per asset/timeframe
-- **`analysis_log`** — signals, indicator readings, and trade thesis narratives (with `indicators` as JSONB)
+```bash
+pip install -r requirements.txt
+python backtest_v2.py
+```
 
-### Alpaca MCP
+## Ethical Constraints (permanent)
 
-Configured in `.mcp.json`. Use the `mcp__alpaca__*` tools for all market data and order execution. The configured keys are paper-trading keys (no real funds).
-
-## Active Strategy: TOB-V2
-
-Defined in `trading/strategy_tob_v2.json`. Entry conditions:
-1. QQQ opens ≥ previous close (gap ≥ 0%) — signal filter
-2. TQQQ first 15-min candle closes ≥ 0.75% above TQQQ open — ORB signal
-3. Enter TQQQ long at VWAP of the 3 ORB bars (9:30–9:44 ET); target = TQQQ ORB high; stop = entry − $3.00
-4. Time stop at 3:50 PM ET; 10 shares per trade; long-only
-
-Backtest period: 2026-04-01 to 2026-05-08 (originally on TSLA). Re-evaluate at 30 live TQQQ trades.
+- NO defense sector: BA, LMT, TXN, NOC, RTX, GD, HII
+- NO: MRNA, PFE
+- Preferred universe: QQQ, TSLA, OKLO, RIVN, COST, HUM, CVS
