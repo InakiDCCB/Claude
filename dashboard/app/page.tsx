@@ -1,5 +1,5 @@
 import { createSupabase } from '@/lib/supabase'
-import type { ChampionConfig } from '@/lib/supabase'
+import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig } from '@/lib/supabase'
 import TradingPanel from '@/components/TradingPanel'
 import DateFilter from '@/components/DateFilter'
 import MarketStatus from '@/components/MarketStatus'
@@ -15,27 +15,34 @@ export default async function Page({
   const from = searchParams.from ?? '2026-01-01'
   const to   = searchParams.to   ?? today
 
-  const sb = createSupabase()
+  let trades:   Trade[]        = []
+  let analysis: AnalysisEntry[] = []
+  let agents:   AgentStatus[]  = []
+  let champion: ChampionConfig | null = null
 
-  const [tradesRes, analysisRes, agentsRes, championRes] = await Promise.all([
-    sb.from('trades')
-      .select('*')
-      .gte('created_at', `${from}T00:00:00Z`)
-      .lte('created_at', `${to}T23:59:59Z`)
-      .order('created_at', { ascending: false }),
-    sb.from('analysis_log')
-      .select('*')
-      .gte('created_at', `${from}T00:00:00Z`)
-      .lte('created_at', `${to}T23:59:59Z`)
-      .order('created_at', { ascending: false }),
-    sb.from('agent_status').select('*').order('name'),
-    sb.from('champion_strategy').select('*').eq('key', 'current').single(),
-  ])
-
-  const trades   = tradesRes.data   ?? []
-  const analysis = analysisRes.data ?? []
-  const agents   = agentsRes.data   ?? []
-  const champion = (championRes.data ?? null) as ChampionConfig | null
+  try {
+    const sb = createSupabase()
+    const [tradesRes, analysisRes, agentsRes, championRes] = await Promise.all([
+      sb.from('trades')
+        .select('*')
+        .gte('created_at', `${from}T00:00:00Z`)
+        .lte('created_at', `${to}T23:59:59Z`)
+        .order('created_at', { ascending: false }),
+      sb.from('analysis_log')
+        .select('*')
+        .gte('created_at', `${from}T00:00:00Z`)
+        .lte('created_at', `${to}T23:59:59Z`)
+        .order('created_at', { ascending: false }),
+      sb.from('agent_status').select('*').order('name'),
+      sb.from('champion_strategy').select('*').eq('key', 'current').single(),
+    ])
+    trades   = (tradesRes.data   ?? []) as Trade[]
+    analysis = (analysisRes.data ?? []) as AnalysisEntry[]
+    agents   = (agentsRes.data   ?? []) as AgentStatus[]
+    champion = (championRes.data ?? null) as ChampionConfig | null
+  } catch {
+    // Supabase unavailable (missing env vars or network) — render empty state
+  }
 
   return (
     <main className="min-h-screen bg-gray-950">
