@@ -79,6 +79,7 @@ export default function TradingPanel({
   champion:        ChampionConfig | null
 }) {
   const [trades,      setTrades]      = useState<Trade[]>(initialTrades)
+  const [liveAgents,  setLiveAgents]  = useState<AgentStatus[]>(agents)
   const [newTradeId,  setNewTradeId]  = useState<string | null>(null)
   const [toast,       setToast]       = useState<Trade | null>(null)
   const [isLive,      setIsLive]      = useState(false)
@@ -123,6 +124,32 @@ export default function TradingPanel({
     return () => { sb.removeChannel(channel) }
   }, [])
 
+  // Realtime: agent_status
+  useEffect(() => {
+    const sb = createSupabase()
+    const channel = sb
+      .channel('agents-live')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'agent_status' },
+        (payload) => {
+          const a = payload.new as AgentStatus
+          setLiveAgents(prev => [...prev.filter(x => x.id !== a.id), a]
+            .sort((a, b) => a.name.localeCompare(b.name)))
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'agent_status' },
+        (payload) => {
+          const a = payload.new as AgentStatus
+          setLiveAgents(prev => prev.map(x => x.id === a.id ? a : x))
+        }
+      )
+      .subscribe()
+    return () => { sb.removeChannel(channel) }
+  }, [])
+
   return (
     <>
       {toast && <TradeToast trade={toast} onClose={() => setToast(null)} />}
@@ -135,7 +162,7 @@ export default function TradingPanel({
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
           Agente
         </h2>
-        <AgentGrid agents={agents} />
+        <AgentGrid agents={liveAgents} />
       </section>
 
       {/* Nivel 5: Estrategias */}
