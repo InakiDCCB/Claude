@@ -10,17 +10,31 @@ A paper trading research system for studying market behavior and developing stra
 
 Claude uses the `mcp__alpaca__*` MCP tools directly for market data and order execution. No separate Python agent scripts — Claude IS the agent.
 
-## Trading Loop (Pulse v2.0)
+## Trading Loop (Pulse v2.2)
 
-Each ~5-min cycle Claude executes in order:
+Session phases:
 
-1. `get_clock` → verify market open
-2. `get_all_positions` → manage open positions (check TP/SL hit)
+| Phase | ET window | Action |
+|---|---|---|
+| Chaotic open | 9:30–10:00 | No trades. Collect regime data. |
+| Regime detection | 10:00 | Classify TREND / RANGE |
+| Active trading | 10:00–15:30 | Entries + bracket management |
+| Passive observation | 15:30–16:00 | No new entries. Manage open positions. Log observations. |
+| Post-close analysis | ≥16:00 | See strategies/pulse_v2.md for full 5-step protocol. |
+
+Each ~5-min cycle during active trading:
+
+1. `get_clock` → verify market open and current phase
+2. `get_all_positions` → manage open positions; **update `status='pending'→'filled'` before applying exit updates** (prevents orphaned pending records)
 3. `get_stock_bars` (1-min IEX) → real-time signals
 4. [If 10:00 ET and first cycle] → regime detection (TREND vs RANGE)
-5. Evaluate setups per active mode
-6. On signal → `place_stock_order` (bracket order)
-7. Log cycle to `analysis_log` + heartbeat to `agent_status`
+5. Compute VWAP + EMAs (5, 9, 21, 34, 55) from 5-min SIP bars; SMA (100, 200) from 1-hour bars
+6. Evaluate setups per active mode + EMA bias: **10:00–11:15 ET use EMA 9** (EMA 21 not yet valid); **≥11:15 ET use EMA 21 as hard filter** (reject long if price < EMA 21)
+7. On signal → `place_stock_order` (bracket order; **round TP/SL to 2 decimal places** — Alpaca rejects sub-penny prices). RSI min is **45** (not 40).
+8. Log cycle to `analysis_log` (include EMAs in `indicators` JSONB) + heartbeat to `agent_status`
+9. If any asset within ±0.30% of VWAP but no full setup → schedule next wakeup at **90s** (alert zone)
+
+Passive observation cycle (15:30–16:00): steps 1–2 only; no new entries; forced close of any open position at 15:55 ET (`exit_type='TIME'`).
 
 Loop starts **manually at 10:00 ET** from a local interactive session (Alpaca MCP is blocked in cloud/remote environments).
 
