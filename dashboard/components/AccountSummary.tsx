@@ -40,6 +40,61 @@ function StatCard({ label, value, sub, loading, valueColor }: {
   )
 }
 
+function PortfolioCard({ account, loading }: { account: AlpacaAccount | null; loading: boolean }) {
+  const portDelta    = account ? parseFloat(account.equity) - parseFloat(account.last_equity) : null
+  const portDeltaPct = portDelta != null && account && parseFloat(account.last_equity) > 0
+    ? (portDelta / parseFloat(account.last_equity)) * 100
+    : null
+  const pColor = portDelta == null ? 'text-white' : portDelta >= 0 ? 'text-emerald-400' : 'text-red-400'
+
+  return (
+    <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4 flex flex-col h-full">
+      <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-3">Cuenta</p>
+
+      <div className="flex flex-col divide-y divide-gray-800/60 flex-1">
+        {/* Portfolio Value */}
+        <div className="pb-3 flex-1 flex flex-col justify-center">
+          <p className="text-[10px] text-gray-600 mb-1">Portfolio</p>
+          {loading ? (
+            <div className="h-5 w-28 bg-gray-800 rounded animate-pulse" />
+          ) : (
+            <p className={`text-sm font-mono font-semibold truncate ${pColor}`}>{fmtUSD(account?.portfolio_value)}</p>
+          )}
+          {portDeltaPct != null && (
+            <p className="text-[10px] text-gray-600 mt-0.5">
+              {portDeltaPct >= 0 ? '▲' : '▼'} {portDeltaPct >= 0 ? '+' : ''}{portDeltaPct.toFixed(2)}% vs ayer
+            </p>
+          )}
+        </div>
+
+        {/* Market Value */}
+        <div className="py-3 flex-1 flex flex-col justify-center">
+          <p className="text-[10px] text-gray-600 mb-1">Market Value</p>
+          {loading ? (
+            <div className="h-5 w-24 bg-gray-800 rounded animate-pulse" />
+          ) : (
+            <p className="text-sm font-mono font-semibold text-white truncate">{fmtUSD(account?.long_market_value)}</p>
+          )}
+          <p className="text-[10px] text-gray-700 mt-0.5">
+            {account ? (parseFloat(account.long_market_value) > 0 ? 'largo' : 'sin exposición') : ''}
+          </p>
+        </div>
+
+        {/* Cash */}
+        <div className="pt-3 flex-1 flex flex-col justify-center">
+          <p className="text-[10px] text-gray-600 mb-1">Cash</p>
+          {loading ? (
+            <div className="h-5 w-24 bg-gray-800 rounded animate-pulse" />
+          ) : (
+            <p className="text-sm font-mono font-semibold text-white truncate">{fmtUSD(account?.cash)}</p>
+          )}
+          <p className="text-[10px] text-gray-700 mt-0.5">disponible</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function HitRatioGauge({ trades }: { trades: Trade[] }) {
   const closed  = trades.filter(t => t.pnl != null)
   const wins    = closed.filter(t => (t.pnl ?? 0) > 0).length
@@ -209,57 +264,32 @@ export default function AccountSummary({ trades }: { trades: Trade[] }) {
     ? closedTrades.reduce((s, t) => s + (t.pnl ?? 0), 0) / closedTrades.length
     : 0
 
-  const portDelta    = account ? parseFloat(account.equity) - parseFloat(account.last_equity) : null
-  const portDeltaPct = portDelta != null && account && parseFloat(account.last_equity) > 0
-    ? (portDelta / parseFloat(account.last_equity)) * 100
-    : null
-
   return (
     <div className="space-y-3">
-      {/* Nivel 1: Portfolio Value · Market Value · Cash · P&L Promedio */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard
-          label="Portfolio Value"
-          value={fmtUSD(account?.portfolio_value)}
-          sub={portDeltaPct != null
-            ? `${portDeltaPct >= 0 ? '▲' : '▼'} ${portDeltaPct >= 0 ? '+' : ''}${portDeltaPct.toFixed(2)}% vs ayer`
-            : undefined}
-          loading={loading}
-          valueColor={portDelta == null ? 'text-white' : portDelta >= 0 ? 'text-emerald-400' : 'text-red-400'}
-        />
-        <StatCard
-          label="Market Value"
-          value={fmtUSD(account?.long_market_value)}
-          sub={account
-            ? (parseFloat(account.long_market_value) > 0 ? 'posiciones largas' : 'sin exposición')
-            : undefined}
-          loading={loading}
-        />
-        <StatCard
-          label="Cash"
-          value={fmtUSD(account?.cash)}
-          sub="disponible para operar"
-          loading={loading}
-        />
-        <StatCard
-          label="P&L Promedio"
-          value={closedTrades.length > 0 ? `${avgPnL >= 0 ? '+' : ''}${fmtUSD(avgPnL)}` : '—'}
-          sub={closedTrades.length > 0
-            ? `${closedTrades.length} trade${closedTrades.length !== 1 ? 's' : ''} cerrado${closedTrades.length !== 1 ? 's' : ''}`
-            : 'sin trades cerrados'}
-          valueColor={closedTrades.length === 0 ? 'text-white' : avgPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}
-        />
+      {/* Niveles 1+2: Portfolio vertical (izquierda) + métricas 2×2 (derecha) */}
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-stretch">
+        <div className="sm:w-48 sm:flex-shrink-0">
+          <PortfolioCard account={account} loading={loading} />
+        </div>
+        <div className="flex-1 grid grid-cols-2 gap-3">
+          <HitRatioGauge trades={trades} />
+          <DollarPnL trades={trades} />
+          <PositionsCard account={account} loading={loading} />
+          <StatCard
+            label="P&L Promedio"
+            value={closedTrades.length > 0 ? `${avgPnL >= 0 ? '+' : ''}${fmtUSD(avgPnL)}` : '—'}
+            sub={closedTrades.length > 0
+              ? `${closedTrades.length} trade${closedTrades.length !== 1 ? 's' : ''} cerrado${closedTrades.length !== 1 ? 's' : ''}`
+              : 'sin trades cerrados'}
+            valueColor={closedTrades.length === 0 ? 'text-white' : avgPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}
+          />
+        </div>
       </div>
 
-      {/* Nivel 2: Hit Ratio · P&L en $ · Positions */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <HitRatioGauge trades={trades} />
-        <DollarPnL trades={trades} />
-        <PositionsCard account={account} loading={loading} />
+      {/* Nivel 3: Top Performers (mitad de ancho; espacio libre para más activos) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <TopPerformers trades={trades} />
       </div>
-
-      {/* Nivel 3: Top Performers */}
-      <TopPerformers trades={trades} />
     </div>
   )
 }

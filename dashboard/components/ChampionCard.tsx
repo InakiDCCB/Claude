@@ -1,4 +1,4 @@
-import type { ChampionConfig } from '@/lib/supabase'
+import type { ChampionConfig, Trade } from '@/lib/supabase'
 
 export function IncomingSlot() {
   return (
@@ -61,7 +61,7 @@ function safeRecord(v: unknown): Record<string, unknown> {
   return {}
 }
 
-export default function ChampionCard({ champion, isBestPerformer = false }: { champion: ChampionConfig | null; isBestPerformer?: boolean }) {
+export default function ChampionCard({ champion, trades: tradeLedger = [], isBestPerformer = false }: { champion: ChampionConfig | null; trades?: Trade[]; isBestPerformer?: boolean }) {
   if (!champion) return null
 
   const c       = champion.config
@@ -69,15 +69,19 @@ export default function ChampionCard({ champion, isBestPerformer = false }: { ch
   const rules   = safeRecord(c.rules)
   const sizing  = safeRecord(c.position_sizing)
 
-  const trades   = Number(perf.trades   ?? 0)
-  const wins     = Number(perf.wins     ?? 0)
-  const losses   = Number(perf.losses   ?? 0)
-  const totalPnl = Number(perf.total_pnl ?? 0)
-  const hitRate  = perf.hit_rate != null
+  const perfTrades = Number(perf.trades  ?? 0)
+  const wins       = Number(perf.wins    ?? 0)
+  const losses     = Number(perf.losses  ?? 0)
+  const hitRate    = perf.hit_rate != null
     ? Number(perf.hit_rate)
-    : trades > 0 ? wins / trades : null
+    : perfTrades > 0 ? wins / perfTrades : null
 
-  const hasPerf  = trades > 0
+  // P&L real: suma neta de todos los trades cerrados en el ledger de Supabase
+  const closedTrades = tradeLedger.filter(t => t.pnl != null)
+  const realPnl      = closedTrades.reduce((s, t) => s + (t.pnl ?? 0), 0)
+  const totalPnl     = closedTrades.length > 0 ? realPnl : Number(perf.total_pnl ?? 0)
+
+  const hasPerf  = perfTrades > 0 || closedTrades.length > 0
   const pnlColor = totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'
 
   const name      = safeStr(c.name      ?? c.strategy  ?? 'Estrategia')
@@ -126,7 +130,7 @@ export default function ChampionCard({ champion, isBestPerformer = false }: { ch
               {totalPnl >= 0 ? '+' : ''}${safeNum(totalPnl)}
             </p>
             <p className="text-[10px] text-gray-500">
-              {hitRate != null ? `${(hitRate * 100).toFixed(0)}% hit` : '—'} · {trades}T
+              {hitRate != null ? `${(hitRate * 100).toFixed(0)}% hit` : '—'} · {closedTrades.length > 0 ? closedTrades.length : perfTrades}T
             </p>
           </div>
         ) : (

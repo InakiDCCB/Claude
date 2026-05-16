@@ -176,7 +176,7 @@ export default function TradingPanel({
           </span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-          <ChampionCard champion={champion} isBestPerformer={champion != null} />
+          <ChampionCard champion={champion} trades={trades} isBestPerformer={champion != null} />
           <IncomingSlot />
           <IncomingSlot />
           <IncomingSlot />
