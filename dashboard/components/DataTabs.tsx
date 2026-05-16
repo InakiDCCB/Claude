@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine,
@@ -230,7 +230,19 @@ function TradesTable({ trades, newTradeId }: { trades: Trade[]; newTradeId?: str
 
 // ─── P&L Chart ────────────────────────────────────────────────────────────────
 
-function PnLChart({ trades }: { trades: Trade[] }) {
+function PnLChart({ trades: allTrades }: { trades: Trade[] }) {
+  const today = new Date().toISOString().split('T')[0]
+  const [from, setFrom] = useState('2026-01-01')
+  const [to,   setTo]   = useState(today)
+
+  const trades = useMemo(
+    () => allTrades.filter(t => {
+      const d = t.created_at.split('T')[0]
+      return d >= from && d <= to
+    }),
+    [allTrades, from, to]
+  )
+
   const filled = trades
     .filter(t => t.pnl != null)
     .sort((a, b) => a.created_at.localeCompare(b.created_at))
@@ -252,6 +264,24 @@ function PnLChart({ trades }: { trades: Trade[] }) {
 
   return (
     <div className="space-y-4">
+      {/* Filtro de fechas local al gráfico */}
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] text-gray-600 uppercase tracking-wider">Período</span>
+        <input
+          type="date"
+          value={from}
+          onChange={e => setFrom(e.target.value)}
+          className="bg-gray-900 border border-gray-700 rounded-lg px-2.5 py-1 text-gray-300 text-xs focus:outline-none focus:ring-1 focus:ring-gray-600"
+        />
+        <span className="text-gray-600 text-xs">–</span>
+        <input
+          type="date"
+          value={to}
+          onChange={e => setTo(e.target.value)}
+          className="bg-gray-900 border border-gray-700 rounded-lg px-2.5 py-1 text-gray-300 text-xs focus:outline-none focus:ring-1 focus:ring-gray-600"
+        />
+      </div>
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { label: 'P&L Total',     value: `${isPositive ? '+' : ''}$${totalPnL.toFixed(2)}`, color: isPositive ? 'text-emerald-400' : 'text-red-400' },
