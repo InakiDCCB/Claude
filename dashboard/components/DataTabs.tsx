@@ -23,14 +23,17 @@ function downloadCSV(filename: string, csv: string) {
   URL.revokeObjectURL(url)
 }
 
-function etTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-US', {
+function etDateTime(iso: string): string {
+  const d = new Date(iso)
+  const date = d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+  const time = d.toLocaleTimeString('en-US', {
     timeZone: 'America/New_York',
     hour12: false,
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
   })
+  return `${date} ${time}`
 }
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
@@ -134,9 +137,9 @@ function TradesTable({ trades, newTradeId }: { trades: Trade[]; newTradeId?: str
       trades.map(t => {
         const exit = resolveExitPrice(t)
         return [
-          `T-${t.id.slice(0, 6).toUpperCase()}`,
+          `T - ${t.order_id?.split('-')[0] ?? t.id.slice(0, 8)}`,
           t.created_at.split('T')[0],
-          etTime(t.filled_at ?? t.created_at),
+          etDateTime(t.filled_at ?? t.created_at),
           t.asset,
           t.side,
           t.quantity,
@@ -157,7 +160,7 @@ function TradesTable({ trades, newTradeId }: { trades: Trade[]; newTradeId?: str
       <TableWrap>
         <thead>
           <tr>
-            {['ID', 'Hora ET', 'Ticker', 'Lado', 'Cant.', 'P. Entrada', 'P. Salida', 'Notional', 'P&L', 'Estrategia', 'Estado'].map(h => (
+            {['ID', 'Fecha', 'Ticker', 'Side', 'Qty', 'P. Entrada', 'P. Salida', 'Notional', 'P&L', 'Estrategia', 'Status'].map(h => (
               <Th key={h}>{h}</Th>
             ))}
           </tr>
@@ -169,10 +172,10 @@ function TradesTable({ trades, newTradeId }: { trades: Trade[]; newTradeId?: str
             return (
               <Row key={t.id} odd={i % 2 === 1} flash={t.id === newTradeId}>
                 <Td className="font-mono text-[11px] text-gray-600 whitespace-nowrap">
-                  T-{t.id.slice(0, 6).toUpperCase()}
+                  T - {t.order_id?.split('-')[0] ?? t.id.slice(0, 8)}
                 </Td>
                 <Td className="font-mono text-xs text-gray-500 whitespace-nowrap">
-                  {etTime(t.filled_at ?? t.created_at)}
+                  {etDateTime(t.filled_at ?? t.created_at)}
                 </Td>
                 <Td className="font-semibold text-white">{t.asset}</Td>
                 <Td>
@@ -230,19 +233,7 @@ function TradesTable({ trades, newTradeId }: { trades: Trade[]; newTradeId?: str
 
 // ─── P&L Chart ────────────────────────────────────────────────────────────────
 
-function PnLChart({ trades: allTrades }: { trades: Trade[] }) {
-  const today = new Date().toISOString().split('T')[0]
-  const [from, setFrom] = useState('2026-01-01')
-  const [to,   setTo]   = useState(today)
-
-  const trades = useMemo(
-    () => allTrades.filter(t => {
-      const d = t.created_at.split('T')[0]
-      return d >= from && d <= to
-    }),
-    [allTrades, from, to]
-  )
-
+function PnLChart({ trades }: { trades: Trade[] }) {
   const filled = trades
     .filter(t => t.pnl != null)
     .sort((a, b) => a.created_at.localeCompare(b.created_at))
@@ -264,24 +255,6 @@ function PnLChart({ trades: allTrades }: { trades: Trade[] }) {
 
   return (
     <div className="space-y-4">
-      {/* Filtro de fechas local al gráfico */}
-      <div className="flex items-center gap-2">
-        <span className="text-[11px] text-gray-600 uppercase tracking-wider">Período</span>
-        <input
-          type="date"
-          value={from}
-          onChange={e => setFrom(e.target.value)}
-          className="bg-gray-900 border border-gray-700 rounded-lg px-2.5 py-1 text-gray-300 text-xs focus:outline-none focus:ring-1 focus:ring-gray-600"
-        />
-        <span className="text-gray-600 text-xs">–</span>
-        <input
-          type="date"
-          value={to}
-          onChange={e => setTo(e.target.value)}
-          className="bg-gray-900 border border-gray-700 rounded-lg px-2.5 py-1 text-gray-300 text-xs focus:outline-none focus:ring-1 focus:ring-gray-600"
-        />
-      </div>
-
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { label: 'P&L Total',     value: `${isPositive ? '+' : ''}$${totalPnL.toFixed(2)}`, color: isPositive ? 'text-emerald-400' : 'text-red-400' },
@@ -393,32 +366,68 @@ export default function DataTabs({ trades, analysis, newTradeId, isLive }: {
   isLive?:     boolean
 }) {
   const [tab, setTab] = useState<TabId>('trades')
+  const today = new Date().toISOString().split('T')[0]
+  const [from, setFrom] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 14); return d.toISOString().split('T')[0]
+  })
+  const [to, setTo] = useState(today)
+
+  const filteredTrades = useMemo(
+    () => trades.filter(t => {
+      const d = (t.filled_at ?? t.created_at).split('T')[0]
+      return d >= from && d <= to
+    }),
+    [trades, from, to]
+  )
+
+  const filteredAnalysis = useMemo(
+    () => analysis.filter(e => {
+      const d = e.created_at.split('T')[0]
+      return d >= from && d <= to
+    }),
+    [analysis, from, to]
+  )
 
   const tabs: { id: TabId; label: string; count: number }[] = [
-    { id: 'trades',   label: 'Trades',       count: trades.length },
-    { id: 'pnl',      label: 'P&L',          count: trades.filter(t => t.pnl != null).length },
-    { id: 'analysis', label: 'Analysis Log', count: analysis.length },
+    { id: 'trades',   label: 'Trades',       count: filteredTrades.length },
+    { id: 'pnl',      label: 'P&L',          count: filteredTrades.filter(t => t.pnl != null).length },
+    { id: 'analysis', label: 'Analysis Log', count: filteredAnalysis.length },
   ]
 
   return (
     <div>
-      <div className="flex items-center gap-1 mb-5 border-b border-gray-800 pb-1">
-        <div className="flex items-center gap-1 flex-1">
+      <div className="flex flex-wrap items-center gap-1 mb-4 border-b border-gray-800 pb-3">
+        <div className="flex items-center gap-1 flex-1 min-w-0">
           {tabs.map(t => (
             <TabBtn key={t.id} label={t.label} active={tab === t.id} count={t.count} onClick={() => setTab(t.id)} />
           ))}
         </div>
-        <div className="flex items-center gap-1.5 text-[11px] pr-1">
-          <span className={`w-1.5 h-1.5 rounded-full inline-block ${isLive ? 'bg-emerald-500 animate-pulse' : 'bg-gray-700'}`} />
-          <span className={isLive ? 'text-emerald-600' : 'text-gray-700'}>
-            {isLive ? 'en vivo' : 'conectando…'}
-          </span>
+        <div className="flex items-center gap-2 shrink-0">
+          <input
+            type="date"
+            value={from}
+            onChange={e => setFrom(e.target.value)}
+            className="bg-gray-900 border border-gray-800 rounded-lg px-2.5 py-1 text-gray-400 text-xs focus:outline-none focus:ring-1 focus:ring-gray-700"
+          />
+          <span className="text-gray-700 text-xs">–</span>
+          <input
+            type="date"
+            value={to}
+            onChange={e => setTo(e.target.value)}
+            className="bg-gray-900 border border-gray-800 rounded-lg px-2.5 py-1 text-gray-400 text-xs focus:outline-none focus:ring-1 focus:ring-gray-700"
+          />
+          <div className="flex items-center gap-1.5 text-[11px] pl-1">
+            <span className={`w-1.5 h-1.5 rounded-full inline-block ${isLive ? 'bg-emerald-500 animate-pulse' : 'bg-gray-700'}`} />
+            <span className={isLive ? 'text-emerald-600' : 'text-gray-700'}>
+              {isLive ? 'en vivo' : 'conectando…'}
+            </span>
+          </div>
         </div>
       </div>
 
-      {tab === 'trades'   && <TradesTable trades={trades} newTradeId={newTradeId} />}
-      {tab === 'pnl'      && <PnLChart trades={trades} />}
-      {tab === 'analysis' && <AnalysisLog entries={analysis} />}
+      {tab === 'trades'   && <TradesTable trades={filteredTrades} newTradeId={newTradeId} />}
+      {tab === 'pnl'      && <PnLChart trades={filteredTrades} />}
+      {tab === 'analysis' && <AnalysisLog entries={filteredAnalysis} />}
     </div>
   )
 }
