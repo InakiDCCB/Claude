@@ -1,28 +1,31 @@
 import { createSupabase } from '@/lib/supabase'
-import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig } from '@/lib/supabase'
+import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState } from '@/lib/supabase'
 import TradingPanel from '@/components/TradingPanel'
 import MarketStatus from '@/components/MarketStatus'
 
 export const revalidate = 0
 
 export default async function Page() {
-  let trades:   Trade[]         = []
-  let analysis: AnalysisEntry[] = []
-  let agents:   AgentStatus[]   = []
-  let champion: ChampionConfig | null = null
+  let trades:      Trade[]             = []
+  let analysis:    AnalysisEntry[]     = []
+  let agents:      AgentStatus[]       = []
+  let champion:    ChampionConfig | null = null
+  let alpacaState: AlpacaState | null  = null
 
   try {
     const sb = createSupabase()
-    const [tradesRes, analysisRes, agentsRes, championRes] = await Promise.all([
+    const [tradesRes, analysisRes, agentsRes, championRes, alpacaStateRes] = await Promise.all([
       sb.from('trades').select('*').order('created_at', { ascending: false }),
       sb.from('analysis_log').select('*').order('created_at', { ascending: false }),
       sb.from('agent_status').select('*').order('name'),
       sb.from('champion_strategy').select('*').eq('key', 'current').single(),
+      sb.from('alpaca_state').select('*').eq('key', 'current').single(),
     ])
-    trades   = (tradesRes.data   ?? []) as Trade[]
-    analysis = (analysisRes.data ?? []) as AnalysisEntry[]
-    agents   = (agentsRes.data   ?? []) as AgentStatus[]
-    champion = (championRes.data ?? null) as ChampionConfig | null
+    trades      = (tradesRes.data      ?? []) as Trade[]
+    analysis    = (analysisRes.data    ?? []) as AnalysisEntry[]
+    agents      = (agentsRes.data      ?? []) as AgentStatus[]
+    champion    = (championRes.data    ?? null) as ChampionConfig | null
+    alpacaState = (alpacaStateRes.data ?? null) as AlpacaState | null
   } catch {
     // Supabase unavailable (missing env vars or network) — render empty state
   }
@@ -46,6 +49,7 @@ export default async function Page() {
           initialAnalysis={analysis}
           agents={agents}
           champion={champion}
+          alpacaState={alpacaState}
         />
       </div>
     </main>

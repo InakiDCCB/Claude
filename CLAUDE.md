@@ -10,7 +10,7 @@ A paper trading research system for studying market behavior and developing stra
 
 Claude uses the `mcp__alpaca__*` MCP tools directly for market data and order execution. No separate Python agent scripts — Claude IS the agent.
 
-## Trading Loop (Pulse v2.2)
+## Trading Loop (Pulse v2.4)
 
 Session phases:
 
@@ -29,10 +29,15 @@ Each ~5-min cycle during active trading:
 3. `get_stock_bars` (1-min IEX) → real-time signals
 4. [If 10:00 ET and first cycle] → regime detection (TREND vs RANGE)
 5. Compute VWAP + EMAs (5, 9, 21, 34, 55) from 5-min SIP bars; SMA (100, 200) from 1-hour bars
-6. Evaluate setups per active mode + EMA bias: **10:00–11:15 ET use EMA 9** (EMA 21 not yet valid); **≥11:15 ET use EMA 21 as hard filter** (reject long if price < EMA 21)
-7. On signal → `place_stock_order` (bracket order; **round TP/SL to 2 decimal places** — Alpaca rejects sub-penny prices). RSI min is **45** (not 40).
-8. Log cycle to `analysis_log` (include EMAs in `indicators` JSONB) + heartbeat to `agent_status`
-9. If any asset within ±0.30% of VWAP but no full setup → schedule next wakeup at **90s** (alert zone)
+6. Evaluate setups per active mode + EMA bias: **10:00–11:15 ET use EMA 9** (EMA 21 not yet valid); **≥11:15 ET use EMA 21 as hard filter** (reject long if price < EMA 21). **Slippage buffer (v2.3):** if price is within ±$0.25 of the hard filter level, require price > level + $0.20 before placing order.
+7. **TREND DOWN regime (v2.3):** do not enter long until price is ≥1.5% above session low AND 3 consecutive 5-min bars have closed above EMA 21. EMA 21 acts as resistance in TREND DOWN until reversal is confirmed.
+8. On signal → `place_stock_order` as **market order only** (no bracket at this step — SL/TP set after fill per step 9). **Round all prices to 2 decimal places** — Alpaca rejects sub-penny prices. RSI min is **45** (not 40). **Sizing (v2.3 — mandatory):** `shares = floor(equity × 0.10 / entry_price)` — calculate before every order, no exceptions. Skip if shares < 2.
+9. **SL post-fill (v2.4 — mandatory):** place market order first (no bracket), confirm fill price with `get_order_by_id`, then calculate `SL = fill_price − 2×ATR(14, 1-min)`. Place OCO/bracket only after fill is confirmed.
+10. **TP Dinámico (v2.4 — P5):** identify nearest structural resistance on 5-min bars before entry. `TP1 = entry + 2×ATR` (close 50%, move SL to break-even). `TP2 = structural resistance or entry + 4×ATR` (close remaining 50%).
+11. **Volume Absorption entry (v2.3):** valid without classic pullback when: bar volume >3× avg of prior 5 bars, closes within ±0.15% of VWAP or support, does NOT close at new session low, and EMA 21 is below price. Enter at next bar open.
+12. **Post-stop-hunt re-entry (v2.4 — P6):** if SL was swept by <$0.25 AND price reversed within ≤2 bars AND volume ≥ avg AND within 3 bars of sweep → re-entry valid at open of next confirmation bar. Full SL/TP rules apply.
+13. Log cycle to `analysis_log` (include EMAs in `indicators` JSONB) + heartbeat to `agent_status`
+14. If any asset within ±0.30% of VWAP but no full setup → schedule next wakeup at **90s** (alert zone)
 
 Passive observation cycle (15:30–16:00): steps 1–2 only; no new entries; forced close of any open position at 15:55 ET (`exit_type='TIME'`).
 

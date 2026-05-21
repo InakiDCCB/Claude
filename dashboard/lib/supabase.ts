@@ -66,3 +66,24 @@ export type ChampionConfig = {
   updated_at: string
   config: Record<string, unknown>
 }
+
+export type AlpacaPosition = {
+  symbol:       string
+  qty:          number
+  avg_entry:    number
+  price:        number
+  market_value: number
+  pl:           number
+  pl_pct:       number
+}
+
+export type AlpacaState = {
+  key:           string
+  synced_at:     string
+  equity:        number | null
+  cash:          number | null
+  buying_power:  number | null
+  day_pl:        number | null
+  unrealized_pl: number | null
+  positions:     AlpacaPosition[] | null
+}

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createSupabase } from '@/lib/supabase'
-import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig } from '@/lib/supabase'
+import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState } from '@/lib/supabase'
 import AccountSummary from './AccountSummary'
 import AgentGrid from './AgentGrid'
 import ChampionCard, { IncomingSlot } from './ChampionCard'
@@ -72,11 +72,13 @@ export default function TradingPanel({
   initialAnalysis,
   agents,
   champion,
+  alpacaState,
 }: {
   initialTrades:   Trade[]
   initialAnalysis: AnalysisEntry[]
   agents:          AgentStatus[]
   champion:        ChampionConfig | null
+  alpacaState:     AlpacaState | null
 }) {
   const [trades,      setTrades]      = useState<Trade[]>(initialTrades)
   const [liveAgents,  setLiveAgents]  = useState<AgentStatus[]>(agents)
@@ -155,7 +157,7 @@ export default function TradingPanel({
       {toast && <TradeToast trade={toast} onClose={() => setToast(null)} />}
 
       {/* Niveles 1–3: Portfolio · Métricas · Top Performers */}
-      <AccountSummary trades={trades} />
+      <AccountSummary trades={trades} alpacaState={alpacaState} />
 
       {/* Nivel 4: Agente */}
       <section>

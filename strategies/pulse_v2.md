@@ -1,6 +1,6 @@
-# Pulse v2.2
+# Pulse v2.4
 
-**Activa desde:** 2026-05-15 (v2.0) · **Actualizada:** 2026-05-15 (v2.2)  
+**Activa desde:** 2026-05-15 (v2.0) · **Actualizada:** 2026-05-20 (v2.4)  
 **Reemplaza:** Pulse v1.x (VWAP pullback único, inicio 9:30 ET)  
 **Activos:** QQQ, TSLA, RIVN
 
@@ -38,6 +38,14 @@ Evaluar QQQ y TSLA con barras de 5-min desde apertura:
 
 Si los dos activos no coinciden en régimen, prevalece **RANGE** (más conservador).
 
+**Régimen TREND DOWN — restricción de entradas long (v2.3 — P1):**
+
+Cuando el régimen sea TREND DOWN (precio y VWAP en caída desde apertura), las señales EMA21 tempranas son falsas. No entrar long hasta que se cumplan **ambas** condiciones:
+1. Precio **≥ 1.5% por encima del low de sesión** en el momento de evaluación
+2. **3 barras consecutivas de 5-min** cerradas por encima de EMA 21
+
+Si solo se cumple una, observar pero no operar. En TREND DOWN, la EMA21 actúa como resistencia dinámica hasta que el reversal se confirma con estructura.
+
 ---
 
 ## Modo RANGE — VWAP Pullback
@@ -56,13 +64,26 @@ Igual al núcleo de v1.2, con feed actualizado.
 - Si el pullback incluyó UNA sola barra de volumen extremo (>2x barra previa) seguida de recuperación con volumen decreciente: la señal es válida.
 - Rechazar solo si hay **2 o más barras consecutivas** de alto volumen en la caída (venta sostenida institucional, no pánico puntual).
 
-**Parámetros de la orden:**
+**Volume Absorption — señal adicional (v2.3 — P3):**
+Entrada válida sin necesidad de pullback clásico cuando se cumplan todas:
+1. Barra de 5-min con volumen **>3× el promedio de las 5 barras previas**
+2. La barra cierra dentro de ±0.15% del VWAP o de un nivel de soporte identificado
+3. La barra **no cierra en nuevo mínimo de sesión** (los vendedores no logran nuevo low)
+4. EMA 21 por debajo del precio (hard filter normal aplica)
+
+Entrada: open de la barra siguiente. SL/TP: reglas P5 abajo.
+
+**Parámetros de la orden (v2.4 — P5: TP Dinámico):**
 
 | Parámetro | Valor |
 |-----------|-------|
-| Stop Loss | 0.3% bajo precio de entrada |
-| Take Profit | 0.6% sobre precio de entrada (ratio 2:1) |
-| Tamaño | Calculado para arriesgar máx. $50/trade |
+| Stop Loss | entry − 2×ATR(14, 1-min), calculado **post-fill** |
+| TP1 | entry + 2×ATR → cerrar **50%** de la posición |
+| TP2 | Próxima resistencia estructural (swing high, número redondo, session high) dentro de 5×ATR; si no hay nivel claro → entry + 4×ATR |
+| Break-even | Al tocar TP1, mover SL a entry + $0.05 para proteger la ganancia |
+| Tamaño | `floor(equity × 0.10 / entry_price)` — calculado antes de cada orden (P4) |
+
+> **Aplicación práctica:** Identificar la resistencia estructural más cercana en barras de 5-min antes de colocar la orden. Si está entre 2×ATR y 5×ATR del entry, ese es el TP2. La ejecución usa bracket solo para TP1; el 50% restante se cierra manualmente al tocar TP2 o se deja con trailing SL.
 
 ---
 
@@ -115,6 +136,30 @@ Activado cuando la detección de régimen a las 10:00 ET clasifica el día como 
 
 Si la pérdida diaria alcanza $500, el sistema se detiene hasta el día siguiente.
 
+### Re-entrada post-stop-hunt (v2.4 — P6)
+
+Cuando un SL es barrido por un stop hunt, la re-entrada es válida bajo las siguientes condiciones:
+
+1. El SL fue superado por **menos de $0.25** (sweep superficial, no ruptura estructural)
+2. El precio revirtió en **≤ 2 barras** de 5-min y cerró de vuelta por encima del nivel clave
+3. La barra de confirmación tiene volumen **≥ promedio de las 5 barras previas**
+4. No han pasado más de **3 barras de 5-min** desde el sweep
+
+Re-entrada: open de la barra siguiente a la confirmación. SL/TP: reglas P5 estándar.
+
+> **Origen:** 2026-05-20 — T1 y T2 en QQQ barridos por $0.07–$0.18 con reversal inmediato. T3 re-entrada correcta en la barra siguiente capturó +$35.94 (2.40R). El patrón de sweep + reversal es sistemático en QQQ.
+
+### Tamaño de posición (v2.3 — P4, obligatorio)
+
+Antes de cada `place_stock_order` calcular:
+
+```
+shares = floor(equity × 0.10 / precio_entrada)
+```
+
+- Si `shares < 2` → skip the trade (R/R no justifica el coste de tiempo).
+- No hay excepción. El tamaño debe calcularse en cada orden, no estimarse.
+
 ---
 
 ## Indicadores de contexto (EMA / SMA)
@@ -136,6 +181,9 @@ Calculados sobre barras de 5-min SIP durante la sesión activa. **No son condici
 - **Ventana 11:15 ET en adelante**: EMA 21 es condición de entrada **dura** — **no entrar long si precio < EMA 21** (rechazar, no reducir tamaño).
 - En modo TREND (ORB): confirmar que precio > EMA 55 antes de entrar breakout.
 - En análisis post-cierre: reportar posición relativa de SMA 100 y 200 para contexto de la sesión siguiente.
+
+**Ajuste v2.3 — Buffer de slippage en hard filter (P2):**
+Cuando el precio evaluado esté dentro de **±$0.25 del nivel EMA 21 (o EMA 9 en ventana temprana)**, exigir que el precio esté **por encima del nivel + $0.20** antes de enviar la orden. Esto protege contra slippage que viola el filtro en el fill.
 
 ---
 
@@ -200,6 +248,72 @@ Si se identifica un patrón recurrente (≥2 sesiones), proponer modificación c
 
 ## Historial de sesiones
 
+### 2026-05-20 — Pulse v2.3 → v2.4
+
+| Campo | Valor |
+|-------|-------|
+| Régimen | RANGE (QQQ y TSLA recuperación desde lows de sesión) |
+| Trades | 6 |
+| Win rate | 50% (3/6) |
+| P&L total | **+$63.69** |
+| R:R promedio (ganadores) | 1.70:1 |
+| Mayor ganancia | TSLA TP +$38.88 (T4) |
+| Mayor pérdida | QQQ SL −$28.00 (T1) |
+
+**Trades:**
+
+| # | Activo | Qty | Entrada | Salida | Tipo | P&L | Notas |
+|---|--------|-----|---------|--------|------|-----|-------|
+| T1 | QQQ | 14 | $708.50 | $706.50 | SL | −$28.00 | Stop hunt — sweep $706.51, reversal inmediato a $709+. |
+| T2 | QQQ | 14 | $709.12 | $708.13 | SL | −$13.86 | Segundo stop hunt — low $707.82, rebote inmediato. |
+| T3 | QQQ | 14 | $709.97 | $712.54 | TP | +$35.94 | Re-entrada P6 post-hunt. Breakout session high. 2.40R. |
+| T4 | TSLA | 24 | $412.50 | $414.12 | TP | +$38.88 | EMA21 bounce. 5 barras sobre EMA21 post stop-hunt 11:41. 1.69R. |
+| T5 | TSLA | 24 | $413.46 | $414.97 | TP | +$36.34 | EMA21 bounce. Entry 0.51 tarde → RR comprimido a ~1:1. |
+| T6 | TSLA | 24 | $413.81 | $413.58 | SL | −$5.61 | SL calculado pre-fill → buffer $0.21 vs 2×ATR=$0.58. Paró en 1 min. |
+
+**Observaciones clave:**
+- Stop hunt pattern QQQ: T1 y T2 barridos por $0.07–$0.18. El sweep + reversal ≤2 barras = señal de re-entrada válida (T3).
+- T6 confirma la regla SL post-fill: el SL debe calcularse **después** del fill real, nunca con precio estimado.
+- TP fijo dejó valor: T5 con TP dinámico 4×ATR habría capturado $415.18 (session high $415.12).
+- Análisis Situacional: hoy H=$415.12 < lunes H=$420.64 → **predicción jueves: low de hoy $406.49 será visitado**.
+
+**Propuestas generadas → implementadas en v2.4:** P5 TP Dinámico (TP1=2×ATR 50%, TP2=estructura/4×ATR, break-even tras TP1), P6 re-entrada post-stop-hunt.
+
+---
+
+### 2026-05-19 — Pulse v2.2 → v2.3
+
+| Campo | Valor |
+|-------|-------|
+| Régimen | TREND DOWN (detectado 10:10 ET, QQQ rompió $700 con v=6,830) |
+| Trades | 3 |
+| Win rate | 66.7% (2/3) |
+| P&L total | **−$1.01** |
+| R:R promedio (ganadores) | 1.76:1 |
+| Mayor ganancia | QQQ TP +$1.02 |
+| Mayor pérdida | QQQ SL −$3.02 |
+
+**Trades:**
+
+| # | Activo | Qty | Entrada | Salida | Tipo | P&L | Notas |
+|---|--------|-----|---------|--------|------|-----|-------|
+| 1 | QQQ | 10 | $698.83 | $698.53 | SL | −$3.02 | EMA21 cross 11:34 ET en TREND DOWN. Fill $0.58 adverse ($0.03 debajo de EMA21). SL 41s después. |
+| 2 | QQQ | 1 | $701.49 | $702.51 | TP | +$1.02 | Breakout continuation sobre session high $700.46. Hold 8m30s. |
+| 3 | QQQ | 1 | $704.01 | $705.00 | TP | +$0.99 | EMA9 pullback retest 12:58 ET. R/R 1.94:1. |
+
+**Error crítico de sizing:** Trades 2–3 con 1 share en lugar de 10. Con 10% consistente P&L = **+$17.08**.
+
+**Missed setup:** 12:50 ET volume absorption (v=5,719 = 3× promedio, en soporte $702.84). R/R 4.7:1. No ejecutado por esperar confirmación de precio.
+
+**Observaciones clave:**
+- TREND DOWN: EMA21 actuó como resistencia en 3 intentos consecutivos (11:19 rechazado, 11:34 SL, 11:54 sell-off). Reversal real confirmado a las 12:15 ET con 3 barras sobre EMA21.
+- Buffer de slippage necesario: precio a $0.03 del hard filter es demasiado marginal para market order.
+- Volume Absorption identificado como señal superior al EMA pullback en condiciones de reversal.
+
+**Propuestas generadas → implementadas en v2.3:** P1 restricción TREND DOWN, P2 buffer slippage, P3 Volume Absorption, P4 sizing obligatorio.
+
+---
+
 ### 2026-05-15 — Pulse v2.0 → v2.2
 
 | Campo | Valor |
@@ -243,3 +357,5 @@ Si se identifica un patrón recurrente (≥2 sesiones), proponer modificación c
 | v2.0 | 2026-05-15 | +Inicio 10:00 ET; +detección de régimen; +modo ORB/TREND; feed 1-min |
 | v2.1 | 2026-05-15 | +Ventana extendida 10:00–15:30 ET; +fase observación pasiva 15:30–16:00; +análisis post-cierre; +EMAs 5/9/21/34/55 y SMAs 100/200 como indicadores de contexto; cierre forzado 15:55 |
 | **v2.2** | **2026-05-15** | **+RSI mínimo 45 (antes 40); +EMA 21 hard filter para longs (antes soft/reduce tamaño); +EMA 9 proxy en 10:00–11:15 ET cuando EMA 21 inválida; +ciclo 90s en zona de alerta ±0.30% VWAP** |
+| **v2.3** | **2026-05-19** | **+P1: en TREND DOWN exigir 3 barras sobre EMA21 + precio ≥1.5% del low antes de entrar long; +P2: buffer slippage +$0.20 cuando precio dentro ±$0.25 del hard filter; +P3: Volume Absorption como señal primaria (v >3×, en soporte/VWAP, sin nuevo mínimo); +P4: sizing obligatorio floor(equity×0.10/precio) verificado antes de cada orden** |
+| **v2.4** | **2026-05-20** | **+P5: TP Dinámico — TP1=entry+2×ATR (cerrar 50%, mover SL a BE); TP2=próxima resistencia estructural o entry+4×ATR; +P6: re-entrada válida post-stop-hunt cuando sweep <$0.25 con reversal ≤2 barras y confirmación de volumen** |

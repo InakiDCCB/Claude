@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import type { Trade } from '@/lib/supabase'
+import type { Trade, AlpacaState } from '@/lib/supabase'
 
 type AlpacaAccount = {
   portfolio_value: string
@@ -214,6 +214,79 @@ function PositionsCard({ account, loading }: { account: AlpacaAccount | null; lo
   )
 }
 
+function LivePositions({ alpacaState }: { alpacaState: AlpacaState | null }) {
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 10_000)
+    return () => clearInterval(id)
+  }, [])
+
+  const positions = alpacaState?.positions ?? []
+  const syncAge   = alpacaState?.synced_at
+    ? Math.floor((now - new Date(alpacaState.synced_at).getTime()) / 1000)
+    : null
+  const syncColor = syncAge == null ? 'text-gray-600'
+    : syncAge < 120  ? 'text-emerald-500'
+    : syncAge < 300  ? 'text-yellow-500'
+    : 'text-red-500'
+  const syncLabel = syncAge == null ? '—'
+    : syncAge < 60   ? `${syncAge}s ago`
+    : `${Math.floor(syncAge / 60)}m ago`
+
+  return (
+    <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Posiciones Live</p>
+        <span className={`text-[10px] font-mono ${syncColor}`}>● {syncLabel}</span>
+      </div>
+
+      {positions.length === 0 ? (
+        <p className="text-xs text-gray-600">Sin posiciones abiertas</p>
+      ) : (
+        <table className="w-full text-[11px]">
+          <thead>
+            <tr className="text-gray-600 border-b border-gray-800">
+              <th className="text-left pb-1 font-normal">Símbolo</th>
+              <th className="text-right pb-1 font-normal">Qty</th>
+              <th className="text-right pb-1 font-normal">Entrada</th>
+              <th className="text-right pb-1 font-normal">Precio</th>
+              <th className="text-right pb-1 font-normal">P&L</th>
+            </tr>
+          </thead>
+          <tbody>
+            {positions.map(p => (
+              <tr key={p.symbol} className="border-b border-gray-800/40">
+                <td className="py-1 font-mono font-semibold text-white">{p.symbol}</td>
+                <td className="py-1 text-right font-mono text-gray-400">{p.qty}</td>
+                <td className="py-1 text-right font-mono text-gray-400">${p.avg_entry.toFixed(2)}</td>
+                <td className="py-1 text-right font-mono text-white">${p.price.toFixed(2)}</td>
+                <td className={`py-1 text-right font-mono font-semibold ${p.pl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {p.pl >= 0 ? '+' : ''}{fmtUSD(p.pl)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {alpacaState && (
+        <div className="mt-3 pt-2 border-t border-gray-800 flex justify-between text-[10px] text-gray-600">
+          <span>
+            Day P&L:&nbsp;
+            <span className={`font-mono ${(alpacaState.day_pl ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {fmtUSD(alpacaState.day_pl)}
+            </span>
+          </span>
+          <span>
+            No realizado:&nbsp;
+            <span className="font-mono text-white">{fmtUSD(alpacaState.unrealized_pl)}</span>
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TopPerformers({ trades }: { trades: Trade[] }) {
   const byAsset: Record<string, number> = {}
   for (const t of trades) {
@@ -247,7 +320,7 @@ function TopPerformers({ trades }: { trades: Trade[] }) {
   )
 }
 
-export default function AccountSummary({ trades }: { trades: Trade[] }) {
+export default function AccountSummary({ trades, alpacaState }: { trades: Trade[]; alpacaState?: AlpacaState | null }) {
   const [account, setAccount] = useState<AlpacaAccount | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -286,9 +359,10 @@ export default function AccountSummary({ trades }: { trades: Trade[] }) {
         </div>
       </div>
 
-      {/* Nivel 3: Top Performers (mitad de ancho; espacio libre para más activos) */}
+      {/* Nivel 3: Top Performers + Posiciones Live */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <TopPerformers trades={trades} />
+        <LivePositions alpacaState={alpacaState ?? null} />
       </div>
     </div>
   )
