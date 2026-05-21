@@ -49,7 +49,7 @@ function PortfolioCard({ account, loading }: { account: AlpacaAccount | null; lo
 
   return (
     <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4 flex flex-col h-full">
-      <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-3">Cuenta</p>
+      <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-3">Account</p>
 
       <div className="flex flex-col divide-y divide-gray-800/60 flex-1">
         {/* Portfolio Value */}
@@ -62,7 +62,7 @@ function PortfolioCard({ account, loading }: { account: AlpacaAccount | null; lo
           )}
           {portDeltaPct != null && (
             <p className="text-[10px] text-gray-600 mt-0.5">
-              {portDeltaPct >= 0 ? '▲' : '▼'} {portDeltaPct >= 0 ? '+' : ''}{portDeltaPct.toFixed(2)}% vs ayer
+              {portDeltaPct >= 0 ? '▲' : '▼'} {portDeltaPct >= 0 ? '+' : ''}{portDeltaPct.toFixed(2)}% vs yesterday
             </p>
           )}
         </div>
@@ -76,7 +76,7 @@ function PortfolioCard({ account, loading }: { account: AlpacaAccount | null; lo
             <p className="text-sm font-mono font-semibold text-white truncate">{fmtUSD(account?.long_market_value)}</p>
           )}
           <p className="text-[10px] text-gray-700 mt-0.5">
-            {account ? (parseFloat(account.long_market_value) > 0 ? 'largo' : 'sin exposición') : ''}
+            {account ? (parseFloat(account.long_market_value) > 0 ? 'long' : 'no exposure') : ''}
           </p>
         </div>
 
@@ -88,7 +88,7 @@ function PortfolioCard({ account, loading }: { account: AlpacaAccount | null; lo
           ) : (
             <p className="text-sm font-mono font-semibold text-white truncate">{fmtUSD(account?.cash)}</p>
           )}
-          <p className="text-[10px] text-gray-700 mt-0.5">disponible</p>
+          <p className="text-[10px] text-gray-700 mt-0.5">available</p>
         </div>
       </div>
     </div>
@@ -156,7 +156,7 @@ function DollarPnL({ trades }: { trades: Trade[] }) {
 
   return (
     <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4">
-      <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-3">P&L en $</p>
+      <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-3">P&L ($)</p>
 
       <div className="flex items-center gap-2 mb-1.5">
         <span className="text-[10px] text-gray-500 w-10 shrink-0">Wins</span>
@@ -183,7 +183,7 @@ function DollarPnL({ trades }: { trades: Trade[] }) {
           Ratio $: <span className="text-white font-mono">{ratio}×</span>
         </span>
         <span className={`font-mono ${net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-          Neto {net >= 0 ? '+' : ''}{fmtUSD(net)}
+          Net {net >= 0 ? '+' : ''}{fmtUSD(net)}
         </span>
       </div>
     </div>
@@ -212,19 +212,19 @@ function LivePositions({ alpacaState }: { alpacaState: AlpacaState | null }) {
   return (
     <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4">
       <div className="flex items-center justify-between mb-3">
-        <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Posiciones Live</p>
+        <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Live Positions</p>
         <span className={`text-[10px] font-mono ${syncColor}`}>● {syncLabel}</span>
       </div>
 
       {positions.length === 0 ? (
-        <p className="text-xs text-gray-600">Sin posiciones abiertas</p>
+        <p className="text-xs text-gray-600">No open positions</p>
       ) : (
         <table className="w-full text-[11px]">
           <thead>
             <tr className="text-gray-600 border-b border-gray-800">
-              <th className="text-left pb-1 font-normal">Símbolo</th>
+              <th className="text-left pb-1 font-normal">Symbol</th>
               <th className="text-right pb-1 font-normal">Qty</th>
-              <th className="text-right pb-1 font-normal">Entrada</th>
+              <th className="text-right pb-1 font-normal">Entry</th>
               <th className="text-right pb-1 font-normal">Precio</th>
               <th className="text-right pb-1 font-normal">P&L</th>
             </tr>
@@ -254,7 +254,7 @@ function LivePositions({ alpacaState }: { alpacaState: AlpacaState | null }) {
             </span>
           </span>
           <span>
-            No realizado:&nbsp;
+            Unrealized:&nbsp;
             <span className="font-mono text-white">{fmtUSD(alpacaState.unrealized_pl)}</span>
           </span>
         </div>
@@ -278,7 +278,7 @@ function TopPerformers({ trades }: { trades: Trade[] }) {
     <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4">
       <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-3">Top Performers</p>
       {!winners.length ? (
-        <p className="text-xs text-gray-600">Sin operaciones ganadoras aún</p>
+        <p className="text-xs text-gray-600">No winning trades yet</p>
       ) : (
         <div className="space-y-2">
           {winners.map(([asset, pnl]) => (
@@ -324,11 +324,11 @@ export default function AccountSummary({ trades, alpacaState }: { trades: Trade[
           <HitRatioGauge trades={trades} />
           <DollarPnL trades={trades} />
           <StatCard
-            label="P&L Promedio"
+            label="Avg P&L"
             value={closedTrades.length > 0 ? `${avgPnL >= 0 ? '+' : ''}${fmtUSD(avgPnL)}` : '—'}
             sub={closedTrades.length > 0
-              ? `${closedTrades.length} trade${closedTrades.length !== 1 ? 's' : ''} cerrado${closedTrades.length !== 1 ? 's' : ''}`
-              : 'sin trades cerrados'}
+              ? `${closedTrades.length} closed trade${closedTrades.length !== 1 ? 's' : ''}`
+              : 'no closed trades'}
             valueColor={closedTrades.length === 0 ? 'text-white' : avgPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}
           />
         </div>

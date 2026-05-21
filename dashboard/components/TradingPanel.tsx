@@ -23,7 +23,7 @@ function TradeToast({ trade, onClose }: { trade: Trade; onClose: () => void }) {
             <div className="flex items-center gap-2 mb-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
               <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-widest">
-                {isExit ? 'Trade cerrado' : 'Trade abierto'}
+                {isExit ? 'Trade closed' : 'Trade opened'}
               </span>
             </div>
             <p className="text-sm font-semibold text-white truncate">
@@ -35,7 +35,7 @@ function TradeToast({ trade, onClose }: { trade: Trade; onClose: () => void }) {
             </p>
             {isExit && (
               <p className="text-xs font-mono mt-0.5">
-                <span className="text-gray-500">salida:&nbsp;</span>
+                <span className="text-gray-500">exit:&nbsp;</span>
                 <span className="text-white">${trade.exit_price!.toFixed(2)}</span>
                 {exitType && (
                   <span className="ml-2 px-1 py-px rounded text-[9px] bg-gray-700 text-gray-400 uppercase">
@@ -53,7 +53,7 @@ function TradeToast({ trade, onClose }: { trade: Trade; onClose: () => void }) {
           <button
             onClick={onClose}
             className="flex-shrink-0 text-gray-600 hover:text-gray-300 transition-colors mt-0.5"
-            aria-label="Cerrar"
+            aria-label="Close"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
               <path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" />
@@ -162,7 +162,7 @@ export default function TradingPanel({
       {/* Nivel 4: Agente */}
       <section>
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
-          Agente
+          Agent
         </h2>
         <AgentGrid agents={liveAgents} />
       </section>
@@ -170,7 +170,7 @@ export default function TradingPanel({
       {/* Nivel 5: Estrategia activa */}
       <section>
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
-          Estrategia activa
+          Active strategy
         </h2>
         <ChampionCard champion={champion} trades={trades} isBestPerformer={champion != null} />
       </section>

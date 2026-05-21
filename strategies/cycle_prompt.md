@@ -109,6 +109,21 @@ Post-stop-hunt re-entry (P6):
 BASE/log?asset=QQQ&timeframe=5m&signal=SIGNAL&confidence=N&indicators=ENC_JSON&thesis=ENC_TEXT
 BASE/heartbeat?name=pulse-v2&status=running&description=Active+HH%3AMM+ET&metadata=ENC_JSON
 
+## STEP 9b — CYCLE OUTPUT FORMAT (mandatory — always print this after every cycle)
+Print the following block in order:
+
+1. First line: "Revisando mercado..." (always, every cycle, every phase)
+2. Current ET time (e.g. "10:05 ET")
+3. Instrument table with these exact columns:
+   | Instrumento | Precio | Neutral | Atento | Posicion | Bull | Bear | Notas |
+   Always include QQQ, TSLA, RIVN. Add others from universe if active signal.
+   - Neutral: price within ±0.15% of VWAP and no clear setup
+   - Atento: price within ±0.30% of VWAP or approaching key level
+   - Posicion: "LONG X shares @ $Y.YY" if open, else "-"
+   - Bull/Bear: checkmark (x) or blank
+   - Notas: key indicator reading (e.g. "EMA21 below, RSI 52, ATR 0.18")
+4. Comments: any relevant observation (regime, setup rejected, position managed, etc.)
+
 ## STEP 10 — END-OF-SESSION MEMORY (only when ET ≥ 15:55)
 Compute final stats from trades-today. Write:
 BASE/memory?regime=X&assets=QQQ%2CTSLA%2CRIVN&total_pnl=X&win_rate=X&trade_count=N

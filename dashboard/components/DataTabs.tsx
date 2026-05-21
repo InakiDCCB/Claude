@@ -68,7 +68,7 @@ function ExportBtn({ onClick }: { onClick: () => void }) {
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
           d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
       </svg>
-      Exportar CSV
+      Export CSV
     </button>
   )
 }
@@ -129,11 +129,11 @@ const STRATEGY_COLORS: Record<string, string> = {
 }
 
 function TradesTable({ trades, newTradeId }: { trades: Trade[]; newTradeId?: string | null }) {
-  if (!trades.length) return <Empty text="No hay trades en este período." />
+  if (!trades.length) return <Empty text="No trades in this period." />
 
   function exportCSV() {
     downloadCSV('trades.csv', toCSV(
-      ['ID', 'Fecha', 'Hora ET', 'Ticker', 'Lado', 'Cantidad', 'P. Entrada', 'P. Salida', 'Notional', 'P&L', 'Estrategia', 'Estado'],
+      ['ID', 'Date', 'Time ET', 'Ticker', 'Side', 'Qty', 'Entry Price', 'Exit Price', 'Notional', 'P&L', 'Strategy', 'Status'],
       trades.map(t => {
         const exit = resolveExitPrice(t)
         return [
@@ -160,7 +160,7 @@ function TradesTable({ trades, newTradeId }: { trades: Trade[]; newTradeId?: str
       <TableWrap>
         <thead>
           <tr>
-            {['ID', 'Fecha', 'Ticker', 'Side', 'Qty', 'P. Entrada', 'P. Salida', 'Notional', 'P&L', 'Estrategia', 'Status'].map(h => (
+            {['ID', 'Date', 'Ticker', 'Side', 'Qty', 'Entry', 'Exit', 'Notional', 'P&L', 'Strategy', 'Status'].map(h => (
               <Th key={h}>{h}</Th>
             ))}
           </tr>
@@ -238,7 +238,7 @@ function PnLChart({ trades }: { trades: Trade[] }) {
     .filter(t => t.pnl != null)
     .sort((a, b) => a.created_at.localeCompare(b.created_at))
 
-  if (!filled.length) return <Empty text="No hay trades con P&L en este período." />
+  if (!filled.length) return <Empty text="No trades with P&L in this period." />
 
   let cum = 0
   const data = filled.map(t => {
@@ -284,7 +284,7 @@ function PnLChart({ trades }: { trades: Trade[] }) {
             <Tooltip
               contentStyle={{ backgroundColor: '#111827', border: '1px solid #374151', borderRadius: '8px', fontSize: 13 }}
               labelStyle={{ color: '#9ca3af', marginBottom: 4 }}
-              formatter={(v: number) => [`$${v.toFixed(2)}`, 'P&L acum.']}
+              formatter={(v: number) => [`$${v.toFixed(2)}`, 'Cum. P&L']}
             />
             <Line
               type="monotone" dataKey="pnl" stroke={color} strokeWidth={2.5}
@@ -307,11 +307,11 @@ const SIGNAL_COLORS: Record<string, string> = {
 }
 
 function AnalysisLog({ entries }: { entries: AnalysisEntry[] }) {
-  if (!entries.length) return <Empty text="No hay entradas de análisis en este período." />
+  if (!entries.length) return <Empty text="No analysis entries in this period." />
 
   function exportCSV() {
     downloadCSV('analysis_log.csv', toCSV(
-      ['Fecha', 'Asset', 'Timeframe', 'Señal', 'Confianza', 'Tesis', 'Outcome', 'Tags'],
+      ['Date', 'Asset', 'Timeframe', 'Signal', 'Confidence', 'Thesis', 'Outcome', 'Tags'],
       entries.map(e => [
         e.created_at, e.asset, e.timeframe, e.signal,
         e.confidence, e.thesis, e.outcome, (e.tags ?? []).join('; '),
@@ -325,7 +325,7 @@ function AnalysisLog({ entries }: { entries: AnalysisEntry[] }) {
       <TableWrap>
         <thead>
           <tr>
-            {['Fecha', 'Asset', 'TF', 'Señal', 'Conf.', 'Tesis', 'Outcome'].map(h => (
+            {['Date', 'Asset', 'TF', 'Signal', 'Conf.', 'Thesis', 'Outcome'].map(h => (
               <Th key={h}>{h}</Th>
             ))}
           </tr>
@@ -419,7 +419,7 @@ export default function DataTabs({ trades, analysis, newTradeId, isLive }: {
           <div className="flex items-center gap-1.5 text-[11px] pl-1">
             <span className={`w-1.5 h-1.5 rounded-full inline-block ${isLive ? 'bg-emerald-500 animate-pulse' : 'bg-gray-700'}`} />
             <span className={isLive ? 'text-emerald-600' : 'text-gray-700'}>
-              {isLive ? 'en vivo' : 'conectando…'}
+              {isLive ? 'live' : 'connecting...'}
             </span>
           </div>
         </div>

@@ -6,14 +6,14 @@ const STATUS_CFG = {
   running: {
     dot:   'bg-emerald-400',
     ping:  true,
-    label: 'Activo',
+    label: 'Active',
     text:  'text-emerald-400',
     bar:   'bg-emerald-500',
   },
   idle: {
     dot:   'bg-gray-600',
     ping:  false,
-    label: 'Inactivo',
+    label: 'Idle',
     text:  'text-gray-500',
     bar:   'bg-gray-600',
   },
@@ -27,7 +27,7 @@ const STATUS_CFG = {
   disconnected: {
     dot:   'bg-orange-400',
     ping:  false,
-    label: 'Detenido · sin red',
+    label: 'Stopped · no network',
     text:  'text-orange-400',
     bar:   'bg-orange-500',
   },
@@ -62,7 +62,7 @@ function AgentCard({ agent }: { agent: AgentStatus }) {
       {progress !== null && (
         <div>
           <div className="flex justify-between items-center mb-1">
-            <span className="text-[10px] text-gray-600">{progressLabel ?? 'Progreso'}</span>
+            <span className="text-[10px] text-gray-600">{progressLabel ?? 'Progress'}</span>
             <span className="text-[10px] font-mono text-gray-500">{progress}%</span>
           </div>
           <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
@@ -75,7 +75,7 @@ function AgentCard({ agent }: { agent: AgentStatus }) {
       )}
 
       <p className="text-[10px] text-gray-700 font-mono">
-        {new Date(agent.updated_at).toLocaleString('es-ES', {
+        {new Date(agent.updated_at).toLocaleString('en-US', {
           timeZone: 'America/New_York',
           month: 'short',
           day: '2-digit',
@@ -89,7 +89,7 @@ function AgentCard({ agent }: { agent: AgentStatus }) {
 
 export default function AgentGrid({ agents }: { agents: AgentStatus[] }) {
   if (!agents.length) {
-    return <p className="text-sm text-gray-600">No hay agentes registrados.</p>
+    return <p className="text-sm text-gray-600">No agents registered.</p>
   }
 
   return (

@@ -57,12 +57,12 @@ export default function MarketStatus() {
           : 'bg-gray-800 text-gray-500 border-gray-700/40'
       }`}>
         <div className={`w-1.5 h-1.5 rounded-full ${open ? 'bg-emerald-400 animate-pulse' : 'bg-gray-600'}`} />
-        {open ? 'Mercado abierto' : 'Mercado cerrado'}
+        {open ? 'Market open' : 'Market closed'}
       </div>
 
       {time && (
         <span className="text-xs text-gray-500 font-mono">
-          {open ? 'Apertura' : 'Cierre'} {time}
+          {open ? 'Open' : 'Close'} {time}
         </span>
       )}
 

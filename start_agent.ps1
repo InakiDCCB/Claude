@@ -1,4 +1,4 @@
-# Pulse v2.4 — Trading Agent Loop
+# Pulse v2.4 -- Trading Agent Loop
 # Runs one cycle every 5 minutes from 10:00 to 15:00 ET
 # Usage: .\start_agent.ps1
 # Stop: Ctrl+C
@@ -8,7 +8,6 @@ $PROMPT_FILE  = Join-Path $PSScriptRoot "strategies\cycle_prompt.md"
 $LOG_FILE     = Join-Path $PSScriptRoot "logs\agent_$(Get-Date -Format 'yyyyMMdd').log"
 $CYCLE_SECS   = 300   # 5 minutes
 
-# Ensure logs directory exists
 $null = New-Item -ItemType Directory -Force (Join-Path $PSScriptRoot "logs")
 
 function Get-ET {
@@ -37,18 +36,13 @@ function Run-Cycle {
     Write-Log "Cycle end"
 }
 
-# ── Main loop ────────────────────────────────────────────────────────────────
+# Main loop
 Write-Log "Agent starting. Ctrl+C to stop."
 
 while ($true) {
     $et = Get-ET
     $h  = $et.Hour
     $m  = $et.Minute
-
-    if (-not $et.IsDaylightSavingTime()) {
-        # EST (UTC-5): shift window +1 hour in UTC
-        # Times already in ET, no adjustment needed
-    }
 
     if ($h -lt 10) {
         $wait = ((10 - $h) * 60 - $m) * 60
@@ -63,13 +57,13 @@ while ($true) {
     }
 
     if ($h -eq 15 -and $m -eq 0) {
-        Write-Log "15:00 ET — running final passive cycle."
+        Write-Log "15:00 ET -- running final passive cycle."
         Run-Cycle
         Write-Log "Done for today."
         break
     }
 
-    # Active window: 10:00–15:00 ET
+    # Active window: 10:00-15:00 ET
     Run-Cycle
     Write-Log "Sleeping $CYCLE_SECS seconds..."
     Start-Sleep -Seconds $CYCLE_SECS

@@ -9,7 +9,7 @@ export function IncomingSlot() {
         </svg>
       </div>
       <div className="text-center">
-        <p className="text-[11px] font-semibold text-gray-600 uppercase tracking-widest">Próximo campeón</p>
+        <p className="text-[11px] font-semibold text-gray-600 uppercase tracking-widest">Next champion</p>
         <p className="text-[10px] text-gray-700 mt-1 font-mono">Incoming</p>
       </div>
     </div>
@@ -84,7 +84,7 @@ export default function ChampionCard({ champion, trades: tradeLedger = [], isBes
   const hasPerf  = perfTrades > 0 || closedTrades.length > 0
   const pnlColor = totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'
 
-  const name      = safeStr(c.name      ?? c.strategy  ?? 'Estrategia')
+  const name      = safeStr(c.name      ?? c.strategy  ?? 'Strategy')
   const version   = c.version != null   ? `v${safeStr(c.version)}`  : ''
   const assets    = safeStr(c.assets    ?? c.symbol    ?? '—')
   const timeframe = safeStr(c.timeframe ?? '—')
@@ -105,11 +105,11 @@ export default function ChampionCard({ champion, trades: tradeLedger = [], isBes
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">
-              Estrategia Activa
+              Active Strategy
             </p>
             {isBestPerformer && (
               <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-800/40 font-semibold">
-                ★ Mejor rendimiento
+                ★ Best performer
               </span>
             )}
           </div>
@@ -135,8 +135,8 @@ export default function ChampionCard({ champion, trades: tradeLedger = [], isBes
           </div>
         ) : (
           <div className="shrink-0 text-right">
-            <p className="text-[11px] text-gray-600">Sin trades aún</p>
-            <p className="text-[10px] text-gray-700">Aprendiendo…</p>
+            <p className="text-[11px] text-gray-600">No trades yet</p>
+            <p className="text-[10px] text-gray-700">Learning...</p>
           </div>
         )}
       </div>
@@ -145,8 +145,8 @@ export default function ChampionCard({ champion, trades: tradeLedger = [], isBes
       <div className="space-y-0.5 mb-3">
         <Row label="Timeframe"  value={timeframe} />
         <Row label="Trades"     value={`${wins}W / ${losses}L`} />
-        {riskPerTrade  && <Row label="Riesgo/trade"   value={`$${riskPerTrade}`} />}
-        {maxDailyLoss  && <Row label="Max pérdida día" value={`$${maxDailyLoss}`} />}
+        {riskPerTrade  && <Row label="Risk/trade"     value={`$${riskPerTrade}`} />}
+        {maxDailyLoss  && <Row label="Max daily loss" value={`$${maxDailyLoss}`} />}
         {stopLossLabel && <Row label="Stop loss"       value={stopLossLabel} mono={false} />}
         {takeProfitLbl && <Row label="Take profit"     value={takeProfitLbl} mono={false} />}
       </div>
@@ -155,7 +155,7 @@ export default function ChampionCard({ champion, trades: tradeLedger = [], isBes
       {entryLong.length > 0 && (
         <div className="mb-2">
           <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-1.5">
-            Condiciones entrada
+            Entry conditions
           </p>
           <div className="flex flex-wrap gap-1">
             {entryLong.map((r, i) => <Tag key={i} label={r} />)}
@@ -167,7 +167,7 @@ export default function ChampionCard({ champion, trades: tradeLedger = [], isBes
       {avoidRules.length > 0 && (
         <div className="mt-2">
           <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-1.5">
-            Evitar
+            Avoid
           </p>
           <div className="flex flex-wrap gap-1">
             {avoidRules.map((r, i) => <Tag key={i} label={r} active={false} />)}
