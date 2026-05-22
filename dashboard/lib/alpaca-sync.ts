@@ -1,4 +1,4 @@
-import { createSupabase } from './supabase'
+import { createSupabaseAdmin } from './supabase'
 
 const ALPACA_BASE = 'https://paper-api.alpaca.markets/v2'
 
@@ -70,7 +70,7 @@ export async function syncAlpacaState(): Promise<SyncResult> {
   const day_pl      = (Number(account.equity) - Number(account.last_equity)) || null
   const unrealized_pl = positions.reduce((s, p) => s + p.pl, 0)
 
-  const { error } = await createSupabase()
+  const { error } = await createSupabaseAdmin()
     .from('alpaca_state')
     .upsert(
       { key: 'current', synced_at, equity, cash, buying_power, day_pl, unrealized_pl, positions },

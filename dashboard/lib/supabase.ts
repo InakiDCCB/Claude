@@ -73,3 +73,11 @@ export type AlpacaState = {
   unrealized_pl: number | null
   positions:     AlpacaPosition[] | null
 }
+
+// Server-only: bypasses RLS — use only in API routes, never in client components
+export function createSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}

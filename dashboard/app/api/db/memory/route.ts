@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabase } from '../../../../lib/supabase'
+import { createSupabaseAdmin } from '../../../../lib/supabase'
 import { checkSecret } from '../../../../lib/auth'
 
 export const revalidate = 0
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
 
   const today = new Date().toISOString().split('T')[0]
 
-  const { error } = await createSupabase()
+  const { error } = await createSupabaseAdmin()
     .from('session_memory')
     .insert({
       session_date: today,

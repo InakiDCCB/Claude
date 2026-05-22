@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabase } from '../../../../lib/supabase'
+import { createSupabaseAdmin } from '../../../../lib/supabase'
 import { checkSecret } from '../../../../lib/auth'
 
 export const revalidate = 0
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   const strategy  = p.get('strategy')  ?? 'Pulse-v2.4'
   const notes     = p.get('notes')     ?? null
 
-  const { data, error } = await createSupabase()
+  const { data, error } = await createSupabaseAdmin()
     .from('trades')
     .insert({
       asset,

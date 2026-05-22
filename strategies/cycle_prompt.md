@@ -43,8 +43,8 @@ mcp__alpaca__get_clock. Parse timestamp to ET (UTC-4 in EDT).
 
 - is_open=false → BASE/heartbeat?...status=idle&description=Market+closed → DONE
 - ET < 10:00 → BASE/heartbeat?...status=idle&description=Pre-market → DONE
-- ET 10:00–15:00 → ACTIVE CYCLE (continue to step 2)
-- ET 15:00–15:55 → PASSIVE: steps 2–3 only, no new entries, then DONE
+- ET 10:00–15:30 → ACTIVE CYCLE (continue to step 2)
+- ET 15:30–15:55 → PASSIVE: steps 2–3 only, no new entries, then DONE
 - ET ≥ 15:55 → close ALL positions (exit_type=TIME) + write memory (step 7) → DONE
 
 ## STEP 2 — LOAD CONTEXT

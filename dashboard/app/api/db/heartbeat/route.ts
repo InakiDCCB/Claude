@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabase } from '../../../../lib/supabase'
+import { createSupabaseAdmin } from '../../../../lib/supabase'
 import { checkSecret } from '../../../../lib/auth'
 
 export const revalidate = 0
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
   const metaRaw     = p.get('metadata')
   const metadata    = metaRaw ? JSON.parse(decodeURIComponent(metaRaw)) : null
 
-  const { error } = await createSupabase()
+  const { error } = await createSupabaseAdmin()
     .from('agent_status')
     .upsert(
       { name, status, description, updated_at: new Date().toISOString(), metadata },

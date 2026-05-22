@@ -94,11 +94,33 @@ create table if not exists alpaca_state (
   positions     jsonb
 );
 
+-- ============================================================
+-- Row Level Security
+-- All tables have RLS enabled.
+-- anon role: SELECT only (dashboard reads via NEXT_PUBLIC_SUPABASE_ANON_KEY).
+-- Writes (INSERT/UPDATE/UPSERT) go through service_role key in API routes —
+-- service_role bypasses RLS so no write policies are needed.
+-- ============================================================
+
+alter table public.trades          enable row level security;
+alter table public.analysis_log    enable row level security;
+alter table public.agent_status    enable row level security;
+alter table public.champion_strategy enable row level security;
+alter table public.session_memory  enable row level security;
+alter table public.alpaca_state    enable row level security;
+
+-- Public read policies (dashboard uses anon key)
+create policy "anon_select" on public.trades          for select to anon using (true);
+create policy "anon_select" on public.analysis_log    for select to anon using (true);
+create policy "anon_select" on public.agent_status    for select to anon using (true);
+create policy "anon_select" on public.champion_strategy for select to anon using (true);
+create policy "anon_select" on public.session_memory  for select to anon using (true);
+create policy "anon_select" on public.alpaca_state    for select to anon using (true);
+
 -- Data API grants (required from October 30, 2026)
--- PostgREST / supabase-js will require explicit grants on all public tables.
-grant select on public.trades to anon;
-grant select on public.analysis_log to anon;
-grant select, update on public.agent_status to anon;
+grant select on public.trades          to anon;
+grant select on public.analysis_log    to anon;
+grant select on public.agent_status    to anon;
 grant select on public.champion_strategy to anon;
-grant select on public.session_memory to anon;
-grant select on public.alpaca_state to anon;
+grant select on public.session_memory  to anon;
+grant select on public.alpaca_state    to anon;

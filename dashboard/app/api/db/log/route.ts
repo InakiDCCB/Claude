@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabase } from '../../../../lib/supabase'
+import { createSupabaseAdmin } from '../../../../lib/supabase'
 import { checkSecret } from '../../../../lib/auth'
 
 export const revalidate = 0
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   const indRaw      = p.get('indicators')
   const indicators  = indRaw ? JSON.parse(decodeURIComponent(indRaw)) : null
 
-  const { error } = await createSupabase()
+  const { error } = await createSupabaseAdmin()
     .from('analysis_log')
     .insert({ asset, timeframe, signal, confidence, indicators, thesis })
 
