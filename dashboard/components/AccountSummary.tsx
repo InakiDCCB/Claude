@@ -109,8 +109,8 @@ function HitRatioGauge({ trades }: { trades: Trade[] }) {
   return (
     <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4">
       <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1">Hit Ratio</p>
-      <div className="flex flex-col items-center gap-1">
-        <svg viewBox="0 0 100 60" className="w-full max-w-[130px]">
+      <div className="flex flex-col items-center gap-2">
+        <svg viewBox="0 0 100 60" className="w-full">
           <path d="M 14 50 A 36 36 0 0 1 86 50" fill="none" stroke="#1f2937" strokeWidth="7" strokeLinecap="round" />
           <path
             d="M 14 50 A 36 36 0 0 1 86 50"
@@ -120,25 +120,25 @@ function HitRatioGauge({ trades }: { trades: Trade[] }) {
             strokeLinecap="round"
             strokeDasharray={`${filled} ${ARC - filled}`}
           />
-          <text x="50" y="43" textAnchor="middle" fill={color} fontSize="13" fontWeight="700" fontFamily="ui-monospace,monospace">
+          <text x="50" y="42" textAnchor="middle" fill={color} fontSize="14" fontWeight="700" fontFamily="ui-monospace,monospace">
             {total === 0 ? '—' : `${pct}%`}
           </text>
-          <text x="50" y="54" textAnchor="middle" fill="#6b7280" fontSize="7" fontFamily="ui-monospace,monospace">
+          <text x="50" y="54" textAnchor="middle" fill="#6b7280" fontSize="7.5" fontFamily="ui-monospace,monospace">
             {total > 0 ? `${total} trades` : ''}
           </text>
         </svg>
         <div className="grid grid-cols-3 gap-1 w-full text-center">
           <div>
-            <p className="text-[9px] text-gray-600 uppercase">Wins</p>
-            <p className="text-xs font-mono font-semibold text-emerald-400">{wins}</p>
+            <p className="text-[10px] text-gray-600 uppercase">Wins</p>
+            <p className="text-sm font-mono font-semibold text-emerald-400">{wins}</p>
           </div>
           <div>
-            <p className="text-[9px] text-gray-600 uppercase">Losses</p>
-            <p className="text-xs font-mono font-semibold text-red-400">{losses}</p>
+            <p className="text-[10px] text-gray-600 uppercase">Losses</p>
+            <p className="text-sm font-mono font-semibold text-red-400">{losses}</p>
           </div>
           <div>
-            <p className="text-[9px] text-gray-600 uppercase">W/L</p>
-            <p className="text-xs font-mono font-semibold text-white">{wl}</p>
+            <p className="text-[10px] text-gray-600 uppercase">W/L</p>
+            <p className="text-sm font-mono font-semibold text-white">{wl}</p>
           </div>
         </div>
       </div>
