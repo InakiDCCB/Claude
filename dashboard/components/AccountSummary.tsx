@@ -110,7 +110,7 @@ function HitRatioGauge({ trades }: { trades: Trade[] }) {
     <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4">
       <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1">Hit Ratio</p>
       <div className="flex flex-col items-center gap-2">
-        <svg viewBox="0 0 100 60" className="w-full">
+        <svg viewBox="0 0 100 60" className="w-full max-w-[130px] mx-auto">
           <path d="M 14 50 A 36 36 0 0 1 86 50" fill="none" stroke="#1f2937" strokeWidth="7" strokeLinecap="round" />
           <path
             d="M 14 50 A 36 36 0 0 1 86 50"
@@ -188,13 +188,6 @@ function DollarPnL({ trades }: { trades: Trade[] }) {
         </span>
       </div>
 
-      {avg !== null && (
-        <div className="mt-1.5 text-[10px] text-right text-gray-600">
-          Avg/trade: <span className={`font-mono ${avg >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-            {avg >= 0 ? '+' : ''}{fmtUSD(avg)}
-          </span>
-        </div>
-      )}
     </div>
   )
 }
@@ -316,7 +309,11 @@ export default function AccountSummary({ trades, alpacaState }: { trades: Trade[
       .catch(() => setLoading(false))
   }, [])
 
-  const filled = trades.filter(t => t.status === 'filled')
+  const filled       = trades.filter(t => t.status === 'filled')
+  const closedTrades = filled.filter(t => t.pnl != null)
+  const avgPnL       = closedTrades.length > 0
+    ? closedTrades.reduce((s, t) => s + (t.pnl ?? 0), 0) / closedTrades.length
+    : 0
 
   return (
     <div className="space-y-3">
@@ -327,7 +324,15 @@ export default function AccountSummary({ trades, alpacaState }: { trades: Trade[
         </div>
         <div className="flex-1 grid grid-cols-2 gap-3">
           <HitRatioGauge trades={trades} />
-          <DollarPnL trades={trades} />
+          <div className="flex flex-col gap-3">
+            <DollarPnL trades={trades} />
+            <StatCard
+              label="Avg P&L / trade"
+              value={closedTrades.length > 0 ? `${avgPnL >= 0 ? '+' : ''}${fmtUSD(avgPnL)}` : '—'}
+              sub={closedTrades.length > 0 ? `${closedTrades.length} closed trade${closedTrades.length !== 1 ? 's' : ''}` : 'no closed trades'}
+              valueColor={closedTrades.length === 0 ? 'text-white' : avgPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}
+            />
+          </div>
         </div>
       </div>
 
