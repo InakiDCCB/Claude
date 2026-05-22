@@ -81,6 +81,19 @@ create table if not exists session_memory (
 
 create index if not exists session_memory_date_idx on session_memory (session_date desc);
 
+-- ALPACA_STATE
+-- Cached snapshot of live Alpaca account + positions (synced every minute by Vercel cron)
+create table if not exists alpaca_state (
+  key           text primary key,
+  synced_at     timestamptz not null default now(),
+  equity        numeric,
+  cash          numeric,
+  buying_power  numeric,
+  day_pl        numeric,
+  unrealized_pl numeric,
+  positions     jsonb
+);
+
 -- Data API grants (required from October 30, 2026)
 -- PostgREST / supabase-js will require explicit grants on all public tables.
 grant select on public.trades to anon;
@@ -88,3 +101,4 @@ grant select on public.analysis_log to anon;
 grant select, update on public.agent_status to anon;
 grant select on public.champion_strategy to anon;
 grant select on public.session_memory to anon;
+grant select on public.alpaca_state to anon;

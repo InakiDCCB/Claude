@@ -38,20 +38,6 @@ export type AnalysisEntry = {
   tags: string[] | null
 }
 
-export type MarketSnapshot = {
-  id: string
-  captured_at: string
-  asset: string
-  timeframe: string
-  open: number | null
-  high: number | null
-  low: number | null
-  close: number
-  volume: number | null
-  vwap: number | null
-  notes: string | null
-}
-
 export type AgentStatus = {
   id: string
   name: string

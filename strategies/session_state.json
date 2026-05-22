@@ -1,0 +1,47 @@
+{
+  "_doc": "Estado incremental Pulse v2.4. Actualizar tras cada ciclo — solo fetchar 3-5 barras nuevas.",
+  "_update_formulas": {
+    "vwap": "vwap_num += TP*V; vwap_den += V; vwap = vwap_num/vwap_den  (TP=(H+L+C)/3)",
+    "ema21": "ema = ema_prev*0.90909 + close*0.09091",
+    "ema9":  "ema = ema_prev*0.80000 + close*0.20000",
+    "rsi_wilder": "avg_gain = avg_gain*13/14 + gain/14;  avg_loss = avg_loss*13/14 + loss/14;  RSI=100-100/(1+avg_gain/avg_loss)"
+  },
+  "date": "2026-05-21",
+  "last_bar_ET": "14:35",
+  "last_bar_UTC": "2026-05-21T18:35:00Z",
+  "regime": "RANGE",
+  "session_low": { "QQQ": 706.77, "TSLA": 412.90, "RIVN": 13.56 },
+  "QQQ": {
+    "vwap_num": 17645000000,
+    "vwap_den": 24810000,
+    "vwap": 711.26,
+    "ema21": 713.98,
+    "ema9":  714.90,
+    "rsi_avg_gain": 0.2489,
+    "rsi_avg_loss": 0.2368,
+    "last_close": 714.45,
+    "atr14_1min_est": 0.60
+  },
+  "TSLA": {
+    "vwap_num": 12495000000,
+    "vwap_den": 29820000,
+    "vwap": 419.00,
+    "ema21": 420.61,
+    "ema9":  420.50,
+    "rsi_avg_gain": 0.1790,
+    "rsi_avg_loss": 0.2150,
+    "last_close": 420.60,
+    "atr14_1min_est": 0.58
+  },
+  "RIVN": {
+    "vwap_num": 211200000,
+    "vwap_den": 15260000,
+    "vwap": 13.84,
+    "ema21": 14.082,
+    "ema9":  14.11,
+    "rsi_avg_gain": 0.01336,
+    "rsi_avg_loss": 0.01014,
+    "last_close": 14.155,
+    "atr14_1min_est": 0.040
+  }
+}

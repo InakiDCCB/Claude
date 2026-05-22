@@ -54,13 +54,13 @@ while ($true) {
         continue
     }
 
-    if ($h -ge 15 -and $m -gt 0) {
+    if ($h -gt 15 -or ($h -eq 15 -and $m -gt 30)) {
         Write-Log "Session ended (ET $($et.ToString('HH:mm'))). Exiting."
         break
     }
 
-    if ($h -eq 15 -and $m -eq 0) {
-        Write-Log "15:00 ET -- running final passive cycle."
+    if ($h -eq 15 -and $m -ge 30) {
+        Write-Log "15:30 ET -- running final passive cycle."
         Run-Cycle
         Write-Log "Done for today."
         break
