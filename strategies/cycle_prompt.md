@@ -134,6 +134,8 @@ BASE/memory?regime=X&assets=QQQ%2CTSLA%2CRIVN&total_pnl=X&win_rate=X&trade_count
   &observations=%7B%22worked%22%3A%5B%5D%2C%22failed%22%3A%5B%5D%2C%22patterns%22%3A%5B%5D%7D
   &parameters=%7B%22notes%22%3A%22suggestions%22%7D
   &summary=TEXT_ENC
+BASE/reconcile-trades?date=YYYY-MM-DD (use actual session date)
+If response.reconciled > 0 → note "Auto-reconciled N trades from Alpaca history" in summary.
 
 ---
 
