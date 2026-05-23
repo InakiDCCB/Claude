@@ -127,14 +127,13 @@ Full table reference:
 | Table | Purpose | Key details |
 |---|---|---|
 | `trades` | Paper trade ledger | `exit_type` ∈ {TP, SL, TIME, MANUAL}; `total_value` is a generated column |
-| `market_snapshots` | OHLCV captures | `timeframe` ∈ {1m, 5m, 1h, 1d} |
-| `analysis_log` | Signals + indicator readings | `indicators` is JSONB (includes `tokens_in`/`tokens_out` per cycle); `signal` ∈ {bullish, bearish, neutral, watching} |
+| `analysis_log` | Signals + indicator readings | `indicators` is JSONB; `signal` ∈ {bullish, bearish, neutral, watching} |
 | `agent_status` | Agent heartbeats | `status` ∈ {running, idle, error}; `metadata` is JSONB |
 | `champion_strategy` | Active strategy config | Single row keyed `"current"`; full config stored as JSONB in `config` column |
 | `alpaca_state` | Live Alpaca account snapshot | Single row keyed `"live"`; synced by `/api/db/sync-alpaca` and Vercel cron |
 | `session_memory` | Post-close analysis storage | Session learnings written after each trading day |
 
-TypeScript types for all tables live in `lib/supabase.ts` (`Trade`, `AnalysisEntry`, `MarketSnapshot`, `AgentStatus`, `ChampionConfig`, `AlpacaState`, `AlpacaPosition`).
+TypeScript types for all tables live in `lib/supabase.ts` (`Trade`, `AnalysisEntry`, `AgentStatus`, `ChampionConfig`, `AlpacaState`, `AlpacaPosition`).
 
 ## Ethical Constraints (permanent)
 
