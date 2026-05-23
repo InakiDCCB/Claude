@@ -15,6 +15,7 @@ venv/
 trading/open_positions.json
 trading/trade_log.json
 trading/logs/*.log
+logs/
 
 # Dashboard build artifacts
 dashboard/node_modules/
