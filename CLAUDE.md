@@ -10,17 +10,18 @@ A paper trading research system for studying market behavior and developing stra
 
 Claude uses the `mcp__alpaca__*` MCP tools directly for market data and order execution. No separate Python agent scripts — Claude IS the agent.
 
-## Trading Loop (Pulse v2.4)
+## Trading Loop (Pulse v2.7)
 
 Session phases:
 
-| Phase | ET window | Action |
-|---|---|---|
-| Chaotic open | 9:30–10:00 | No trades. Collect regime data. |
-| Regime detection | 10:00 | Classify TREND / RANGE |
-| Active trading | 10:00–15:30 | Entries + bracket management |
-| Passive observation | 15:30–16:00 | No new entries. Manage open positions. Log observations. |
-| Post-close analysis | ≥16:00 | See strategies/pulse_v2.md for full 5-step protocol. |
+| Phase               | ET window   | Action                                                   |
+| ------------------- | ----------- | -------------------------------------------------------- |
+| Chaotic open        | 9:30–10:00  | No trades. Collect regime data.                          |
+| Regime detection    | 10:00       | Classify TREND / RANGE                                   |
+| Active trading      | 10:00–15:45 | Entries + bracket management                             |
+| Passive observation | 15:45–16:00 | No new entries. Manage open positions. Log observations. |
+| Close positions     | 15:55       | Close all open positions                                 |
+| Post-close analysis | ≥16:00      | See strategies/pulse_v2.md for full 5-step protocol.     |
 
 Each ~5-min cycle during active trading:
 
@@ -64,10 +65,10 @@ cd dashboard && npx tsc --noEmit # type-check without building
 
 **Key files:**
 - `app/page.tsx` — server component; parallel-fetches trades, analysis_log, agent_status, champion_strategy, alpaca_state filtered by date range (`from`/`to` search params)
-- `app/actions.ts` — `toggleAgentStatus()` server action; updates agent_status and revalidates page cache
+- `app/actions.ts` — reserved for server actions (currently empty)
 - `app/api/account/route.ts` — proxies Alpaca `/v2/account` + `/v2/positions` (legacy; dashboard reads `alpaca_state` directly)
-- `app/api/db/*.ts` — agent HTTP endpoints: `heartbeat`, `log`, `trade`, `trade-exit`, `read`, `memory`, `sync-alpaca`; all require `?secret=AGENT_SECRET`
-- `app/api/cron/sync/route.ts` — Vercel cron endpoint for automatic Alpaca sync; requires `Authorization: Bearer CRON_SECRET`
+- `app/api/db/*.ts` — agent HTTP endpoints: `heartbeat`, `log`, `trade`, `trade-exit`, `read`, `memory`, `sync-alpaca`, `reconcile-trades`; all require `?secret=AGENT_SECRET`
+- `app/api/cron/sync/route.ts` — sync endpoint called by external cron (cron-job.org) every minute; requires `Authorization: Bearer CRON_SECRET`
 - `app/api/ping/route.ts` — health check
 - `lib/supabase.ts` — `createSupabase()` factory + all TypeScript types
 - `lib/alpaca-sync.ts` — `syncAlpacaState()` fetches Alpaca account + positions, upserts to `alpaca_state`
@@ -82,7 +83,8 @@ cd dashboard && npx tsc --noEmit # type-check without building
 | `DataTabs.tsx` | Tabbed interface for trades & analysis; line charts (Recharts); CSV export |
 | `MarketStatus.tsx` | ET clock + market open/closed indicator; pings `/api/ping` every 30s for latency |
 | `ChampionCard.tsx` | Displays active strategy config from `champion_strategy` table; also exports `IncomingSlot` |
-| `AgentGrid.tsx` | Lists agents from `agent_status`; calls `toggleAgentStatus()` server action; renders `TokenUsageCard` with draining quota bars and reset countdowns |
+| `AgentGrid.tsx` | Lists agents from `agent_status`; renders status pill (running/idle/error/disconnected) + optional progress bar from `metadata.progress` |
+| `MarketCalendarCard.tsx` | NYSE calendar + early-close indicator; sidebar widget |
 
 **Env vars required:**
 
@@ -102,23 +104,7 @@ Configured in `.mcp.json` (use `.mcp.json.example` as a template). Use `mcp__alp
 
 ## Supabase Schema
 
-Defined in `supabase/schema.sql`. Tables: `trades`, `market_snapshots`, `analysis_log`, `agent_status`, `champion_strategy`.
-
-**Note:** The `alpaca_state` table is used by the dashboard and sync routes but is **not in `schema.sql`** — create it manually:
-
-```sql
-create table if not exists alpaca_state (
-  key           text primary key,
-  synced_at     timestamptz not null default now(),
-  equity        numeric,
-  cash          numeric,
-  buying_power  numeric,
-  day_pl        numeric,
-  unrealized_pl numeric,
-  positions     jsonb
-);
-grant select on alpaca_state to anon;
-```
+Defined in `supabase/schema.sql`. Tables: `trades`, `analysis_log`, `agent_status`, `champion_strategy`, `session_memory`, `alpaca_state`. All have RLS enabled with `anon` SELECT policies; writes go through `service_role` in `/api/db/*` routes.
 
 Full table reference:
 
@@ -128,7 +114,7 @@ Full table reference:
 | `analysis_log` | Signals + indicator readings | `indicators` is JSONB; `signal` ∈ {bullish, bearish, neutral, watching} |
 | `agent_status` | Agent heartbeats | `status` ∈ {running, idle, error}; `metadata` is JSONB |
 | `champion_strategy` | Active strategy config | Single row keyed `"current"`; full config stored as JSONB in `config` column |
-| `alpaca_state` | Live Alpaca account snapshot | Single row keyed `"live"`; synced by `/api/db/sync-alpaca` and Vercel cron |
+| `alpaca_state` | Live Alpaca account snapshot | Single row keyed `"current"`; synced by `/api/db/sync-alpaca` (manual) and `/api/cron/sync` (external cron-job.org every minute) |
 | `session_memory` | Post-close analysis storage | Session learnings written after each trading day |
 
 TypeScript types for all tables live in `lib/supabase.ts` (`Trade`, `AnalysisEntry`, `AgentStatus`, `ChampionConfig`, `AlpacaState`, `AlpacaPosition`).
@@ -137,4 +123,4 @@ TypeScript types for all tables live in `lib/supabase.ts` (`Trade`, `AnalysisEnt
 
 - NO defense sector: BA, LMT, TXN, NOC, RTX, GD, HII
 - NO: MRNA, PFE
-- Preferred universe: QQQ, TSLA, OKLO, RIVN, COST, HUM, CVS
+- Universe: QQQ, TSLA, RIVN

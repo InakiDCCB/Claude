@@ -1,8 +1,10 @@
-# Pulse v2.4
+# Pulse v2.7
 
-**Activa desde:** 2026-05-15 (v2.0) · **Actualizada:** 2026-05-20 (v2.4)  
+**Activa desde:** 2026-05-15 (v2.0) · **Actualizada:** 2026-05-27 (v2.7)  
 **Reemplaza:** Pulse v1.x (VWAP pullback único, inicio 9:30 ET)  
 **Activos:** QQQ, TSLA, RIVN
+
+> **Parámetros vigentes (sizing, SL/TP, cap riesgo, filtros) son los de `champion_strategy.config` en Supabase — single source of truth.** Las cifras de v2.4 en secciones inferiores se mantienen como referencia histórica del diseño.
 
 ---
 

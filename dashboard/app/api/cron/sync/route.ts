@@ -3,8 +3,8 @@ import { syncAlpacaState } from '../../../../lib/alpaca-sync'
 
 export const revalidate = 0
 
-// Called by Vercel Cron every minute (configured in vercel.json).
-// Vercel injects Authorization: Bearer CRON_SECRET automatically.
+// Called by external cron (cron-job.org) every minute.
+// Requires header: Authorization: Bearer ${CRON_SECRET}
 export async function GET(req: NextRequest) {
   const auth = req.headers.get('authorization')
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
