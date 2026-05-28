@@ -111,6 +111,73 @@ Activado cuando la detección de régimen a las 10:00 ET clasifica el día como 
 
 ---
 
+## Entradas adicionales — Setups independientes
+
+Esta sección define vías de entrada que **operan en paralelo** al árbol RANGE/TREND principal. **No comparten filtros** con el modo activo (EMA, VWAP, RSI, chop, TREND DOWN) **ni los condicionan**. Tienen reglas propias completas y sizing dedicado.
+
+### FVG (Fair Value Gap) — entrada adicional independiente
+
+Setup standalone basado en ICT (Inner Circle Trader). Detecta gaps de liquidez no rellenados como zonas de entrada precisa con invalidación clara.
+
+**Definición FVG alcista (3 velas consecutivas):**
+- Vela 1: cualquier vela
+- Vela 2: vela de impulso alcista (no se solapa con la 3 en el sentido del gap)
+- Vela 3: vela alcista cuyo `low > high(vela 1)`
+- Gap = rango `[high(vela 1), low(vela 3)]`
+- Midpoint = `(high(vela 1) + low(vela 3)) / 2`
+
+**Condiciones de entry (todas autocontenidas):**
+
+| Parámetro | Valor |
+|---|---|
+| Detección | Scan últimas 15 barras de 1-min IEX (preferente) y 5-min SIP (secundario) |
+| Entry trigger | Precio retorna al rango del gap y **toca el midpoint** |
+| Confirmación | Cierre de la barra de entry dentro del gap con volumen ≥ avg últimas 5 barras |
+| SL | `low(vela 1) − $0.02` |
+| TP1 | 2:1 R/R sobre el SL → cerrar 50% |
+| TP2 | Swing high previo a la formación del FVG **o** 3:1 R/R (lo que llegue primero) |
+| Sizing | `floor(equity × 0.05 / entry_price)` — independiente del 8% de v2.7 |
+| Validez | Expira si: (a) precio cierra por debajo de `low(vela 1)` sin retest, o (b) pasan 20 barras sin retest |
+| Order placement | Market order primero; OCO/bracket post-fill (igual patrón que v2.7) |
+| Tag DB | `strategy='fvg_v1'` |
+
+**Aislamiento explícito — qué NO aplica:**
+- ❌ EMA 9 hard filter (10:00–11:15 ET)
+- ❌ EMA 21 hard filter (≥11:15 ET)
+- ❌ Buffer de slippage ±$0.25
+- ❌ Restricciones TREND DOWN (3 barras / 1.5% above low)
+- ❌ Filtro chop ATR(14,5m)/precio < 0.15%
+- ❌ Cap riesgo $25 por trade
+- ❌ Sizing 8% del equity
+- ❌ Ventana 10:00–15:00 (FVG opera todo el horario activo)
+- ❌ RSI mínimo 45
+
+**Lo que SÍ se respeta (reglas de riesgo globales, no de setup):**
+- ✅ Cap exposure total ≤70% del equity (regla de portafolio)
+- ✅ Universo ético (no defense, no MRNA/PFE)
+- ✅ Forced close escalonado EOD (15:00 +0.7%, 15:30 +0.4%, 15:55 todo)
+- ✅ SGOV parking overnight
+
+**Coexistencia con v2.7:**
+Un mismo símbolo puede tener simultáneamente un trade abierto por v2.7 y un trade abierto por FVG. Cada uno con su propio SL/TP. No se cancelan ni reemplazan entre sí.
+
+**Estado en `session_state`:**
+Al inicio de cada ciclo, mantener lista de FVGs activos:
+```json
+{
+  "active_fvgs": [
+    { "symbol": "QQQ", "formed_at": "11:35", "low_bound": 728.40, "high_bound": 728.65, "midpoint": 728.525, "sl_level": 728.38, "expires_at": "11:55" }
+  ]
+}
+```
+Limpiar expirados al inicio de cada ciclo. Eliminar al ejecutar entry.
+
+**Logging:**
+- En `analysis_log.notes`: registrar "FVG detected: SYMBOL [low_bound]-[high_bound] at TIME" cuando se forma, independiente de observaciones del modo principal.
+- En post-close: reportar P&L FVG **por separado** del P&L v2.7 para evaluar el setup en aislamiento.
+
+---
+
 ## Fases de la sesión
 
 | Fase | Horario ET | Acción |

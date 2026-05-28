@@ -130,7 +130,30 @@ TREND DOWN restriction:
 Post-stop-hunt re-entry (P6):
   SL swept by <$0.25 + price reversed within ≤2 bars + volume ≥ 5-bar avg + <3 bars since sweep → re-entry valid.
 
-## STEP 8 — PLACE ORDER (if valid setup)
+## STEP 7b — FVG SCAN (additional INDEPENDENT entry — runs every cycle, parallel to STEP 7)
+
+FVG is a standalone setup. Does NOT apply EMA filter, VWAP zone, RSI gate, chop filter, TREND DOWN restriction, or v2.7 sizing. Runs even if STEP 7 rejected an entry.
+
+Detection per symbol (QQQ, TSLA, RIVN):
+  1. Pull last 15 bars of 1-min IEX (already loaded in STEP 3).
+  2. For each triplet (n, n+1, n+2): if low(n+2) > high(n) → bullish FVG.
+     low_bound  = high(n)
+     high_bound = low(n+2)
+     midpoint   = (low_bound + high_bound) / 2
+     sl_level   = low(n) − 0.02
+     formed_at  = bar n+2 timestamp
+     expires_at = formed_at + 20 bars (20 minutes for 1-min)
+
+Maintain `active_fvgs` list in session_state. At cycle start:
+  - Drop FVGs where price has closed below low(vela 1) without retest.
+  - Drop FVGs where current_time > expires_at.
+
+Entry trigger per active FVG:
+  - Current 1-min close inside [low_bound, high_bound] AND touched midpoint
+  - Bar volume ≥ average of prior 5 bars
+  - If triggered → execute STEP 8b (FVG order placement) and remove FVG from active list.
+
+## STEP 8 — PLACE ORDER (if valid setup from STEP 7)
   shares = floor(equity × 0.10 / entry_price). Skip if shares < 2.
   Round ALL prices to exactly 2 decimal places.
   1. place_stock_order(symbol, shares, "buy", "market", "day") → order_id
@@ -139,6 +162,17 @@ Post-stop-hunt re-entry (P6):
      TP1 = round(fill + 2×ATR14, 2)
      TP2 = nearest structural resistance on 5-min chart, or round(fill + 4×ATR14, 2)
   4. BASE/trade?asset=X&side=buy&qty=N&price=FILL&order_id=ID&notes=SL%3DX.XX+TP1%3DY.YY+TP2%3DZ.ZZ+ATR%3DA.AA
+
+## STEP 8b — PLACE FVG ORDER (independent sizing & risk — does NOT use v2.7 rules)
+  shares = floor(equity × 0.05 / entry_price). Skip if shares < 2.
+  Round ALL prices to exactly 2 decimal places.
+  1. place_stock_order(symbol, shares, "buy", "market", "day") → order_id
+  2. get_order_by_id(order_id) → confirm filled_avg_price (= fvg_fill)
+  3. SL  = round(fvg.sl_level, 2)  (low(vela 1) − 0.02 — NOT 2×ATR)
+     risk = fvg_fill − SL
+     TP1 = round(fvg_fill + 2 × risk, 2)  (2:1 R/R)
+     TP2 = swing high prior to FVG formation, or round(fvg_fill + 3 × risk, 2)
+  4. BASE/trade?asset=X&side=buy&qty=N&price=FILL&order_id=ID&strategy=fvg_v1&notes=FVG+SL%3DX.XX+TP1%3DY.YY+TP2%3DZ.ZZ+midpoint%3DM.MM
 
 ## STEP 9 — LOG CYCLE
 Build indicators JSON including token estimates for this cycle:
@@ -161,6 +195,9 @@ Write strategies/session_state.json with the following structure (merge with exi
   "equity": X,
   "position": { "symbol": X, "qty": N, "entry": X, "unrealized_pl": X } or null,
   "open_orders": [...],
+  "active_fvgs": [
+    { "symbol": "QQQ", "formed_at": "HH:MM", "low_bound": X, "high_bound": X, "midpoint": X, "sl_level": X, "expires_at": "HH:MM" }
+  ],
   "QQQ":  { "vwap_num": X, "vwap_den": X, "vwap": X, "ema9": X, "ema21": X, "last_close": X, "atr14_1min_est": X, "bars_count": N },
   "TSLA": { "vwap_num": X, "vwap_den": X, "vwap": X, "ema9": X, "ema21": X, "last_close": X, "atr14_1min_est": X, "bars_count": N },
   "RIVN": { "vwap_num": X, "vwap_den": X, "vwap": X, "ema9": X, "ema21": X, "last_close": X, "atr14_1min_est": X, "bars_count": N }
@@ -181,7 +218,8 @@ If response.reconciled > 0 → note "Auto-reconciled N trades from Alpaca histor
 - LONG ONLY. Never open short positions.
 - Universe: QQQ, TSLA, RIVN, OKLO, COST only.
 - NEVER trade: BA, LMT, TXN, NOC, RTX, GD, HII, MRNA, PFE.
-- Max 2 simultaneous positions.
+- v2.7 max 2 simultaneous positions per setup branch. FVG opens independently and counts separately.
+- Total exposure cap ≤70% equity across ALL setups (global risk rule, applies to both v2.7 and FVG).
 - SL calculated AFTER fill is confirmed — never before.
 - All prices to exactly 2 decimal places.
 - On any tool error: log it via BASE/log and continue.
