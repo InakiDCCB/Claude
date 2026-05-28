@@ -160,26 +160,26 @@ export default function TradingPanel({
       {/* Niveles 1–3: Portfolio · Métricas · Top Performers */}
       <AccountSummary trades={trades} alpacaState={alpacaState} />
 
-      {/* Nivel 4: Agente + Market Calendar */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2">
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
-            Agent
-          </h2>
-          <AgentGrid agents={liveAgents} />
+      {/* Niveles 4-5: Agente + Active Strategy (izq) · Market Calendar (der, full height) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 space-y-8">
+          <section>
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+              Agent
+            </h2>
+            <AgentGrid agents={liveAgents} />
+          </section>
+          <section>
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+              Active strategy
+            </h2>
+            <ChampionCard champion={champion} trades={trades} isBestPerformer={champion != null} />
+          </section>
         </div>
-        <div>
+        <div className="lg:h-full">
           <MarketCalendarCard />
         </div>
-      </section>
-
-      {/* Nivel 5: Estrategia activa */}
-      <section>
-        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
-          Active strategy
-        </h2>
-        <ChampionCard champion={champion} trades={trades} isBestPerformer={champion != null} />
-      </section>
+      </div>
 
       {/* Nivel 6: Trades · P&L · Analysis Log */}
       <section>

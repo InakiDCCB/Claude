@@ -50,10 +50,9 @@ export default function MarketCalendarCard() {
   const today = now.toISOString().slice(0, 10)
   const upcoming = NYSE_2026
     .filter(e => e.date >= today)
-    .slice(0, 6)
 
   return (
-    <div className="bg-gray-900/40 border border-gray-800 rounded-xl p-4">
+    <div className="bg-gray-900/40 border border-gray-800 rounded-xl p-4 h-full flex flex-col">
       <div className="flex items-baseline justify-between mb-3">
         <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Market Calendar</h3>
         <span className="text-[10px] text-gray-600">NYSE 2026</span>
@@ -62,7 +61,7 @@ export default function MarketCalendarCard() {
       {upcoming.length === 0 ? (
         <p className="text-[11px] text-gray-500">No upcoming holidays this year.</p>
       ) : (
-        <ul className="space-y-1.5">
+        <ul className="space-y-1.5 flex-1">
           {upcoming.map(e => {
             const dleft = daysUntil(e.date)
             const isToday = dleft === 0
