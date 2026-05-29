@@ -10,7 +10,7 @@ A paper trading research system for studying market behavior and developing stra
 
 Claude uses the `mcp__alpaca__*` MCP tools directly for market data and order execution. No separate Python agent scripts — Claude IS the agent.
 
-## Trading Loop (Pulse v2.7)
+## Trading Loop (Pulse v2.8)
 
 Session phases:
 
@@ -29,8 +29,8 @@ Each ~5-min cycle during active trading:
 2. `get_all_positions` → manage open positions + apply pending exit updates
 3. `get_stock_bars` (1-min IEX) → real-time signals
 4. [If 10:00 ET and first cycle] → regime detection (TREND vs RANGE)
-5. Compute VWAP + EMAs (5, 9, 21, 34, 55) from 5-min SIP bars; SMA (100, 200) from 1-hour bars
-6. Evaluate setups per active mode + EMA bias: **10:00–11:15 ET use EMA 9** (EMA 21 not yet valid); **≥11:15 ET use EMA 21 as hard filter** (reject long if price < EMA 21). **Slippage buffer (v2.3):** if price is within ±$0.25 of the hard filter level, require price > level + $0.20 before placing order.
+5. Compute VWAP + EMAs (5, 9, 21, 34, 55) from 5-min SIP bars; SMA (100, 200) from 1-hour bars. **(v2.8)** Also incremental-update Volume Profile per symbol: pull `get_stock_trades` (SIP) since `last_tick_UTC`, bin volume at `bin_size = max($0.01, yesterday_close × 0.0005)`, recompute developing VPOC/VAH/VAL via TPO 70% expansion. `yesterday_profile` and `naked_pocs` are seeded by pre-market and immutable during the day.
+6. Evaluate setups per active mode + EMA bias: **10:00–11:15 ET use EMA 9** (EMA 21 not yet valid); **≥11:15 ET use EMA 21 as hard filter** (reject long if price < EMA 21). **Slippage buffer (v2.3):** if price is within ±$0.25 of the hard filter level, require price > level + $0.20 before placing order. **(v2.8) VP hard filter:** VWAP Pullback rejects if price not within yesterday VA OR developing VA; Volume Absorption rejects unless close is within ±0.10% of yesterday VPOC, developing VPOC, or a naked POC; ORB Breakout requires close above `max(ORB_HIGH, yesterday VAH)`. **FVG (`strategy='fvg_v1'`) is explicitly exempt from VP — ICT gap thesis is orthogonal to value areas.** If `yesterday_profile` is missing (cold start without pre-market), fail-open on VP for v2.7 setups and log a warning.
 7. **TREND DOWN regime (v2.3):** do not enter long until price is ≥1.5% above session low AND 3 consecutive 5-min bars have closed above EMA 21. EMA 21 acts as resistance in TREND DOWN until reversal is confirmed.
 8. On signal → `place_stock_order` as **market order only** (no bracket at this step — SL/TP set after fill per step 9). **Round all prices to 2 decimal places** — Alpaca rejects sub-penny prices. RSI min is **45** (not 40). **Sizing (v2.3 — mandatory):** `shares = floor(equity × 0.10 / entry_price)` — calculate before every order, no exceptions. Skip if shares < 2.
 9. **SL post-fill (v2.4 — mandatory):** place market order first (no bracket), confirm fill price with `get_order_by_id`, then calculate `SL = fill_price − 2×ATR(14, 1-min)`. Place OCO/bracket only after fill is confirmed.

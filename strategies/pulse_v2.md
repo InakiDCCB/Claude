@@ -1,6 +1,6 @@
-# Pulse v2.7
+# Pulse v2.8
 
-**Activa desde:** 2026-05-15 (v2.0) · **Actualizada:** 2026-05-27 (v2.7)  
+**Activa desde:** 2026-05-15 (v2.0) · **Actualizada:** 2026-05-28 (v2.8)  
 **Reemplaza:** Pulse v1.x (VWAP pullback único, inicio 9:30 ET)  
 **Activos:** QQQ, TSLA, RIVN
 
@@ -50,6 +50,50 @@ Si solo se cumple una, observar pero no operar. En TREND DOWN, la EMA21 actúa c
 
 ---
 
+## Volume Profile — indicador primario (v2.8)
+
+VP es **hard filter primario** para los 3 setups del árbol v2.7 (VWAP Pullback, Volume Absorption, ORB Breakout). **Excluido en FVG** — ver sección "Aislamiento explícito".
+
+**Definiciones:**
+
+| Concepto | Definición |
+|---|---|
+| Bin | Cubo de precio. `bin_size = max(0.01, round(yesterday_close × 0.0005, 2))` — fijo todo el día. |
+| VPOC | Precio del bin con mayor volumen acumulado (midpoint del bin). Imán institucional. |
+| VAH / VAL | Bordes superior/inferior del Value Area — bins consecutivos alrededor del VPOC que acumulan el **70% del volumen total**. |
+| Yesterday profile | VPOC/VAH/VAL del RTH 9:30–16:00 ET de la sesión previa. Fijo desde pre-market. |
+| Developing profile | VPOC/VAH/VAL acumulado del RTH 9:30 ET hasta el ciclo actual. Se actualiza cada ciclo. |
+| Naked POC | VPOC de una de las **5 sesiones previas** que el precio aún no ha vuelto a tocar (no intersect con OHLC posteriores). Magneto pendiente. |
+
+**Fuente:** `mcp__alpaca__get_stock_trades(symbol, start, end, feed="sip")` — tick por tick, ventana RTH only.
+
+**Algoritmo Value Area (TPO 70%):**
+```
+1. VPOC_bin = argmax(volume_by_bin)
+2. covered = volume_by_bin[VPOC_bin]; lo = hi = VPOC_bin
+3. while covered < 0.70 × total_volume:
+     up_pair   = volume_by_bin.get(hi+1, 0) + volume_by_bin.get(hi+2, 0)
+     down_pair = volume_by_bin.get(lo-1, 0) + volume_by_bin.get(lo-2, 0)
+     if up_pair >= down_pair: hi += 2; covered += up_pair
+     else:                    lo -= 2; covered += down_pair
+4. VAH = (hi + 1) × bin_size; VAL = lo × bin_size; VPOC_price = (VPOC_bin + 0.5) × bin_size
+```
+
+**Persistencia:** `yesterday_profile`, `naked_pocs[]`, `bin_size` y `developing.{vpoc,vah,val,volume_by_bin}` viven en `session_state.state[symbol]` (JSONB). Pre-market siembra los tres primeros; cada ciclo actualiza `developing` incrementalmente y `last_tick_UTC`.
+
+**Helper de evaluación:**
+```
+VP_lookup(symbol, price):
+  in_yesterday_VA  = yesterday.VAL ≤ price ≤ yesterday.VAH
+  in_developing_VA = developing.VAL ≤ price ≤ developing.VAH
+  near_VPOC = (|price − yesterday.VPOC|   ≤ 0.001 × price)
+           OR (|price − developing.VPOC|  ≤ 0.001 × price)
+           OR (∃ npoc ∈ naked_pocs : |price − npoc| ≤ 0.001 × price)
+  return { in_yesterday_VA, in_developing_VA, near_VPOC }
+```
+
+---
+
 ## Modo RANGE — VWAP Pullback
 
 Igual al núcleo de v1.2, con feed actualizado.
@@ -61,6 +105,7 @@ Igual al núcleo de v1.2, con feed actualizado.
 3. **2 barras consecutivas verdes en 1-min IEX** cerrando por encima de la anterior (confirmación de bounce en tiempo real)
 4. RSI (14 períodos, 5-min) entre 45 y 65
 5. Hora entre 10:00 y 15:00 ET
+6. **VP hard filter (v2.8):** el precio de evaluación del pullback está **dentro de [VAL, VAH] del perfil de ayer** O **dentro del developing Value Area de hoy**. Si está fuera de ambos VA, rechazar. *Tesis: pullbacks fuera de value son extensión que sigue corriendo antes de rebotar.*
 
 **Flush de pánico — caso especial:**
 - Si el pullback incluyó UNA sola barra de volumen extremo (>2x barra previa) seguida de recuperación con volumen decreciente: la señal es válida.
@@ -72,6 +117,7 @@ Entrada válida sin necesidad de pullback clásico cuando se cumplan todas:
 2. La barra cierra dentro de ±0.15% del VWAP o de un nivel de soporte identificado
 3. La barra **no cierra en nuevo mínimo de sesión** (los vendedores no logran nuevo low)
 4. EMA 21 por debajo del precio (hard filter normal aplica)
+5. **VP hard filter (v2.8):** la barra de absorción cierra **dentro de ±0.10% de uno de**: VPOC de ayer, developing VPOC de hoy, o un **naked POC**. Si no, rechazar. *Tesis: la absorción institucional es fiable solo en nodos de alto volumen con interés estructural previo.*
 
 Entrada: open de la barra siguiente. SL/TP: reglas P5 abajo.
 
@@ -100,7 +146,7 @@ Activado cuando la detección de régimen a las 10:00 ET clasifica el día como 
 
 **Condiciones de entrada long (breakout alcista):**
 
-1. Precio cierra una barra de 5-min **por encima de ORB_HIGH**
+1. Precio cierra una barra de 5-min **por encima de `max(ORB_HIGH, yesterday.VAH)`** (v2.8). Si `ORB_HIGH < yesterday.VAH`, el breakout efectivo requiere superar VAH — no basta ORB_HIGH. *Tesis: un break sobre ORB_HIGH pero dentro del value area de ayer es rotación intra-value, no ruptura.*
 2. Volumen de la barra de breakout > promedio de volumen del ORB
 3. Banda de Bollinger superior BB(20,2) en 5-min está expandiéndose (ancho actual > ancho promedio últimas 5 barras)
 4. Hora entre 9:45 y 11:00 ET (ventana ORB)
@@ -153,6 +199,7 @@ Setup standalone basado en ICT (Inner Circle Trader). Detecta gaps de liquidez n
 - ❌ Sizing 8% del equity
 - ❌ Ventana 10:00–15:00 (FVG opera todo el horario activo)
 - ❌ RSI mínimo 45
+- ❌ **Volume Profile hard filter (v2.8)** — FVG no se filtra por value area ni por proximidad a VPOC/naked POC. Su tesis (gaps de liquidez ICT) es ortogonal al concepto de zonas de aceptación.
 
 **Lo que SÍ se respeta (reglas de riesgo globales, no de setup):**
 - ✅ Cap exposure total ≤70% del equity (regla de portafolio)
@@ -194,14 +241,14 @@ Limpiar expirados al inicio de cada ciclo. Eliminar al ejecutar entry.
 
 ## Gestión de riesgo (ambos modos)
 
-| Regla | Valor |
-|-------|-------|
-| Máx. posiciones simultáneas | 2 |
-| Máx. pérdida diaria | $500 |
-| Ventana de entrada (RANGE) | 10:00–15:30 ET |
-| Ventana ORB (TREND) | 9:45–11:00 ET |
-| Sin entradas fase pasiva | No abrir después de 15:30 ET |
-| Cierre forzado | Posiciones abiertas a las 15:55 ET → salida market (`exit_type = 'TIME'`) |
+| Regla                       | Valor                                                                     |
+| --------------------------- | ------------------------------------------------------------------------- |
+| Máx. posiciones simultáneas | 10                                                                        |
+| Máx. pérdida diaria         | $500                                                                      |
+| Ventana de entrada (RANGE)  | 10:00–15:30 ET                                                            |
+| Ventana ORB (TREND)         | 9:45–11:00 ET                                                             |
+| Sin entradas fase pasiva    | No abrir después de 15:30 ET                                              |
+| Cierre forzado              | Posiciones abiertas a las 15:55 ET → salida market (`exit_type = 'TIME'`) |
 
 Si la pérdida diaria alcanza $500, el sistema se detiene hasta el día siguiente.
 
@@ -428,3 +475,4 @@ Si se identifica un patrón recurrente (≥2 sesiones), proponer modificación c
 | **v2.2** | **2026-05-15** | **+RSI mínimo 45 (antes 40); +EMA 21 hard filter para longs (antes soft/reduce tamaño); +EMA 9 proxy en 10:00–11:15 ET cuando EMA 21 inválida; +ciclo 90s en zona de alerta ±0.30% VWAP** |
 | **v2.3** | **2026-05-19** | **+P1: en TREND DOWN exigir 3 barras sobre EMA21 + precio ≥1.5% del low antes de entrar long; +P2: buffer slippage +$0.20 cuando precio dentro ±$0.25 del hard filter; +P3: Volume Absorption como señal primaria (v >3×, en soporte/VWAP, sin nuevo mínimo); +P4: sizing obligatorio floor(equity×0.10/precio) verificado antes de cada orden** |
 | **v2.4** | **2026-05-20** | **+P5: TP Dinámico — TP1=entry+2×ATR (cerrar 50%, mover SL a BE); TP2=próxima resistencia estructural o entry+4×ATR; +P6: re-entrada válida post-stop-hunt cuando sweep <$0.25 con reversal ≤2 barras y confirmación de volumen** |
+| **v2.8** | **2026-05-28** | **+Volume Profile como hard filter primario (fuente: tick trades SIP, bin 0.05% del close de ayer): VWAP Pullback exige precio dentro de yesterday VA o developing VA; Volume Absorption exige cierre ±0.10% de VPOC/naked POC; ORB Breakout exige cierre sobre max(ORB_HIGH, yesterday VAH). FVG explícitamente EXENTO del filtro VP (tesis ICT ortogonal a value areas).** |

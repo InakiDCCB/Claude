@@ -94,6 +94,30 @@ create table if not exists alpaca_state (
   positions     jsonb
 );
 
+-- VOLUME_PROFILES (Pulse v2.8)
+-- End-of-session Volume Profile snapshot per (date, symbol).
+-- Written by post-close from session_state.developing; read by pre-market the next morning
+-- as `yesterday_profile`, avoiding a paginated tick re-fetch.
+-- day_high, day_low and session_close are stored so the naked-POC check can be done
+-- as a pure SQL self-join without any extra bar pulls.
+create table if not exists volume_profiles (
+  date          date not null,
+  symbol        text not null,
+  vpoc          numeric not null,        -- midpoint price of the highest-volume bin
+  vah           numeric not null,        -- upper edge of the 70% value area
+  val           numeric not null,        -- lower edge of the 70% value area
+  total_volume  bigint  not null,        -- sum of size across all bins
+  bin_size      numeric not null,        -- bin width used (= 0.0005 × prior-day close, min $0.01)
+  day_high      numeric not null,        -- session high (for naked-POC touched check)
+  day_low       numeric not null,        -- session low  (for naked-POC touched check)
+  session_close numeric not null,        -- last close — feeds next day's bin_size
+  created_at    timestamptz not null default now(),
+  primary key (date, symbol)
+);
+
+create index if not exists volume_profiles_symbol_date_idx
+  on volume_profiles (symbol, date desc);
+
 -- ============================================================
 -- Row Level Security
 -- All tables have RLS enabled.
@@ -102,25 +126,28 @@ create table if not exists alpaca_state (
 -- service_role bypasses RLS so no write policies are needed.
 -- ============================================================
 
-alter table public.trades          enable row level security;
-alter table public.analysis_log    enable row level security;
-alter table public.agent_status    enable row level security;
+alter table public.trades            enable row level security;
+alter table public.analysis_log      enable row level security;
+alter table public.agent_status      enable row level security;
 alter table public.champion_strategy enable row level security;
-alter table public.session_memory  enable row level security;
-alter table public.alpaca_state    enable row level security;
+alter table public.session_memory    enable row level security;
+alter table public.alpaca_state      enable row level security;
+alter table public.volume_profiles   enable row level security;
 
 -- Public read policies (dashboard uses anon key)
-create policy "anon_select" on public.trades          for select to anon using (true);
-create policy "anon_select" on public.analysis_log    for select to anon using (true);
-create policy "anon_select" on public.agent_status    for select to anon using (true);
+create policy "anon_select" on public.trades            for select to anon using (true);
+create policy "anon_select" on public.analysis_log      for select to anon using (true);
+create policy "anon_select" on public.agent_status      for select to anon using (true);
 create policy "anon_select" on public.champion_strategy for select to anon using (true);
-create policy "anon_select" on public.session_memory  for select to anon using (true);
-create policy "anon_select" on public.alpaca_state    for select to anon using (true);
+create policy "anon_select" on public.session_memory    for select to anon using (true);
+create policy "anon_select" on public.alpaca_state      for select to anon using (true);
+create policy "anon_select" on public.volume_profiles   for select to anon using (true);
 
 -- Data API grants (required from October 30, 2026)
-grant select on public.trades          to anon;
-grant select on public.analysis_log    to anon;
-grant select on public.agent_status    to anon;
+grant select on public.trades            to anon;
+grant select on public.analysis_log      to anon;
+grant select on public.agent_status      to anon;
 grant select on public.champion_strategy to anon;
-grant select on public.session_memory  to anon;
-grant select on public.alpaca_state    to anon;
+grant select on public.session_memory    to anon;
+grant select on public.alpaca_state      to anon;
+grant select on public.volume_profiles   to anon;
