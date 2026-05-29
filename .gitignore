@@ -23,8 +23,9 @@ dashboard/.next/
 dashboard/.vercel/
 dashboard/.env.local
 
-# Claude Code local settings
-.claude/
+# Claude Code local settings (ignore everything except curated memory/)
+.claude/*
+!.claude/memory/
 
 # OS
 .DS_Store
