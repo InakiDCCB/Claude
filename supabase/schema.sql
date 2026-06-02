@@ -28,8 +28,9 @@ create table if not exists trades (
 -- Heartbeat table for monitoring running agents from the dashboard
 create table if not exists agent_status (
   id          uuid primary key default gen_random_uuid(),
-  name        text not null,
-  status      text not null default 'idle' check (status in ('running','idle','error')),
+  name        text not null unique,
+  status      text not null default 'idle'
+                check (status in ('running','idle','error','disconnected')),
   description text,
   updated_at  timestamptz not null default now(),
   metadata    jsonb
@@ -53,9 +54,9 @@ create table if not exists analysis_log (
 -- CHAMPION_STRATEGY
 -- Active strategy config displayed in the dashboard
 create table if not exists champion_strategy (
-  key        text primary key,
-  updated_at timestamptz not null default now(),
-  config     jsonb not null
+  key        text primary key default 'current',
+  config     jsonb not null,
+  updated_at timestamptz not null default now()
 );
 
 -- Indexes for common query patterns
@@ -81,10 +82,23 @@ create table if not exists session_memory (
 
 create index if not exists session_memory_date_idx on session_memory (session_date desc);
 
+-- SESSION_STATE (Pulse v2.8)
+-- Intra-day loop state, one row per trading date.
+-- `state` is a JSONB blob holding per-symbol VWAP num/den, EMAs, ATR, RSI seed,
+-- positions, active FVGs, and v2.8 fields: yesterday_profile, naked_pocs,
+-- developing.{vpoc,vah,val,volume_by_bin}, last_bar_ET, last_bar_UTC,
+-- session_high, session_low. Seeded by /pre-market, updated each cycle via
+-- jsonb_set on changed paths only, read by cycle_prompt.md STEP 0.
+create table if not exists session_state (
+  date       date primary key,
+  state      jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
 -- ALPACA_STATE
 -- Cached snapshot of live Alpaca account + positions (synced every minute by Vercel cron)
 create table if not exists alpaca_state (
-  key           text primary key,
+  key           text primary key default 'current',
   synced_at     timestamptz not null default now(),
   equity        numeric,
   cash          numeric,
@@ -118,6 +132,49 @@ create table if not exists volume_profiles (
 create index if not exists volume_profiles_symbol_date_idx
   on volume_profiles (symbol, date desc);
 
+-- SITUATIONAL_ANALYSIS (Pulse v2.8, 2026-06-01)
+-- D-1 → D bias snapshots written by the `/situational` skill.
+-- Informational only — does NOT affect the trading loop.
+-- Multiple rows per (session_date, symbol) are expected (pre-market, midday,
+-- pre-close snapshots all coexist).
+create table if not exists situational_analysis (
+  id              uuid primary key default gen_random_uuid(),
+  created_at      timestamptz not null default now(),
+  session_date    date not null,
+  symbol          text not null,
+  -- Yesterday's reference levels (from volume_profiles)
+  y_close         numeric,
+  y_high          numeric,
+  y_low           numeric,
+  y_vpoc          numeric,
+  y_vah           numeric,
+  y_val           numeric,
+  -- Today's developing levels at snapshot time
+  t_open          numeric,
+  t_high          numeric,
+  t_low           numeric,
+  t_current       numeric,
+  -- Classification
+  gap_type        text check (gap_type in (
+                    'gap_up_outside','gap_up_inside','inside',
+                    'gap_down_inside','gap_down_outside','overlap')),
+  range_structure text check (range_structure in (
+                    'higher_high','lower_low','inside_day','expansion','contraction')),
+  bias            text not null check (bias in ('bullish','bearish','neutral','mixed')),
+  confidence      numeric check (confidence between 0 and 1),
+  target_levels   jsonb default '[]'::jsonb,   -- [{ price, label, reason }]
+  invalidation    numeric,                     -- price below/above which thesis is void
+  thesis          text,
+  notes           text,
+  constraint situational_analysis_symbol_check
+    check (symbol in ('QQQ','TSLA','RIVN'))
+);
+
+create index if not exists situational_session_date_idx
+  on situational_analysis (session_date desc);
+create index if not exists situational_symbol_date_idx
+  on situational_analysis (symbol, session_date desc);
+
 -- ============================================================
 -- Row Level Security
 -- All tables have RLS enabled.
@@ -126,28 +183,34 @@ create index if not exists volume_profiles_symbol_date_idx
 -- service_role bypasses RLS so no write policies are needed.
 -- ============================================================
 
-alter table public.trades            enable row level security;
-alter table public.analysis_log      enable row level security;
-alter table public.agent_status      enable row level security;
-alter table public.champion_strategy enable row level security;
-alter table public.session_memory    enable row level security;
-alter table public.alpaca_state      enable row level security;
-alter table public.volume_profiles   enable row level security;
+alter table public.trades               enable row level security;
+alter table public.analysis_log         enable row level security;
+alter table public.agent_status         enable row level security;
+alter table public.champion_strategy    enable row level security;
+alter table public.session_memory       enable row level security;
+alter table public.session_state        enable row level security;
+alter table public.alpaca_state         enable row level security;
+alter table public.volume_profiles      enable row level security;
+alter table public.situational_analysis enable row level security;
 
 -- Public read policies (dashboard uses anon key)
-create policy "anon_select" on public.trades            for select to anon using (true);
-create policy "anon_select" on public.analysis_log      for select to anon using (true);
-create policy "anon_select" on public.agent_status      for select to anon using (true);
-create policy "anon_select" on public.champion_strategy for select to anon using (true);
-create policy "anon_select" on public.session_memory    for select to anon using (true);
-create policy "anon_select" on public.alpaca_state      for select to anon using (true);
-create policy "anon_select" on public.volume_profiles   for select to anon using (true);
+create policy "anon_select" on public.trades               for select to anon using (true);
+create policy "anon_select" on public.analysis_log         for select to anon using (true);
+create policy "anon_select" on public.agent_status         for select to anon using (true);
+create policy "anon_select" on public.champion_strategy    for select to anon using (true);
+create policy "anon_select" on public.session_memory       for select to anon using (true);
+create policy "anon_select" on public.session_state        for select to anon using (true);
+create policy "anon_select" on public.alpaca_state         for select to anon using (true);
+create policy "anon_select" on public.volume_profiles      for select to anon using (true);
+create policy "anon_select" on public.situational_analysis for select to anon using (true);
 
 -- Data API grants (required from October 30, 2026)
-grant select on public.trades            to anon;
-grant select on public.analysis_log      to anon;
-grant select on public.agent_status      to anon;
-grant select on public.champion_strategy to anon;
-grant select on public.session_memory    to anon;
-grant select on public.alpaca_state      to anon;
-grant select on public.volume_profiles   to anon;
+grant select on public.trades               to anon;
+grant select on public.analysis_log         to anon;
+grant select on public.agent_status         to anon;
+grant select on public.champion_strategy    to anon;
+grant select on public.session_memory       to anon;
+grant select on public.session_state        to anon;
+grant select on public.alpaca_state         to anon;
+grant select on public.volume_profiles      to anon;
+grant select on public.situational_analysis to anon;
