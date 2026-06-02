@@ -9,6 +9,7 @@
 - [Visión general Pulse](project_pulse_overview.md) — agente autónomo v2.8 con 4 setups; FVG aislado del resto
 - [Restricciones permanentes del universo](project_universe_constraints.md) — QQQ/TSLA/RIVN long-only, lista ética de exclusión
 - [Dashboard](project_dashboard.md) — Next.js Vercel; layout 6 niveles; cron-job.org sync cada minuto
+- [Análisis situacional /situational](project_situational_analysis.md) — skill D-1 → D independiente, solo informativo
 
 ## Referencias externas
 - [Supabase](ref_supabase.md) — project_id y tablas clave del sistema
@@ -29,6 +30,7 @@
 ## Filosofía y disciplina de estrategia
 - [Filosofía de trading](feedback_trading_philosophy.md) — aprender el mercado es lo permanente; estrategias son reemplazables
 - [Mantener Pulse v2.8 + FVG](feedback_stick_with_pulse.md) — no añadir momentum/chase sin ≥3 sesiones de evidencia
+- [Sin filtro EMA](feedback_no_ema_filter.md) — eliminado el gate EMA9/EMA21 + buffer; solo VWAP/VA/ORB/FVG deciden entradas
 
 ## Preferencias del usuario
 - [Estilo de decisión](feedback_decision_style.md) — propuestas opinionadas con tradeoffs explícitos
