@@ -30,12 +30,12 @@ Each ~5-min cycle during active trading:
 3. `get_stock_bars` (1-min IEX) → real-time signals
 4. [If 10:00 ET and first cycle] → regime detection (TREND vs RANGE)
 5. Compute VWAP + EMAs (5, 9, 21, 34, 55) from 5-min SIP bars; SMA (100, 200) from 1-hour bars. **(v2.8)** Also incremental-update Volume Profile per symbol: pull `get_stock_trades` (SIP) since `last_tick_UTC`, bin volume at `bin_size = max($0.01, yesterday_close × 0.0005)`, recompute developing VPOC/VAH/VAL via TPO 70% expansion. `yesterday_profile` and `naked_pocs` are seeded by pre-market and immutable during the day.
-6. Evaluate setups per active mode + EMA bias: **10:00–11:15 ET use EMA 9** (EMA 21 not yet valid); **≥11:15 ET use EMA 21 as hard filter** (reject long if price < EMA 21). **Slippage buffer (v2.3):** if price is within ±$0.25 of the hard filter level, require price > level + $0.20 before placing order. **(v2.8) VP hard filter:** VWAP Pullback rejects if price not within yesterday VA OR developing VA; Volume Absorption rejects unless close is within ±0.10% of yesterday VPOC, developing VPOC, or a naked POC; ORB Breakout requires close above `max(ORB_HIGH, yesterday VAH)`. **FVG (`strategy='fvg_v1'`) is explicitly exempt from VP — ICT gap thesis is orthogonal to value areas.** If `yesterday_profile` is missing (cold start without pre-market), fail-open on VP for v2.7 setups and log a warning.
-7. **TREND DOWN regime (v2.3):** do not enter long until price is ≥1.5% above session low AND 3 consecutive 5-min bars have closed above EMA 21. EMA 21 acts as resistance in TREND DOWN until reversal is confirmed.
+6. Evaluate setups against the 4 entries (VWAP Pullback / Volume Absorption / ORB Breakout / FVG). **EMA filter REMOVED (2026-06-01):** EMA9/EMA21 + slippage buffer are no longer entry gates — only VWAP/VA/ORB/FVG criteria decide. EMAs are still computed for context but do not block entries. **(v2.8) VP hard filter:** VWAP Pullback rejects if price not within yesterday VA OR developing VA; Volume Absorption rejects unless close is within ±0.10% of yesterday VPOC, developing VPOC, or a naked POC; ORB Breakout requires close above `max(ORB_HIGH, yesterday VAH)`. **FVG (`strategy='fvg_v1'`) is explicitly exempt from VP — ICT gap thesis is orthogonal to value areas.** If `yesterday_profile` is missing (cold start without pre-market), fail-open on VP for v2.7 setups and log a warning.
+7. **TREND DOWN regime (v2.3, post EMA-removal):** do not enter long until price is ≥1.5% above session low. (The "3 consecutive bars above EMA21" leg was tied to the EMA filter and is dropped.)
 8. On signal → `place_stock_order` as **market order only** (no bracket at this step — SL/TP set after fill per step 9). **Round all prices to 2 decimal places** — Alpaca rejects sub-penny prices. RSI min is **45** (not 40). **Sizing (v2.3 — mandatory):** `shares = floor(equity × 0.10 / entry_price)` — calculate before every order, no exceptions. Skip if shares < 2.
 9. **SL post-fill (v2.4 — mandatory):** place market order first (no bracket), confirm fill price with `get_order_by_id`, then calculate `SL = fill_price − 2×ATR(14, 1-min)`. Place OCO/bracket only after fill is confirmed.
 10. **TP Dinámico (v2.4 — P5):** identify nearest structural resistance on 5-min bars before entry. `TP1 = entry + 2×ATR` (close 50%, move SL to break-even). `TP2 = structural resistance or entry + 4×ATR` (close remaining 50%).
-11. **Volume Absorption entry (v2.3):** valid without classic pullback when: bar volume >3× avg of prior 5 bars, closes within ±0.15% of VWAP or support, does NOT close at new session low, and EMA 21 is below price. Enter at next bar open.
+11. **Volume Absorption entry (v2.3):** valid without classic pullback when: bar volume >3× avg of prior 5 bars, closes within ±0.15% of VWAP or support, does NOT close at new session low, and EMA 21 is below price (this is an *internal* setup criterion — distinct from the removed EMA *filter*). Enter at next bar open.
 12. **Post-stop-hunt re-entry (v2.4 — P6):** if SL was swept by <$0.25 AND price reversed within ≤2 bars AND volume ≥ avg AND within 3 bars of sweep → re-entry valid at open of next confirmation bar. Full SL/TP rules apply.
 13. Log cycle to `analysis_log` (include EMAs in `indicators` JSONB) + heartbeat to `agent_status`
 14. If any asset within ±0.30% of VWAP but no full setup → schedule next wakeup at **90s** (alert zone)
@@ -60,7 +60,7 @@ cd dashboard && npx tsc --noEmit # type-check without building
 **Dashboard layout (6 levels):**
 1–3. Portfolio · Metrics · Top Performers → `AccountSummary`
 4. Agent status → `AgentGrid`
-5. Strategies grid (champion + 3 incoming slots) → `ChampionCard` + `IncomingSlot`
+5. Strategies grid (champion) → `ChampionCard`
 6. Trades · P&L · Analysis Log → `DataTabs`
 
 **Key files:**
@@ -82,7 +82,7 @@ cd dashboard && npx tsc --noEmit # type-check without building
 | `AccountSummary.tsx` | Reads live Alpaca data from `alpaca_state` table; displays equity, cash, buying power, day P&L as stat cards |
 | `DataTabs.tsx` | Tabbed interface for trades & analysis; line charts (Recharts); CSV export |
 | `MarketStatus.tsx` | ET clock + market open/closed indicator; pings `/api/ping` every 30s for latency |
-| `ChampionCard.tsx` | Displays active strategy config from `champion_strategy` table; also exports `IncomingSlot` |
+| `ChampionCard.tsx` | Displays active strategy config from `champion_strategy` table |
 | `AgentGrid.tsx` | Lists agents from `agent_status`; renders status pill (running/idle/error/disconnected) + optional progress bar from `metadata.progress` |
 | `MarketCalendarCard.tsx` | NYSE calendar + early-close indicator; sidebar widget |
 
@@ -100,24 +100,37 @@ cd dashboard && npx tsc --noEmit # type-check without building
 
 ## Alpaca MCP
 
-Configured in `.mcp.json` (use `.mcp.json.example` as a template). Use `mcp__alpaca__*` tools for all market data and order execution. Must run from local machine — Alpaca endpoints are blocked in cloud/web environments.
+Configured in `.mcp.json` (gitignored — contains Alpaca paper keys). Use `mcp__alpaca__*` tools for all market data and order execution. Must run from local machine — Alpaca endpoints are blocked in cloud/web environments.
 
 ## Supabase Schema
 
-Defined in `supabase/schema.sql`. Tables: `trades`, `analysis_log`, `agent_status`, `champion_strategy`, `session_memory`, `alpaca_state`. All have RLS enabled with `anon` SELECT policies; writes go through `service_role` in `/api/db/*` routes.
+Defined in `supabase/schema.sql`. Tables: `trades`, `analysis_log`, `agent_status`, `champion_strategy`, `session_memory`, `alpaca_state`, `session_state`, `volume_profiles`, `situational_analysis`. All have RLS enabled with `anon` SELECT policies; writes go through `service_role` in `/api/db/*` routes or direct service_role SQL.
 
 Full table reference:
 
 | Table | Purpose | Key details |
 |---|---|---|
-| `trades` | Paper trade ledger | `exit_type` ∈ {TP, SL, TIME, MANUAL}; `total_value` is a generated column |
+| `trades` | Paper trade ledger | `exit_type` ∈ {TP, SL, TIME, MANUAL}; `status` ∈ {pending, filled, cancelled, rejected}; quantity column is `quantity` (not `qty`); `total_value` is generated |
 | `analysis_log` | Signals + indicator readings | `indicators` is JSONB; `signal` ∈ {bullish, bearish, neutral, watching} |
 | `agent_status` | Agent heartbeats | `status` ∈ {running, idle, error}; `metadata` is JSONB |
 | `champion_strategy` | Active strategy config | Single row keyed `"current"`; full config stored as JSONB in `config` column |
 | `alpaca_state` | Live Alpaca account snapshot | Single row keyed `"current"`; synced by `/api/db/sync-alpaca` (manual) and `/api/cron/sync` (external cron-job.org every minute) |
-| `session_memory` | Post-close analysis storage | Session learnings written after each trading day |
+| `session_memory` | Post-close analysis storage | `session_date` (not `date`); session learnings written after each trading day |
+| `session_state` | Intraday loop state | Per-date row; full state JSONB with VWAP num/den, EMAs, RSI seed, position, FVGs, developing VP |
+| `volume_profiles` | Daily VP snapshots | Per-date×symbol row; VPOC/VAH/VAL + day_high/low + session_close + bin_size. Written by post-close. |
+| `situational_analysis` | D-1 → D bias snapshots | Per-date×symbol×timestamp row; written by `/situational` skill (informational only — does not affect loop) |
 
 TypeScript types for all tables live in `lib/supabase.ts` (`Trade`, `AnalysisEntry`, `AgentStatus`, `ChampionConfig`, `AlpacaState`, `AlpacaPosition`).
+
+## User Skills (manual `/commands`)
+
+Skills live in `~/.claude/commands/` (local git-only repo, no remote). Invoke with `/<name>`:
+
+| Skill | Purpose | Affects loop? |
+|---|---|---|
+| `/pre-market` | 9:30–9:50 ET seed of indicators + VP from yesterday → writes `session_state` | Yes — seeds state |
+| `/post-close` | ≥16:00 ET 5-step protocol → writes `session_memory` + `volume_profiles` | Yes — produces next-day inputs |
+| `/situational` | D-1 → D multi-day bias analysis (gap_type, range_structure, targets) → writes `situational_analysis` | **No — informational only**, manual trigger any time |
 
 ## Ethical Constraints (permanent)
 
