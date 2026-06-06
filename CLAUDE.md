@@ -10,7 +10,11 @@ A paper trading research system for studying market behavior and developing stra
 
 Claude uses the `mcp__alpaca__*` MCP tools directly for market data and order execution. No separate Python agent scripts — Claude IS the agent.
 
-## Trading Loop (Pulse v2.8)
+## Trading Loop (Pulse v2.9)
+
+**v2.9 (2026-06-05):** FVG entries pasan a **limit orders pre-placed al midpoint** en lugar de market orders disparados por cycle detection. El broker filea automáticamente si el precio retrocede, eliminando cycle-delay misses (problema documentado el 06-04: 4 triggers no captados). Ver STEP 7b/8b en `strategies/cycle_prompt.md`.
+
+## Trading Loop (Pulse v2.8 base)
 
 Session phases:
 
@@ -136,4 +140,4 @@ Skills live in `~/.claude/commands/` (local git-only repo, no remote). Invoke wi
 
 - NO defense sector: BA, LMT, TXN, NOC, RTX, GD, HII
 - NO: MRNA, PFE
-- Universe: QQQ, TSLA, RIVN
+- **Universe: QQQ ONLY** — no exceptions. See memory `feedback-qqq-only-universe` for full reasoning.
