@@ -51,7 +51,7 @@ Si no hay fila → cold start: ejecuta el seeding mínimo del STEP 2-bis.
 ## STEP 2 — DATOS (1 sola fuente: 1-min IEX)
 
 ```
-get_stock_bars(symbol="QQQ", timeframe="1Min", start=<last_1min_UTC del estado, o hoy 13:30Z>, feed="iex")
+get_stock_bars(symbols="QQQ", timeframe="1Min", start=<last_1min_UTC del estado, o hoy 13:30Z>, feed="iex")
 ```
 - Filtrar SELLADAS: `bar.t + 1min ≤ now`. Si no hay barra nueva sellada Y no hay posición NI limit pendiente → imprime 1 línea "HH:MM — sin barra nueva — skip" → STEP 9 (wakeup) directo.
 - Las barras 5-min se DERIVAN aquí: agrupar 1-min por bloques de 5 alineados a 9:30 ET
@@ -167,7 +167,12 @@ Evaluar y, si dispara, incluir en el JSONB del STEP 8:
    (los 4 parámetros son obligatorios o Alpaca rechaza con 422; PROHIBIDO order_class="bracket").
    Si falla → retry 1 vez → si falla otra vez → market sell todo + log "emergency close".
 3. `state.position = {sys, qty, entry:fill, tp, sl, oco_id, opened_ET}` ; si FVG → `fvg.fills_today += 1`.
-4. Registrar trade: `BASE/trade?asset=QQQ&side=buy&qty=N&price=FILL&order_id=ID&strategy=fvg_v3|vwappb_v3&notes=SL%3D..+TP%3D..+rvol30%3D..+ordinal%3D1`.
+4. Registrar trade (SQL directo — NO endpoints HTTP):
+   ```sql
+   INSERT INTO trades (asset, side, quantity, price, order_id, status, strategy, notes)
+   VALUES ('QQQ','buy',N,FILL,'<order_id>','filled','fvg_v3|vwappb_v3','sl=.. tp=.. rvol30=.. ordinal=1');
+   ```
+   Al cerrar (STEP 3.2): UPDATE de esa misma fila (por order_id) con exit_price/exit_type/pnl — NUNCA fila 'sell' nueva.
 
 **Gestión de posición abierta:** los exits viven en el broker (OCO). Este prompt solo:
 (a) detecta OCO disparado (STEP 3.2) y registra el exit + C4; (b) VWAPPB no tiene time-stop;
@@ -175,11 +180,21 @@ FVG no tiene time-stop; el cierre 15:55 es el límite duro.
 
 ## STEP 8 — LOG
 
-Una fila por ciclo:
-`BASE/log?asset=QQQ&timeframe=5m&signal=bullish|neutral|watching&confidence=N&indicators=ENC_JSON&thesis=1_LINEA_ENC`
-indicators JSONB: `{vwap, ema9, rsi14, atr1m, rsi2_5m, atr5m, last_close, gates:{...solo el ciclo que se computan}, shadow_signals:[...solo si hubo], tokens_in:N, tokens_out:N}`
-`BASE/heartbeat?name=pulse-v3&status=running&description=HH%3AMM`
-(BASE = https://dashboard-two-pi-65.vercel.app/api/db — añadir &secret={{AGENT_SECRET}} a toda URL.)
+Todo por SQL directo (Supabase MCP) — los endpoints HTTP del dashboard NO se usan desde local
+(AGENT_SECRET no existe aquí). Una fila por ciclo CON CAMBIOS (skip en ciclos de 1 línea):
+```sql
+INSERT INTO analysis_log (asset, timeframe, signal, confidence, indicators, thesis)
+VALUES ('QQQ','5m','bullish|bearish|neutral|watching',N,'<JSON>'::jsonb,'1 línea');
+```
+indicators JSONB: `{vwap, ema9, rsi14, atr1m, rsi2_5m, atr5m, last_close, gates:{...solo el ciclo que se computan}, shadow_signals:[...solo si hubo]}`
+
+Heartbeat (cada ciclo, barato — puede ir en la misma llamada execute_sql que el log):
+```sql
+INSERT INTO agent_status (name, status, description, updated_at)
+VALUES ('pulse-v3','running','HH:MM ET <1 línea>', now())
+ON CONFLICT (name) DO UPDATE SET status=EXCLUDED.status, description=EXCLUDED.description, updated_at=now();
+```
+(idle al cerrar mercado / fin de día. La tabla usa `name` — NO existe `agent_name`.)
 
 ## STEP 9 — GUARDAR ESTADO + WAKEUP ALINEADO
 
@@ -204,12 +219,25 @@ en cualquier otro caso → delay = delay_aligned   (≈290-310s)
 evaluar RSI2/FVG con latencia <30s. Si despiertas fuera de boundary sin barra 5-min nueva,
 haz el ciclo de 1 línea y re-alinea.
 
+**PROPIEDAD DEL WAKEUP (obligatorio):** TÚ programas cada wakeup llamando `ScheduleWakeup`
+con este mismo prompt. El usuario NO usa /loop ni re-invoca nada. Un turno que termina sin
+llamar ScheduleWakeup MATA el loop. Únicas excepciones: STEP 10 completado o mercado cerrado
+(STEP 0). Antes de cerrar CUALQUIER turno del loop: verifica que ScheduleWakeup fue llamado.
+
 ## STEP 10 — CIERRE DE SESIÓN (solo ET ≥ 15:55)
 
 1. Cerrar posiciones (ya hecho en STEP 1) + cancelar todo limit vivo (`cancel_all_orders` si hace falta).
-2. `BASE/memory?regime=v3&assets=QQQ&total_pnl=X&win_rate=X&trade_count=N&observations=...&summary=...`
-3. `BASE/reconcile-trades?date=YYYY-MM-DD`
-4. Recordar en el output: "corre /post-close (resuelve shadows y deja los gates de mañana)".
+2. Memoria de sesión (SQL directo; el unique en session_date existe desde 06-11):
+   ```sql
+   INSERT INTO session_memory (session_date, regime, assets, total_pnl, win_rate, trade_count, observations, summary)
+   VALUES (CURRENT_DATE,'v3',ARRAY['QQQ'],X,X,N,'<JSON>'::jsonb,'2-3 líneas')
+   ON CONFLICT (session_date) DO UPDATE SET total_pnl=EXCLUDED.total_pnl, win_rate=EXCLUDED.win_rate,
+     trade_count=EXCLUDED.trade_count, observations=EXCLUDED.observations, summary=EXCLUDED.summary;
+   ```
+   (`assets` es ARRAY; `observations` es JSONB — no texto plano.)
+3. Reconciliar: `SELECT order_id, exit_type FROM trades WHERE DATE(created_at AT TIME ZONE 'America/New_York')=CURRENT_DATE AND side='buy' AND exit_type IS NULL;`
+   — si alguna fila quedó sin exit, resolverla con `get_order_by_id` y UPDATE.
+4. Heartbeat → idle. Recordar en el output: "corre /post-close (resuelve shadows y deja los gates de mañana)".
 
 ## RESTRICCIONES PERMANENTES
 

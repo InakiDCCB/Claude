@@ -68,7 +68,7 @@ create index if not exists analysis_asset_idx     on analysis_log (asset, create
 -- Persistent learnings written by the autonomous agent after each session
 create table if not exists session_memory (
   id           uuid primary key default gen_random_uuid(),
-  session_date date not null,
+  session_date date not null unique,  -- unique desde 2026-06-11 (migración session_memory_unique_session_date) → ON CONFLICT (session_date) válido
   created_at   timestamptz not null default now(),
   regime       text,  -- v3.0 (2026-06-11): texto libre — el concepto TREND/RANGE fue eliminado; post-close escribe 'v3'
   assets       text[],

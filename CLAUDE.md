@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A paper trading research system for studying market behavior and developing strategies. Execution and market data go through **Alpaca** (paper account, configured in `.mcp.json`). All trade records and analysis are stored in **Supabase**. Strategy specs live in `strategies/` (current: `pulse_v2.md`).
+A paper trading research system for studying market behavior and developing strategies. Execution and market data go through **Alpaca** (paper account, configured in `.mcp.json`). All trade records and analysis are stored in **Supabase**. Strategy specs live in `strategies/` (current: `cycle_prompt.md` v3.0; older specs in `strategies/history/`).
 
 ## Key Principle
 
@@ -30,7 +30,7 @@ Sistemas v3.0: **LIVE** = S2 FVG (limit al midpoint on-formation; max 1 fill/dí
 
 Claves de ejecución: una sola fuente de datos (1-min IEX; las 5-min se derivan por resampleo — sin SIP ni su lag de 15min), indicadores incrementales persistidos en `session_state`, exits SIEMPRE broker-side vía OCO (4 params obligatorios; `order_class="bracket"` PROHIBIDO), safety-net de posición desprotegida como primera acción de cada ciclo, wakeup alineado al próximo múltiplo de 5 min ET (~290-310s; 60s tras placear un limit o con precio cerca de TP/SL). Timing crítico: las señales RSI2 pierden el edge si la orden llega >1 min tarde del sello (playbook §7b).
 
-Loop manual desde sesión local: `/model haiku` → `/load-memory` → `/pre-market` → `/loop @strategies/cycle_prompt.md`. **Modelo: Haiku 4.5 (`claude-haiku-4-5`) para pre-market + loop** — cada wake (~300s) re-lee el contexto con cache expirado (TTL 5 min), Haiku cuesta 1/3 de Sonnet y el ciclo es ejecución mecánica de reglas escritas para ello. **Sonnet 4.6 para `/post-close` y research.** Direct `mcp__alpaca__*` tool calls are blocked in cloud/remote environments; Alpaca data is available in Vercel via the `alpaca_state` sync table.
+Arranque diario desde sesión local: `/load-memory` → `/pre-market` → lanzar el primer ciclo con `@strategies/cycle_prompt.md`. **El agente programa sus propios wakeups llamando ScheduleWakeup en cada ciclo (STEP 9) — el usuario NO usa `/loop` ni re-invoca; un turno que termina sin ScheduleWakeup mata el loop** (excepciones: STEP 10 completado, mercado cerrado). **Modelo: Sonnet 4.6 para TODO** (pre-market, loop, post-close, research — decisión usuario 2026-06-11: Haiku no puede ejecutar `/pre-market` y sus ciclos de 2-3.5 min rompían la latencia <30s del playbook §7b). **Todas las escrituras del agente (trades, analysis_log, heartbeat, session_memory) van por SQL directo vía Supabase MCP** — los endpoints HTTP `/api/db/*` no se usan desde local (AGENT_SECRET solo existe en Vercel). Direct `mcp__alpaca__*` tool calls are blocked in cloud/remote environments; Alpaca data is available in Vercel via the `alpaca_state` sync table.
 
 ## Dashboard (`dashboard/`)
 
@@ -54,8 +54,8 @@ cd dashboard && npx tsc --noEmit # type-check without building
 **Key files:**
 - `app/page.tsx` — server component; parallel-fetches trades, analysis_log, agent_status, champion_strategy, alpaca_state filtered by date range (`from`/`to` search params)
 - `app/actions.ts` — reserved for server actions (currently empty)
-- `app/api/account/route.ts` — proxies Alpaca `/v2/account` + `/v2/positions` (legacy; dashboard reads `alpaca_state` directly)
-- `app/api/db/*.ts` — agent HTTP endpoints: `heartbeat`, `log`, `trade`, `trade-exit`, `read`, `memory`, `sync-alpaca`, `reconcile-trades`; all require `?secret=AGENT_SECRET`
+- `app/api/account/route.ts` — proxies Alpaca `/v2/account` + `/v2/positions`; used by `AccountSummary`'s PortfolioCard
+- `app/api/db/*.ts` — only `sync-alpaca` and `reconcile-trades` remain (the two that need Alpaca keys from Vercel); both require `?secret=AGENT_SECRET`. The agent write endpoints (heartbeat/log/trade/trade-exit/read/memory) were removed 2026-06-11 — the agent writes via direct Supabase SQL (MCP)
 - `app/api/cron/sync/route.ts` — sync endpoint called by external cron (cron-job.org) every minute; requires `Authorization: Bearer CRON_SECRET`
 - `app/api/ping/route.ts` — health check
 - `lib/supabase.ts` — `createSupabase()` factory + all TypeScript types
