@@ -10,43 +10,27 @@ A paper trading research system for studying market behavior and developing stra
 
 Claude uses the `mcp__alpaca__*` MCP tools directly for market data and order execution. No separate Python agent scripts — Claude IS the agent.
 
-## Trading Loop (Pulse v2.9)
+## Trading Loop (Pulse v3.0 — 2026-06-11)
 
-**v2.9 (2026-06-05):** FVG entries pasan a **limit orders pre-placed al midpoint** en lugar de market orders disparados por cycle detection. El broker filea automáticamente si el precio retrocede, eliminando cycle-delay misses (problema documentado el 06-04: 4 triggers no captados). Ver STEP 7b/8b en `strategies/cycle_prompt.md`.
-
-## Trading Loop (Pulse v2.8 base)
+**`strategies/cycle_prompt.md` es la ÚNICA fuente de verdad operacional** (sistemas, gates, fórmulas, wakeups). Este resumen es orientativo; si difieren, manda el cycle_prompt. v3.0 sale del playbook validado en 32 sesiones (`strategies/research/playbook_2026_06_10.md`). Versión anterior archivada en `strategies/history/cycle_prompt_v2.9.2_2026-06-10.md`.
 
 Session phases:
 
-| Phase               | ET window   | Action                                                   |
-| ------------------- | ----------- | -------------------------------------------------------- |
-| Chaotic open        | 9:30–10:00  | No trades. Collect regime data.                          |
-| Regime detection    | 10:00       | Classify TREND / RANGE                                   |
-| Active trading      | 10:00–15:45 | Entries + bracket management                             |
-| Passive observation | 15:45–16:00 | No new entries. Manage open positions. Log observations. |
-| Close positions     | 15:55       | Close all open positions                                 |
-| Post-close analysis | ≥16:00      | See strategies/pulse_v2.md for full 5-step protocol.     |
+| Phase          | ET window   | Action                                                       |
+| -------------- | ----------- | ------------------------------------------------------------ |
+| Pre-market     | 9:30–9:55   | `/pre-market`: seeds incrementales + niveles ayer + gates conocibles |
+| Gates 10:00    | 10:00       | rvol30, gap_pct, open_loc → fija fvg_on / rsi2_on / gapf_on  |
+| Gates 10:30    | 10:30       | xvwap60 (cruces close-VWAP 1ª hora) → fija vwappb_on         |
+| Active trading | 10:00–15:30 | Ciclos ALINEADOS a velas 5-min (wake = sello + 10s)          |
+| Passive        | 15:30–15:55 | Solo gestión de posición; sin entries nuevos                  |
+| Close          | 15:55       | Cierre forzado total (exit_type=TIME)                         |
+| Post-close     | ≥16:00      | `/post-close`: niveles de mañana + resolución de shadows      |
 
-Each ~5-min cycle during active trading:
+Sistemas v3.0: **LIVE** = S2 FVG (limit al midpoint on-formation; max 1 fill/día; gate rvol30 ≥ 0.85) y S3 VWAPPB (pullback a VWAP; solo días choppy con xvwap60 ≥ 6). **SHADOW** (computar y loggear señal con precios exactos, CERO órdenes; validación 5 sesiones) = S1 RSI2-dip, S4 Sweep&Reclaim, S5 GapFill. **C4 global**: 2 pérdidas consecutivas de un sistema → ese sistema apagado hasta mañana. **ELIMINADOS en v3.0** (no evaluar): ORB, Volume Absorption, filtro EMA, filtro VP, régimen TREND/RANGE, VP developing intradía, tick fetches.
 
-1. `get_clock` → verify market open and current phase
-2. `get_all_positions` → manage open positions + apply pending exit updates
-3. `get_stock_bars` (1-min IEX) → real-time signals
-4. [If 10:00 ET and first cycle] → regime detection (TREND vs RANGE)
-5. Compute VWAP + EMAs (5, 9, 21, 34, 55) from 5-min SIP bars; SMA (100, 200) from 1-hour bars. **(v2.8)** Also incremental-update Volume Profile per symbol: pull `get_stock_trades` (SIP) since `last_tick_UTC`, bin volume at `bin_size = max($0.01, yesterday_close × 0.0005)`, recompute developing VPOC/VAH/VAL via TPO 70% expansion. `yesterday_profile` and `naked_pocs` are seeded by pre-market and immutable during the day.
-6. Evaluate setups against the 4 entries (VWAP Pullback / Volume Absorption / ORB Breakout / FVG). **EMA filter REMOVED (2026-06-01):** EMA9/EMA21 + slippage buffer are no longer entry gates — only VWAP/VA/ORB/FVG criteria decide. EMAs are still computed for context but do not block entries. **(v2.8) VP hard filter:** VWAP Pullback rejects if price not within yesterday VA OR developing VA; Volume Absorption rejects unless close is within ±0.10% of yesterday VPOC, developing VPOC, or a naked POC; ORB Breakout requires close above `max(ORB_HIGH, yesterday VAH)`. **FVG (`strategy='fvg_v1'`) is explicitly exempt from VP — ICT gap thesis is orthogonal to value areas.** If `yesterday_profile` is missing (cold start without pre-market), fail-open on VP for v2.7 setups and log a warning.
-7. **TREND DOWN regime (v2.3, post EMA-removal):** do not enter long until price is ≥1.5% above session low. (The "3 consecutive bars above EMA21" leg was tied to the EMA filter and is dropped.)
-8. On signal → `place_stock_order` as **market order only** (no bracket at this step — SL/TP set after fill per step 9). **Round all prices to 2 decimal places** — Alpaca rejects sub-penny prices. RSI min is **45** (not 40). **Sizing (v2.3 — mandatory):** `shares = floor(equity × 0.10 / entry_price)` — calculate before every order, no exceptions. Skip if shares < 2.
-9. **SL post-fill (v2.4 — mandatory):** place market order first (no bracket), confirm fill price with `get_order_by_id`, then calculate `SL = fill_price − 2×ATR(14, 1-min)`. Place OCO/bracket only after fill is confirmed.
-10. **TP Dinámico (v2.4 — P5):** identify nearest structural resistance on 5-min bars before entry. `TP1 = entry + 2×ATR` (close 50%, move SL to break-even). `TP2 = structural resistance or entry + 4×ATR` (close remaining 50%).
-11. **Volume Absorption entry (v2.3):** valid without classic pullback when: bar volume >3× avg of prior 5 bars, closes within ±0.15% of VWAP or support, does NOT close at new session low, and EMA 21 is below price (this is an *internal* setup criterion — distinct from the removed EMA *filter*). Enter at next bar open.
-12. **Post-stop-hunt re-entry (v2.4 — P6):** if SL was swept by <$0.25 AND price reversed within ≤2 bars AND volume ≥ avg AND within 3 bars of sweep → re-entry valid at open of next confirmation bar. Full SL/TP rules apply.
-13. Log cycle to `analysis_log` (include EMAs in `indicators` JSONB) + heartbeat to `agent_status`
-14. If any asset within ±0.30% of VWAP but no full setup → schedule next wakeup at **90s** (alert zone)
+Claves de ejecución: una sola fuente de datos (1-min IEX; las 5-min se derivan por resampleo — sin SIP ni su lag de 15min), indicadores incrementales persistidos en `session_state`, exits SIEMPRE broker-side vía OCO (4 params obligatorios; `order_class="bracket"` PROHIBIDO), safety-net de posición desprotegida como primera acción de cada ciclo, wakeup alineado al próximo múltiplo de 5 min ET (~290-310s; 60s tras placear un limit o con precio cerca de TP/SL). Timing crítico: las señales RSI2 pierden el edge si la orden llega >1 min tarde del sello (playbook §7b).
 
-Passive observation cycle (15:30–16:00): steps 1–2 only; no new entries; forced close of any open position at 15:55 ET (`exit_type='TIME'`).
-
-Loop starts **manually at 10:00 ET** from a local interactive Claude Code session. Direct `mcp__alpaca__*` tool calls are blocked in cloud/remote environments; Alpaca data is available in Vercel via the `alpaca_state` sync table. `strategies/cycle_prompt.md` is the source of truth for step-by-step cycle behavior. To reduce token consumption, start the session with `/model haiku`.
+Loop manual desde sesión local: `/model haiku` → `/load-memory` → `/pre-market` → `/loop @strategies/cycle_prompt.md`. **Modelo: Haiku 4.5 (`claude-haiku-4-5`) para pre-market + loop** — cada wake (~300s) re-lee el contexto con cache expirado (TTL 5 min), Haiku cuesta 1/3 de Sonnet y el ciclo es ejecución mecánica de reglas escritas para ello. **Sonnet 4.6 para `/post-close` y research.** Direct `mcp__alpaca__*` tool calls are blocked in cloud/remote environments; Alpaca data is available in Vercel via the `alpaca_state` sync table.
 
 ## Dashboard (`dashboard/`)
 
@@ -120,7 +104,7 @@ Full table reference:
 | `champion_strategy` | Active strategy config | Single row keyed `"current"`; full config stored as JSONB in `config` column |
 | `alpaca_state` | Live Alpaca account snapshot | Single row keyed `"current"`; synced by `/api/db/sync-alpaca` (manual) and `/api/cron/sync` (external cron-job.org every minute) |
 | `session_memory` | Post-close analysis storage | `session_date` (not `date`); session learnings written after each trading day |
-| `session_state` | Intraday loop state | Per-date row; full state JSONB with VWAP num/den, EMAs, RSI seed, position, FVGs, developing VP |
+| `session_state` | Intraday loop state | Per-date row; state JSONB v3.0: VWAP num/den, EMAs, RSI14, ATR1m, buffer 5-min (closes/RSI2/ATR5m), gates diarios, c4 counters, fvg fills, position |
 | `volume_profiles` | Daily VP snapshots | Per-date×symbol row; VPOC/VAH/VAL + day_high/low + session_close + bin_size. Written by post-close. |
 | `situational_analysis` | D-1 → D bias snapshots | Per-date×symbol×timestamp row; written by `/situational` skill (informational only — does not affect loop) |
 
@@ -132,9 +116,10 @@ Skills live in `~/.claude/commands/` (local git-only repo, no remote). Invoke wi
 
 | Skill | Purpose | Affects loop? |
 |---|---|---|
-| `/pre-market` | 9:30–9:50 ET seed of indicators + VP from yesterday → writes `session_state` | Yes — seeds state |
-| `/post-close` | ≥16:00 ET 5-step protocol → writes `session_memory` + `volume_profiles` | Yes — produces next-day inputs |
-| `/situational` | D-1 → D multi-day bias analysis (gap_type, range_structure, targets) → writes `situational_analysis` | **No — informational only**, manual trigger any time |
+| `/load-memory` | Carga memoria: default = modo trading lean (7 reglas); `full` = research | No — contexto |
+| `/pre-market` | 9:30–9:55 ET: seeds incrementales + niveles ayer + vol30_baseline + gates conocibles → `session_state` | Yes — seeds state |
+| `/post-close` | ≥16:00 ET: snapshot niveles mañana (`volume_profiles`) + resolución shadow trades (validación 5 sesiones) + `session_memory` | Yes — produce los gates de mañana |
+| `/situational` | D-1 → D multi-day bias analysis → writes `situational_analysis` | **No — informational only**, manual trigger any time |
 
 ## Ethical Constraints (permanent)
 
