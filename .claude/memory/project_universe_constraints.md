@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-**Universo activo:** QQQ, TSLA, RIVN — únicos tickers que el sistema opera. **Long-only**, sin shorts.
+**Universo activo:** **QQQ ONLY** — sin excepciones. **Long-only**, sin shorts.
 
 **Exclusión permanente (defensa + farma específica):** BA, LMT, TXN, NOC, RTX, GD, HII (sector defensa), MRNA, PFE.
 

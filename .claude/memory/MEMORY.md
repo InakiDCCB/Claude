@@ -3,18 +3,17 @@
 > Estrategia activa: **Pulse v2.8** (3 setups con árbol v2.7 + Volume Profile hard filter) **+ FVG v1** (independiente). Última consolidación: 2026-05-29.
 
 ## Usuario
-- [Perfil de Inaki](user_inaki_profile.md) — paper trader QQQ/TSLA/RIVN en Alpaca, hispanohablante, conocimiento avanzado de trading
+- [Perfil de Inaki](user_inaki_profile.md) — paper trader QQQ-only en Alpaca, hispanohablante, conocimiento avanzado de trading
 
 ## Proyecto Pulse
 - [Visión general Pulse](project_pulse_overview.md) — agente autónomo v2.8 con 4 setups; FVG aislado del resto
-- [Restricciones permanentes del universo](project_universe_constraints.md) — QQQ/TSLA/RIVN long-only, lista ética de exclusión
+- [Restricciones permanentes del universo](project_universe_constraints.md) — **QQQ-only sin excepciones**, long-only, lista ética de exclusión
 - [Dashboard](project_dashboard.md) — Next.js Vercel; layout 6 niveles; cron-job.org sync cada minuto
 - [Análisis situacional /situational](project_situational_analysis.md) — skill D-1 → D independiente, solo informativo
 
 ## Referencias externas
 - [Supabase](ref_supabase.md) — project_id y tablas clave del sistema
 - [Repo de skills locales](ref_skills_repo.md) — pre-market / post-close en `.claude/commands/` con git local
-- [Vault de Obsidian](ref_obsidian_vault.md) — el directorio Trading es también el vault del usuario; memoria se lee en Obsidian
 
 ## Operativa de la sesión
 - [Horario de sesión](feedback_session_schedule.md) — 9:50 pre-análisis · 10:00 loop · 15:45 passive · 15:55 forced close

@@ -12,7 +12,7 @@ metadata:
 3. **Brackets con `time_in_force: day` expiran al cierre del mercado (16:00 ET).** Si una posición debe quedar overnight (decisión explícita del usuario), usar `time_in_force: gtc` en SL/TP antes de las 16:00.
 4. **Default: cerrar todo a 15:55 ET.** Posiciones overnight requieren autorización explícita del usuario. La única excepción es SGOV — ver [[feedback-eod-close-sgov]].
 
-**Why:** El 2026-05-27 quedaron QQQ 4sh + RIVN 70sh abiertas overnight porque (a) no se programó forced close a 15:55 y (b) los brackets eran DAY orders que expiraron a las 16:00. Mercado cerrado bloquea correcciones. RIVN cayó $0.11/sh durante el último intercambio = −$7.70 unrealized evitable.
+**Why:** El 2026-05-27 quedaron 2 posiciones abiertas overnight (cuando el universo aún incluía otros símbolos) porque (a) no se programó forced close a 15:55 y (b) los brackets eran DAY orders que expiraron a las 16:00. Mercado cerrado bloquea correcciones. Una de las posiciones cayó $0.11/sh durante el último intercambio = −$7.70 unrealized evitable. La regla aplica igual para QQQ-only.
 
 **How to apply:**
 - Al entrar a passive observation a 15:45 ET, programar wakeup a 15:55 ET con prompt explícito "Cerrar todas las posiciones a market — forced close".

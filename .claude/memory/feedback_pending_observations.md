@@ -11,7 +11,7 @@ Observaciones identificadas pero NO implementadas todavía. Validar con ≥3 ses
 
 ## OBS-1 · Regla de entrada tardía
 
-**Observación (2026-05-20, T5 TSLA):** Entry $0.51 por encima del trigger ideal comprimió el RR a ~1:1 en vez del 2:1 esperado. El trade fue correcto en dirección pero capturó menos ganancia por entrar tarde.
+**Observación (sesión 2026-05-20, símbolo fuera del universo actual):** Entry $0.51 por encima del trigger ideal comprimió el RR a ~1:1 en vez del 2:1 esperado. El trade fue correcto en dirección pero capturó menos ganancia por entrar tarde. La regla candidata sigue siendo válida y debe re-evaluarse contra QQQ.
 
 **Regla candidata:** Si `entry_price > trigger_level + 1×ATR(14, 1-min)` → skip the trade. El setup ya corrió demasiado.
 

@@ -5,7 +5,7 @@ import { checkSecret } from '@/lib/auth'
 export const revalidate = 0
 
 const ALPACA_BASE = 'https://paper-api.alpaca.markets/v2'
-const UNIVERSE   = new Set(['QQQ', 'TSLA', 'RIVN', 'OKLO', 'COST'])
+const UNIVERSE   = new Set(['QQQ'])
 
 type AlpacaOrder = {
   id: string

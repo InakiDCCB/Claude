@@ -18,9 +18,6 @@ trading/logs/*.log
 logs/
 strategies/session_state.json
 
-# Obsidian vault config (personal layout/state)
-.obsidian/
-
 # Dashboard build artifacts
 dashboard/node_modules/
 dashboard/.next/

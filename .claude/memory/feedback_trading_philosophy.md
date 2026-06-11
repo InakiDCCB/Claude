@@ -11,7 +11,7 @@ El aprendizaje del **comportamiento del mercado** es lo único permanente. Las e
 
 **How to apply:**
 - Al proponer mejoras, enmarcarlas en "qué aprendemos sobre el mercado" antes que "cuánto ganamos".
-- Para análisis de condiciones de mercado base, usar QQQ (y opcionalmente VOO), NO stocks individuales como TSLA.
+- Para análisis de condiciones de mercado base, usar QQQ (universo activo, sin excepciones).
 - No proponer estrategias de predicción de precio. Proponer estrategias que explotan condiciones conocidas.
 - Si una estrategia no genera trades en un día (ej. Pulse v2.8 puro en TREND DOWN), **esa es la señal correcta** — no inventar setups. Ver [[feedback-stick-with-pulse]].
 - Cambios estructurales solo después de patrón confirmado en ≥3 sesiones.

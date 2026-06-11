@@ -12,7 +12,7 @@ Durante el trading loop, **respuestas ultra-terse** — cada token cuenta. Refor
 **How to apply:**
 
 - **Default por ciclo: UNA línea**
-  `HH:MM ET — QQQ $X TSLA $X RIVN $X — régimen — acción (o "sin acción")`
+  `HH:MM ET — QQQ $X — régimen — acción (o "sin acción")` (universo QQQ-only desde 2026-06-04)
 - **NO tablas** salvo que dispare un setup o cambie posición.
 - **NO notas/commentary** salvo entry/exit/alerta.
 - **NO narración antes de tool calls.**

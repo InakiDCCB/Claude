@@ -4,7 +4,7 @@ import { checkSecret } from '../../../../lib/auth'
 
 export const revalidate = 0
 
-// GET /api/db/memory?regime=RANGE&assets=QQQ,TSLA&total_pnl=63.69&win_rate=66.7&trade_count=6&observations={}&parameters={}&summary=text&secret=TOKEN
+// GET /api/db/memory?regime=RANGE&assets=QQQ&total_pnl=63.69&win_rate=66.7&trade_count=6&observations={}&parameters={}&summary=text&secret=TOKEN
 export async function GET(req: NextRequest) {
   const p = req.nextUrl.searchParams
   const denied = checkSecret(p.get('secret'))

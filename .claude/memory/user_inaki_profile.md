@@ -5,7 +5,7 @@ metadata:
   type: user
 ---
 
-Inaki opera una cuenta paper en Alpaca con un agente autónomo (Pulse) escrito como skill de Claude Code que él mismo orquesta desde una sesión local. Universo restringido a QQQ, TSLA y RIVN — ver [[project-universe-constraints]].
+Inaki opera una cuenta paper en Alpaca con un agente autónomo (Pulse) escrito como skill de Claude Code que él mismo orquesta desde una sesión local. Universo restringido a **QQQ únicamente** — sin excepciones. Ver [[project-universe-constraints]].
 
 **Stack:** Alpaca MCP (market data + execution) + Supabase (ledger, estado, memoria) + Next.js en Vercel (dashboard). Ver [[ref-supabase]].
 
