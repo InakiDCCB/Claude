@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createSupabase } from '@/lib/supabase'
-import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState, SessionStateRow, ShadowSignal, SessionMemoryRow } from '@/lib/supabase'
+import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState, SessionStateRow, ShadowSignal, PnlPoint } from '@/lib/supabase'
 import AccountSummary from './AccountSummary'
 import PerformanceCard from './PerformanceCard'
 import AgentGrid from './AgentGrid'
@@ -79,7 +79,7 @@ export default function TradingPanel({
   alpacaState,
   sessionState,
   shadowSignals,
-  sessions,
+  pnlHistory,
 }: {
   initialTrades:   Trade[]
   initialAnalysis: AnalysisEntry[]
@@ -88,7 +88,7 @@ export default function TradingPanel({
   alpacaState:     AlpacaState | null
   sessionState:    SessionStateRow | null
   shadowSignals:   ShadowSignal[]
-  sessions:        SessionMemoryRow[]
+  pnlHistory:      PnlPoint[]
 }) {
   const [trades,        setTrades]        = useState<Trade[]>(initialTrades)
   const [liveAgents,    setLiveAgents]    = useState<AgentStatus[]>(agents)
@@ -174,7 +174,7 @@ export default function TradingPanel({
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
           Performance
         </h2>
-        <PerformanceCard sessions={sessions} />
+        <PerformanceCard pnlHistory={pnlHistory} />
       </section>
 
       {/* Niveles 4-5: Agente + Active Strategy (izq) · Market Calendar (der, full height) */}

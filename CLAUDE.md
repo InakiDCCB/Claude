@@ -47,7 +47,7 @@ cd dashboard && npx tsc --noEmit # type-check without building
 
 **Dashboard layout (7 levels):**
 1–3. Portfolio · Metrics · P&L by System → `AccountSummary`
-3b. Performance (equity curve por sesión, KPIs inception/MTD/maxDD/PF, sesiones recientes) → `PerformanceCard` (lee `session_memory`)
+3b. Performance (equity curve por sesión, KPIs inception/MTD/maxDD/PF, sesiones recientes) → `PerformanceCard` (deriva de `trades` reconciliada con broker — NO de `session_memory`, que es diario cualitativo)
 4. Agent status → `AgentGrid`
 5. Strategies grid (champion) → `ChampionCard`
 6. Trades · P&L · Analysis Log → `DataTabs`

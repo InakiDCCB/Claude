@@ -1,5 +1,5 @@
 import { createSupabase } from '@/lib/supabase'
-import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState, SessionStateRow, ShadowSignal, SessionMemoryRow } from '@/lib/supabase'
+import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState, SessionStateRow, ShadowSignal, PnlPoint } from '@/lib/supabase'
 import TradingPanel from '@/components/TradingPanel'
 import MarketStatus from '@/components/MarketStatus'
 
@@ -23,11 +23,11 @@ export default async function Page({
   let alpacaState:  AlpacaState | null  = null
   let sessionState: SessionStateRow | null = null
   let shadowSignals: ShadowSignal[]     = []
-  let sessions:     SessionMemoryRow[]  = []
+  let pnlHistory:   PnlPoint[]          = []
 
   try {
     const sb = createSupabase()
-    const [tradesRes, analysisRes, agentsRes, championRes, alpacaStateRes, sessionStateRes, shadowRes, sessionsRes] = await Promise.all([
+    const [tradesRes, analysisRes, agentsRes, championRes, alpacaStateRes, sessionStateRes, shadowRes, pnlRes] = await Promise.all([
       sb.from('trades').select('*')
         .gte('created_at', fromDate).lte('created_at', toDate)
         .order('created_at', { ascending: false }),
@@ -41,10 +41,12 @@ export default async function Page({
       sb.from('shadow_signals').select('*')
         .gte('created_at', fromDate).lte('created_at', toDate)
         .order('created_at', { ascending: false }).limit(500),
-      // Performance view: historial completo de sesiones (no filtrado por from/to)
-      sb.from('session_memory')
-        .select('session_date,total_pnl,win_rate,trade_count,summary')
-        .order('session_date', { ascending: true }).limit(120),
+      // Performance view: P&L realizado de TODA la vida de la cuenta (no filtrado por from/to);
+      // fuente = trades (reconciliada con broker), no session_memory
+      sb.from('trades')
+        .select('created_at,pnl')
+        .not('pnl', 'is', null)
+        .order('created_at', { ascending: true }).limit(5000),
     ])
     trades        = (tradesRes.data       ?? []) as Trade[]
     analysis      = (analysisRes.data     ?? []) as AnalysisEntry[]
@@ -53,7 +55,7 @@ export default async function Page({
     alpacaState   = (alpacaStateRes.data  ?? null) as AlpacaState | null
     sessionState  = (sessionStateRes.data ?? null) as SessionStateRow | null
     shadowSignals = (shadowRes.data       ?? []) as ShadowSignal[]
-    sessions      = (sessionsRes.data     ?? []) as SessionMemoryRow[]
+    pnlHistory    = (pnlRes.data          ?? []) as PnlPoint[]
   } catch {
     // Supabase unavailable (missing env vars or network) — render empty state
   }
@@ -80,7 +82,7 @@ export default async function Page({
           alpacaState={alpacaState}
           sessionState={sessionState}
           shadowSignals={shadowSignals}
-          sessions={sessions}
+          pnlHistory={pnlHistory}
         />
       </div>
     </main>

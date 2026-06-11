@@ -106,13 +106,11 @@ export type SessionStateRow = {
   }
 }
 
-// session_memory — una fila por sesión de trading (escrita por el loop STEP 10 / post-close)
-export type SessionMemoryRow = {
-  session_date: string
-  total_pnl: number | null
-  win_rate: number | null   // porcentaje 0-100
-  trade_count: number | null
-  summary: string | null
+// Punto de P&L realizado (trades cerrados, vida completa de la cuenta) — fuente del PerformanceCard.
+// Se deriva de `trades` (reconciliada con broker), NO de session_memory (diario cualitativo).
+export type PnlPoint = {
+  created_at: string
+  pnl: number
 }
 
 // Fila de la vista shadow_signals (validación 5 sesiones de S1/S4/S5)

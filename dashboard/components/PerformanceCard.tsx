@@ -4,7 +4,7 @@ import {
   ComposedChart, Bar, Cell, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
-import type { SessionMemoryRow } from '@/lib/supabase'
+import type { PnlPoint } from '@/lib/supabase'
 
 const START_CAPITAL = 100_000
 
@@ -12,8 +12,8 @@ function fmtUSD(n: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(n)
 }
 
-function fmtDate(d: string): string {
-  return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+function fmtDate(isoDay: string): string {
+  return new Date(isoDay + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 function signColor(n: number): string {
@@ -30,36 +30,43 @@ function Kpi({ label, value, sub, color }: { label: string; value: string; sub?:
   )
 }
 
-export default function PerformanceCard({ sessions }: { sessions: SessionMemoryRow[] }) {
-  if (!sessions.length) {
+export default function PerformanceCard({ pnlHistory }: { pnlHistory: PnlPoint[] }) {
+  if (!pnlHistory.length) {
     return (
       <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4">
-        <p className="text-xs text-gray-600">No session history yet</p>
+        <p className="text-xs text-gray-600">No closed trades yet</p>
       </div>
     )
   }
 
-  // Serie diaria + acumulada (sessions vienen ordenadas asc por fecha)
+  // Agregación por día de sesión ET desde trades (fuente reconciliada con el broker)
+  const byDay = new Map<string, { pnl: number; n: number; w: number }>()
+  for (const r of pnlHistory) {
+    const day = new Date(r.created_at).toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+    const d = byDay.get(day) ?? { pnl: 0, n: 0, w: 0 }
+    d.pnl += Number(r.pnl)
+    d.n   += 1
+    if (Number(r.pnl) > 0) d.w += 1
+    byDay.set(day, d)
+  }
+  const days = [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b))
+
+  // Serie diaria + acumulada
   let cum = 0
-  const data = sessions.map(s => {
-    const pnl = Number(s.total_pnl ?? 0)
-    cum += pnl
-    return { date: fmtDate(s.session_date), pnl: Number(pnl.toFixed(2)), cum: Number(cum.toFixed(2)) }
+  const data = days.map(([day, d]) => {
+    cum += d.pnl
+    return { date: fmtDate(day), pnl: Number(d.pnl.toFixed(2)), cum: Number(cum.toFixed(2)) }
   })
 
   const net    = cum
   const netPct = (net / START_CAPITAL) * 100
 
-  const now = new Date()
-  const mtd = sessions
-    .filter(s => {
-      const d = new Date(s.session_date + 'T00:00:00')
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-    })
-    .reduce((a, s) => a + Number(s.total_pnl ?? 0), 0)
+  const nowMonth = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }).slice(0, 7)
+  const mtd = days
+    .filter(([day]) => day.startsWith(nowMonth))
+    .reduce((a, [, d]) => a + d.pnl, 0)
 
-  const last    = sessions[sessions.length - 1]
-  const lastPnl = Number(last.total_pnl ?? 0)
+  const [lastDay, lastStats] = days[days.length - 1]
 
   // Max drawdown peak-to-trough sobre la curva acumulada
   let peak = 0, maxDD = 0
@@ -68,13 +75,13 @@ export default function PerformanceCard({ sessions }: { sessions: SessionMemoryR
     maxDD = Math.max(maxDD, peak - d.cum)
   }
 
-  const grossW    = sessions.reduce((a, s) => a + Math.max(Number(s.total_pnl ?? 0), 0), 0)
-  const grossL    = sessions.reduce((a, s) => a + Math.max(-Number(s.total_pnl ?? 0), 0), 0)
+  const grossW    = days.reduce((a, [, d]) => a + Math.max(d.pnl, 0), 0)
+  const grossL    = days.reduce((a, [, d]) => a + Math.max(-d.pnl, 0), 0)
   const pf        = grossL > 0 ? (grossW / grossL).toFixed(2) : grossW > 0 ? '∞' : '—'
-  const greenDays = sessions.filter(s => Number(s.total_pnl ?? 0) > 0).length
-  const redDays   = sessions.filter(s => Number(s.total_pnl ?? 0) < 0).length
+  const greenDays = days.filter(([, d]) => d.pnl > 0).length
+  const redDays   = days.filter(([, d]) => d.pnl < 0).length
 
-  const recent = [...sessions].reverse().slice(0, 8)
+  const recent = [...days].reverse().slice(0, 8)
 
   return (
     <div className="space-y-3">
@@ -83,20 +90,20 @@ export default function PerformanceCard({ sessions }: { sessions: SessionMemoryR
         <Kpi
           label="Net P&L"
           value={`${net >= 0 ? '+' : ''}${fmtUSD(net)}`}
-          sub={`${netPct >= 0 ? '+' : ''}${netPct.toFixed(2)}% · ${sessions.length} sessions`}
+          sub={`${netPct >= 0 ? '+' : ''}${netPct.toFixed(2)}% · ${days.length} sessions`}
           color={signColor(net)}
         />
         <Kpi
           label="MTD"
           value={`${mtd >= 0 ? '+' : ''}${fmtUSD(mtd)}`}
-          sub={now.toLocaleDateString('en-US', { month: 'long' })}
+          sub={new Date().toLocaleDateString('en-US', { month: 'long' })}
           color={signColor(mtd)}
         />
         <Kpi
           label="Last Session"
-          value={`${lastPnl >= 0 ? '+' : ''}${fmtUSD(lastPnl)}`}
-          sub={fmtDate(last.session_date)}
-          color={signColor(lastPnl)}
+          value={`${lastStats.pnl >= 0 ? '+' : ''}${fmtUSD(lastStats.pnl)}`}
+          sub={fmtDate(lastDay)}
+          color={signColor(lastStats.pnl)}
         />
         <Kpi
           label="Max Drawdown"
@@ -115,9 +122,12 @@ export default function PerformanceCard({ sessions }: { sessions: SessionMemoryR
       {/* Curva acumulada + P&L diario · sesiones recientes */}
       <div className="flex flex-col lg:flex-row gap-3">
         <div className="flex-1 bg-gray-900/30 border border-gray-800/60 rounded-xl p-4" style={{ minHeight: 260 }}>
-          <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-2">
-            Realized P&L by Session
-          </p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+              Realized P&L by Session
+            </p>
+            <p className="text-[10px] text-gray-700">source: trades (broker-reconciled)</p>
+          </div>
           <div style={{ height: 220 }}>
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
@@ -164,22 +174,18 @@ export default function PerformanceCard({ sessions }: { sessions: SessionMemoryR
               </tr>
             </thead>
             <tbody>
-              {recent.map(s => {
-                const pnl = Number(s.total_pnl ?? 0)
-                const n   = s.trade_count ?? 0
-                return (
-                  <tr key={s.session_date} className="border-b border-gray-800/40">
-                    <td className="py-1.5 font-mono text-gray-400">{fmtDate(s.session_date)}</td>
-                    <td className="py-1.5 text-right font-mono text-gray-400">{n}</td>
-                    <td className="py-1.5 text-right font-mono text-gray-400">
-                      {n > 0 && s.win_rate != null ? `${Math.round(Number(s.win_rate))}%` : '—'}
-                    </td>
-                    <td className={`py-1.5 text-right font-mono font-semibold ${pnl > 0 ? 'text-emerald-400' : pnl < 0 ? 'text-red-400' : 'text-gray-500'}`}>
-                      {n > 0 || pnl !== 0 ? `${pnl >= 0 ? '+' : ''}${fmtUSD(pnl)}` : 'flat'}
-                    </td>
-                  </tr>
-                )
-              })}
+              {recent.map(([day, d]) => (
+                <tr key={day} className="border-b border-gray-800/40">
+                  <td className="py-1.5 font-mono text-gray-400">{fmtDate(day)}</td>
+                  <td className="py-1.5 text-right font-mono text-gray-400">{d.n}</td>
+                  <td className="py-1.5 text-right font-mono text-gray-400">
+                    {d.n > 0 ? `${Math.round((d.w / d.n) * 100)}%` : '—'}
+                  </td>
+                  <td className={`py-1.5 text-right font-mono font-semibold ${d.pnl > 0 ? 'text-emerald-400' : d.pnl < 0 ? 'text-red-400' : 'text-gray-500'}`}>
+                    {`${d.pnl >= 0 ? '+' : ''}${fmtUSD(d.pnl)}`}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
