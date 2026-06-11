@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { createSupabase } from '@/lib/supabase'
-import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState, SessionStateRow, ShadowSignal } from '@/lib/supabase'
+import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState, SessionStateRow, ShadowSignal, SessionMemoryRow } from '@/lib/supabase'
 import AccountSummary from './AccountSummary'
+import PerformanceCard from './PerformanceCard'
 import AgentGrid from './AgentGrid'
 import ChampionCard from './ChampionCard'
 import DataTabs from './DataTabs'
@@ -78,6 +79,7 @@ export default function TradingPanel({
   alpacaState,
   sessionState,
   shadowSignals,
+  sessions,
 }: {
   initialTrades:   Trade[]
   initialAnalysis: AnalysisEntry[]
@@ -86,6 +88,7 @@ export default function TradingPanel({
   alpacaState:     AlpacaState | null
   sessionState:    SessionStateRow | null
   shadowSignals:   ShadowSignal[]
+  sessions:        SessionMemoryRow[]
 }) {
   const [trades,        setTrades]        = useState<Trade[]>(initialTrades)
   const [liveAgents,    setLiveAgents]    = useState<AgentStatus[]>(agents)
@@ -163,8 +166,16 @@ export default function TradingPanel({
     <>
       {toast && <TradeToast trade={toast} onClose={() => setToast(null)} />}
 
-      {/* Niveles 1–3: Portfolio · Métricas · Top Performers */}
+      {/* Niveles 1–3: Portfolio · Métricas · P&L por sistema */}
       <AccountSummary trades={trades} alpacaState={alpacaState} />
+
+      {/* Nivel 3b: Performance histórica de la cuenta (vista Asset Management) */}
+      <section>
+        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+          Performance
+        </h2>
+        <PerformanceCard sessions={sessions} />
+      </section>
 
       {/* Niveles 4-5: Agente + Active Strategy (izq) · Market Calendar (der, full height) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

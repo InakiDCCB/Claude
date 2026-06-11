@@ -45,8 +45,9 @@ cd dashboard && npx tsc --noEmit # type-check without building
 
 **Data flow:** `app/page.tsx` (server) fetches all Supabase data → passes as props to `TradingPanel` (client root) → distributed to child components.
 
-**Dashboard layout (6 levels):**
-1–3. Portfolio · Metrics · Top Performers → `AccountSummary`
+**Dashboard layout (7 levels):**
+1–3. Portfolio · Metrics · P&L by System → `AccountSummary`
+3b. Performance (equity curve por sesión, KPIs inception/MTD/maxDD/PF, sesiones recientes) → `PerformanceCard` (lee `session_memory`)
 4. Agent status → `AgentGrid`
 5. Strategies grid (champion) → `ChampionCard`
 6. Trades · P&L · Analysis Log → `DataTabs`

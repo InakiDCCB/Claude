@@ -265,31 +265,40 @@ function LivePositions({ alpacaState }: { alpacaState: AlpacaState | null }) {
   )
 }
 
-function TopPerformers({ trades }: { trades: Trade[] }) {
-  const byAsset: Record<string, number> = {}
+function SystemPnL({ trades }: { trades: Trade[] }) {
+  // Universo QQQ-only: agrupar por activo no informa nada — agrupamos por sistema
+  const bySys: Record<string, { pnl: number; n: number; w: number }> = {}
   for (const t of trades) {
-    if (t.pnl != null) byAsset[t.asset] = (byAsset[t.asset] ?? 0) + t.pnl
+    if (t.pnl == null) continue
+    const k = t.strategy ?? 'manual'
+    bySys[k] ??= { pnl: 0, n: 0, w: 0 }
+    bySys[k].pnl += t.pnl
+    bySys[k].n   += 1
+    if (t.pnl > 0) bySys[k].w += 1
   }
-  const winners = Object.entries(byAsset)
-    .filter(([, pnl]) => pnl > 0)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 6)
-  const max = winners[0]?.[1] ?? 1
+  const rows = Object.entries(bySys).sort(([, a], [, b]) => b.pnl - a.pnl).slice(0, 6)
+  const max  = Math.max(...rows.map(([, v]) => Math.abs(v.pnl)), 1)
 
   return (
     <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4">
-      <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-3">Top Performers</p>
-      {!winners.length ? (
-        <p className="text-xs text-gray-600">No winning trades yet</p>
+      <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-3">P&L by System</p>
+      {!rows.length ? (
+        <p className="text-xs text-gray-600">No closed trades yet</p>
       ) : (
         <div className="space-y-2">
-          {winners.map(([asset, pnl]) => (
-            <div key={asset} className="flex items-center gap-2">
-              <span className="text-xs font-mono text-white w-10 shrink-0">{asset}</span>
+          {rows.map(([sys, v]) => (
+            <div key={sys} className="flex items-center gap-2">
+              <span className="text-xs font-mono text-white w-24 truncate shrink-0" title={sys}>{sys}</span>
+              <span className="text-[10px] font-mono text-gray-600 w-9 shrink-0">{v.w}/{v.n}</span>
               <div className="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${(pnl / max) * 100}%` }} />
+                <div
+                  className={`h-full rounded-full ${v.pnl >= 0 ? 'bg-emerald-500' : 'bg-red-500'}`}
+                  style={{ width: `${(Math.abs(v.pnl) / max) * 100}%` }}
+                />
               </div>
-              <span className="text-xs font-mono text-emerald-400 w-20 text-right shrink-0">+{fmtUSD(pnl)}</span>
+              <span className={`text-xs font-mono w-20 text-right shrink-0 ${v.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {v.pnl >= 0 ? '+' : ''}{fmtUSD(v.pnl)}
+              </span>
             </div>
           ))}
         </div>
@@ -336,9 +345,9 @@ export default function AccountSummary({ trades, alpacaState }: { trades: Trade[
         </div>
       </div>
 
-      {/* Nivel 3: Top Performers + Posiciones Live */}
+      {/* Nivel 3: P&L por sistema + Posiciones Live */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <TopPerformers trades={trades} />
+        <SystemPnL trades={trades} />
         <LivePositions alpacaState={alpacaState ?? null} />
       </div>
     </div>

@@ -106,6 +106,15 @@ export type SessionStateRow = {
   }
 }
 
+// session_memory — una fila por sesión de trading (escrita por el loop STEP 10 / post-close)
+export type SessionMemoryRow = {
+  session_date: string
+  total_pnl: number | null
+  win_rate: number | null   // porcentaje 0-100
+  trade_count: number | null
+  summary: string | null
+}
+
 // Fila de la vista shadow_signals (validación 5 sesiones de S1/S4/S5)
 export type ShadowSignal = {
   log_id: string
