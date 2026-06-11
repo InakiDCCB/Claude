@@ -74,6 +74,53 @@ export type AlpacaState = {
   positions:     AlpacaPosition[] | null
 }
 
+// ─── Pulse v3.0 ───────────────────────────────────────────────────────────────
+
+// session_state.state JSONB (v3.0) — campos que el dashboard lee; todos opcionales
+// porque las filas pre-v3 usan otra estructura.
+export type SessionGates = {
+  rsi2_on?: boolean
+  fvg_on?: boolean
+  gapf_on?: boolean
+  vwappb_on?: boolean
+  gap_pct?: number
+  open_loc?: string
+  rvol30?: number
+  xvwap60?: number
+  computed_10?: boolean
+  computed_1030?: boolean
+}
+
+export type SessionStateRow = {
+  date: string
+  updated_at: string
+  state: {
+    gates?: SessionGates
+    c4?: Record<string, number>
+    fvg?: { fills_today?: number; active?: Record<string, unknown> | null }
+    position?: Record<string, unknown> | null
+    session_low?: number
+    session_high?: number
+    QQQ?: { vwap?: number; last_close?: number; atr1m?: number; [k: string]: unknown }
+    [k: string]: unknown
+  }
+}
+
+// Fila de la vista shadow_signals (validación 5 sesiones de S1/S4/S5)
+export type ShadowSignal = {
+  log_id: string
+  created_at: string
+  session_date: string
+  sys: string | null
+  ts_signal_et: string | null
+  ts_eval_et: string | null
+  latency_s: number | null
+  entry: number | null
+  sl: number | null
+  tp: number | null
+  note: string | null
+}
+
 // Server-only: bypasses RLS — use only in API routes, never in client components
 export function createSupabaseAdmin() {
   return createClient(

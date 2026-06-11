@@ -70,7 +70,7 @@ create table if not exists session_memory (
   id           uuid primary key default gen_random_uuid(),
   session_date date not null,
   created_at   timestamptz not null default now(),
-  regime       text check (regime in ('TREND', 'RANGE')),
+  regime       text,  -- v3.0 (2026-06-11): texto libre — el concepto TREND/RANGE fue eliminado; post-close escribe 'v3'
   assets       text[],
   total_pnl    numeric,
   win_rate     numeric check (win_rate between 0 and 100),
@@ -82,13 +82,15 @@ create table if not exists session_memory (
 
 create index if not exists session_memory_date_idx on session_memory (session_date desc);
 
--- SESSION_STATE (Pulse v2.8)
+-- SESSION_STATE (Pulse v3.0, 2026-06-11)
 -- Intra-day loop state, one row per trading date.
--- `state` is a JSONB blob holding per-symbol VWAP num/den, EMAs, ATR, RSI seed,
--- positions, active FVGs, and v2.8 fields: yesterday_profile, naked_pocs,
--- developing.{vpoc,vah,val,volume_by_bin}, last_bar_ET, last_bar_UTC,
--- session_high, session_low. Seeded by /pre-market, updated each cycle via
--- jsonb_set on changed paths only, read by cycle_prompt.md STEP 0.
+-- `state` JSONB v3.0: last_1min_UTC, vol30_baseline, yesterday{vpoc,vah,val,close},
+-- gates{rsi2_on,fvg_on,gapf_on,vwappb_on,gap_pct,open_loc,rvol30,xvwap60,computed_10,computed_1030},
+-- session_low/high, QQQ{vwap_num,vwap_den,vwap,ema9,ema21,rsi14{ag,al},atr1m,last_close,
+-- xvwap_count,m5{closes[],rsi2{ag2,al2},atr5m,last_seal_UTC}}, c4{fvg,vwappb,rsi2},
+-- fvg{fills_today,active}, position. Seeded by /pre-market, updated each cycle via
+-- `state || jsonb_build_object(...)` on changed paths, read by cycle_prompt.md STEP 0.
+-- (Filas anteriores a 2026-06-11 usan la estructura v2.x — históricas.)
 create table if not exists session_state (
   date       date primary key,
   state      jsonb not null,
@@ -166,14 +168,41 @@ create table if not exists situational_analysis (
   invalidation    numeric,                     -- price below/above which thesis is void
   thesis          text,
   notes           text,
+  -- Universe is QQQ-only. Constraint applied with NOT VALID so any
+  -- pre-existing non-QQQ rows are grandfathered; new inserts must be QQQ.
   constraint situational_analysis_symbol_check
-    check (symbol in ('QQQ','TSLA','RIVN'))
+    check (symbol = 'QQQ')
 );
 
 create index if not exists situational_session_date_idx
   on situational_analysis (session_date desc);
 create index if not exists situational_symbol_date_idx
   on situational_analysis (symbol, session_date desc);
+
+-- SHADOW_SIGNALS (Pulse v3.0, 2026-06-11) — vista
+-- Expande analysis_log.indicators->'shadow_signals' (array JSONB que el loop
+-- loggea cuando un sistema SHADOW dispara: S1 RSI2-dip / S4 SWP / S5 GAPF)
+-- a filas planas para el dashboard y la validación de 5 sesiones.
+-- security_invoker => respeta el RLS de analysis_log (anon select).
+create or replace view public.shadow_signals
+  with (security_invoker = true) as
+select
+  al.id          as log_id,
+  al.created_at,
+  (al.created_at at time zone 'America/New_York')::date as session_date,
+  s->>'sys'                     as sys,
+  s->>'ts_signal_ET'            as ts_signal_et,
+  s->>'ts_eval_ET'              as ts_eval_et,
+  nullif(s->>'latency_s','')::numeric as latency_s,
+  nullif(s->>'entry','')::numeric     as entry,
+  nullif(s->>'sl','')::numeric        as sl,
+  nullif(s->>'tp','')::numeric        as tp,
+  s->>'note'                    as note
+from public.analysis_log al
+cross join lateral jsonb_array_elements(al.indicators->'shadow_signals') as s
+where al.indicators ? 'shadow_signals';
+
+grant select on public.shadow_signals to anon;
 
 -- ============================================================
 -- Row Level Security

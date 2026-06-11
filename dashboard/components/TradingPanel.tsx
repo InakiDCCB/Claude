@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import { createSupabase } from '@/lib/supabase'
-import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState } from '@/lib/supabase'
+import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState, SessionStateRow, ShadowSignal } from '@/lib/supabase'
 import AccountSummary from './AccountSummary'
 import AgentGrid from './AgentGrid'
 import ChampionCard from './ChampionCard'
 import DataTabs from './DataTabs'
 import MarketCalendarCard from './MarketCalendarCard'
+import SessionGatesCard from './SessionGatesCard'
+import ShadowPanel from './ShadowPanel'
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
@@ -74,12 +76,16 @@ export default function TradingPanel({
   agents,
   champion,
   alpacaState,
+  sessionState,
+  shadowSignals,
 }: {
   initialTrades:   Trade[]
   initialAnalysis: AnalysisEntry[]
   agents:          AgentStatus[]
   champion:        ChampionConfig | null
   alpacaState:     AlpacaState | null
+  sessionState:    SessionStateRow | null
+  shadowSignals:   ShadowSignal[]
 }) {
   const [trades,        setTrades]        = useState<Trade[]>(initialTrades)
   const [liveAgents,    setLiveAgents]    = useState<AgentStatus[]>(agents)
@@ -179,6 +185,12 @@ export default function TradingPanel({
         <div className="lg:h-full">
           <MarketCalendarCard />
         </div>
+      </div>
+
+      {/* Nivel 5b (v3.0): Gates del día · Shadow validation */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <SessionGatesCard sessionState={sessionState} />
+        <ShadowPanel signals={shadowSignals} />
       </div>
 
       {/* Nivel 6: Trades · P&L · Analysis Log */}
