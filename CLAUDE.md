@@ -10,7 +10,7 @@ A paper trading research system for studying market behavior and developing stra
 
 Claude uses the `mcp__alpaca__*` MCP tools directly for market data and order execution. No separate Python agent scripts — Claude IS the agent.
 
-## Trading Loop (Pulse v3.0 — 2026-06-11)
+## Trading Loop (Pulse v3.0.1 — 2026-06-12)
 
 **`strategies/cycle_prompt.md` es la ÚNICA fuente de verdad operacional** (sistemas, gates, fórmulas, wakeups). Este resumen es orientativo; si difieren, manda el cycle_prompt. v3.0 sale del playbook validado en 32 sesiones (`strategies/research/playbook_2026_06_10.md`); v3.0.1 (2026-06-12) añade fixes de ejecución post-mortem: fase solo desde get_clock, pre-submit check FVG con precio fresco, delay de wakeup computado al momento de la llamada, baseline vol30 en IEX. Versión anterior archivada en `strategies/history/cycle_prompt_v2.9.2_2026-06-10.md`.
 
