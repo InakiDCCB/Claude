@@ -1,5 +1,11 @@
-# Pulse v3.0.1 — cycle prompt (2026-06-12)
+# Pulse v3.0.2 — cycle prompt (2026-06-15)
 
+v3.0.2 (2026-06-15): FVG SIN tope de 1 fill/día — experimento aprobado por usuario.
+Ahora gobernado solo por rvol30≥0.85 + pre-submit checks + C4 (2 pérdidas seguidas) +
+1-posición-a-la-vez + stop diario −$500. Fills SECUENCIALES (no concurrentes: no abre un
+2º FVG hasta que cierra el 1º). Hipótesis: las quality gates seleccionan fills #2+ con edge,
+vs. el backtest crudo (fill#1 56%/+$18.50, fill#2 31%/+$1.19) que NO aislaba pre-submit/rvol30.
+`/post-close` trackea performance por `ordinal` para veredicto.
 v3.0.1 (post-mortem 06-12): fase SOLO desde get_clock (STEP 1), check de precio fresco
 pre-submit FVG (STEP 6), delay de wakeup computado al momento de la llamada (STEP 9),
 baseline vol30 en IEX (STEP 2-bis). Reglas de trading sin cambios.
@@ -13,7 +19,7 @@ cubierta aquí, no operes y loguea el caso.
 
 | Sistema | Modo | Señal | Gate diario |
 |---|---|---|---|
-| S2 FVG | **LIVE** | gap alcista 3 barras 1-min → limit al midpoint | rvol30 ≥ 0.85 Y fills_today < 1 |
+| S2 FVG | **LIVE** | gap alcista 3 barras 1-min → limit al midpoint | rvol30 ≥ 0.85 (SIN tope de fills/día desde v3.0.2; fills secuenciales) |
 | S3 VWAPPB | **LIVE** | pullback a VWAP (5 condiciones) | xvwap60 ≥ 6 |
 | S1 RSI2 | **SHADOW** (no ordenar) | RSI2(5m) < 15 al sellar barra 5-min | open ≥ VAL ayer |
 | S4 SWP | **SHADOW** | sweep de session low + reclaim con volumen | ninguno |
@@ -131,7 +137,7 @@ Imprimir los gates en la tabla la única vez que se computan.
 
 ## STEP 6 — SEÑALES LIVE
 
-**S2 FVG** (solo si `gates.fvg_on` Y `fvg.fills_today == 0` Y `c4.fvg < 2` Y sin limit FVG activo Y sin posición):
+**S2 FVG** (solo si `gates.fvg_on` Y `c4.fvg < 2` Y sin limit FVG activo Y sin posición — SIN tope de fills/día desde v3.0.2; el `sin limit activo Y sin posición` fuerza que los fills sean secuenciales, no concurrentes):
 - Por cada triplete de 1-min SELLADAS (n, n+1, n+2): si `low(n+2) > high(n)` → FVG.
   `midpoint = round((high(n)+low(n+2))/2, 2)` ; `sl = round(low(n)−0.02, 2)`.
 - `shares = floor(equity × 0.05 / midpoint)` (escalado 0.025→0.05 aprobado por usuario 06-12, junto con el pre-submit check de abajo; skip si < 2).
@@ -188,11 +194,11 @@ Evaluar y, si dispara, incluir en el JSONB del STEP 8:
    ```
    (los 4 parámetros son obligatorios o Alpaca rechaza con 422; PROHIBIDO order_class="bracket").
    Si falla → retry 1 vez → si falla otra vez → market sell todo + log "emergency close".
-3. `state.position = {sys, qty, entry:fill, tp, sl, oco_id, opened_ET}` ; si FVG → `fvg.fills_today += 1`.
+3. `state.position = {sys, qty, entry:fill, tp, sl, oco_id, opened_ET}` ; si FVG → `fvg.fills_today += 1` (desde v3.0.2 ya NO es gate — solo cuenta el ordinal del fill para tracking en `/post-close`).
 4. Registrar trade (SQL directo — NO endpoints HTTP):
    ```sql
    INSERT INTO trades (asset, side, quantity, price, order_id, status, strategy, notes)
-   VALUES ('QQQ','buy',N,FILL,'<order_id>','filled','fvg_v3|vwappb_v3','sl=.. tp=.. rvol30=.. ordinal=1');
+   VALUES ('QQQ','buy',N,FILL,'<order_id>','filled','fvg_v3|vwappb_v3','sl=.. tp=.. rvol30=.. ordinal=<fvg.fills_today tras incrementar>');
    ```
    Al cerrar (STEP 3.2): UPDATE de esa misma fila (por order_id) con exit_price/exit_type/pnl — NUNCA fila 'sell' nueva.
 

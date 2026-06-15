@@ -4,15 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A paper trading research system for studying market behavior and developing strategies. Execution and market data go through **Alpaca** (paper account, configured in `.mcp.json`). All trade records and analysis are stored in **Supabase**. Strategy specs live in `strategies/` (current: `cycle_prompt.md` v3.0.1; older specs in `strategies/history/`).
+A paper trading research system for studying market behavior and developing strategies. Execution and market data go through **Alpaca** (paper account, configured in `.mcp.json`). All trade records and analysis are stored in **Supabase**. Strategy specs live in `strategies/` (current: `cycle_prompt.md` v3.0.2; older specs in `strategies/history/`).
 
 ## Key Principle
 
 Claude uses the `mcp__alpaca__*` MCP tools directly for market data and order execution. No separate Python agent scripts — Claude IS the agent.
 
-## Trading Loop (Pulse v3.0.1 — 2026-06-12)
+## Trading Loop (Pulse v3.0.2 — 2026-06-15)
 
-**`strategies/cycle_prompt.md` es la ÚNICA fuente de verdad operacional** (sistemas, gates, fórmulas, wakeups). Este resumen es orientativo; si difieren, manda el cycle_prompt. v3.0 sale del playbook validado en 32 sesiones (`strategies/research/playbook_2026_06_10.md`); v3.0.1 (2026-06-12) añade fixes de ejecución post-mortem: fase solo desde get_clock, pre-submit check FVG con precio fresco, delay de wakeup computado al momento de la llamada, baseline vol30 en IEX. Versión anterior archivada en `strategies/history/cycle_prompt_v2.9.2_2026-06-10.md`.
+**`strategies/cycle_prompt.md` es la ÚNICA fuente de verdad operacional** (sistemas, gates, fórmulas, wakeups). Este resumen es orientativo; si difieren, manda el cycle_prompt. v3.0 sale del playbook validado en 32 sesiones (`strategies/research/playbook_2026_06_10.md`); v3.0.1 (2026-06-12) añade fixes de ejecución post-mortem: fase solo desde get_clock, pre-submit check FVG con precio fresco, delay de wakeup computado al momento de la llamada, baseline vol30 en IEX. v3.0.2 (2026-06-15) elimina el tope de 1 fill/día del FVG (experimento de usuario): ahora francotirador secuencial gobernado por rvol30 + pre-submit + C4 + 1-posición; `/post-close` trackea performance por ordinal. Versión anterior archivada en `strategies/history/cycle_prompt_v2.9.2_2026-06-10.md`.
 
 Session phases:
 
@@ -26,7 +26,7 @@ Session phases:
 | Close          | 15:55       | Cierre forzado total (exit_type=TIME)                         |
 | Post-close     | ≥16:00      | `/post-close`: niveles de mañana + resolución de shadows      |
 
-Sistemas v3.0: **LIVE** = S2 FVG (limit al midpoint on-formation; max 1 fill/día; gate rvol30 ≥ 0.85) y S3 VWAPPB (pullback a VWAP; solo días choppy con xvwap60 ≥ 6). **SHADOW** (computar y loggear señal con precios exactos, CERO órdenes; validación 5 sesiones) = S1 RSI2-dip, S4 Sweep&Reclaim, S5 GapFill. **C4 global**: 2 pérdidas consecutivas de un sistema → ese sistema apagado hasta mañana. **ELIMINADOS en v3.0** (no evaluar): ORB, Volume Absorption, filtro EMA, filtro VP, régimen TREND/RANGE, VP developing intradía, tick fetches.
+Sistemas v3.0: **LIVE** = S2 FVG (limit al midpoint on-formation; gate rvol30 ≥ 0.85; SIN tope de fills/día desde v3.0.2 — francotirador secuencial gobernado por rvol30 + pre-submit + C4 + 1-posición) y S3 VWAPPB (pullback a VWAP; solo días choppy con xvwap60 ≥ 6). **SHADOW** (computar y loggear señal con precios exactos, CERO órdenes; validación 5 sesiones) = S1 RSI2-dip, S4 Sweep&Reclaim, S5 GapFill. **C4 global**: 2 pérdidas consecutivas de un sistema → ese sistema apagado hasta mañana. **ELIMINADOS en v3.0** (no evaluar): ORB, Volume Absorption, filtro EMA, filtro VP, régimen TREND/RANGE, VP developing intradía, tick fetches.
 
 Claves de ejecución: una sola fuente de datos (1-min IEX; las 5-min se derivan por resampleo — sin SIP ni su lag de 15min), indicadores incrementales persistidos en `session_state`, exits SIEMPRE broker-side vía OCO (4 params obligatorios; `order_class="bracket"` PROHIBIDO), safety-net de posición desprotegida como primera acción de cada ciclo, wakeup alineado al próximo múltiplo de 5 min ET (~290-310s; 60s tras placear un limit o con precio cerca de TP/SL). Timing crítico: las señales RSI2 pierden el edge si la orden llega >1 min tarde del sello (playbook §7b).
 
