@@ -56,26 +56,11 @@ alter table trades add column strategy_id text references strategy_registry(stra
 -- Going-forward: el loop escribe strategy_id canónico (nota mínima en cycle_prompt, Fase 5).
 ```
 
-### 3.3 `shadow_trades` — resultados simulados resueltos (unifica shadow+live)
-```sql
-create table shadow_trades (
-  id            uuid primary key default gen_random_uuid(),
-  session_date  date not null,
-  strategy_id   text not null references strategy_registry(strategy_id),
-  direction     text not null default 'long',
-  entry numeric, sl numeric, tp numeric,
-  exit_price    numeric,
-  exit_type     text check (exit_type in ('TP','SL','TIME')),
-  pnl_per_share numeric,            -- normalizado a 1 share → comparable con live
-  latency_s     numeric,
-  signal_ts timestamptz, eval_ts timestamptz,
-  source        text default 'shadow' check (source in ('shadow','backtest')),
-  created_at    timestamptz default now()
-);
-```
-`/post-close` ya simula los outcomes de `analysis_log.shadow_signals`; aquí se persisten resueltos.
-**Esto es la lectura segura de Fase 4 ("etiquetar/registrar")** y la base de evidencia para una
-eventual promoción a órdenes reales (que sigue siendo decisión tuya, §8).
+### 3.3 ~~`shadow_trades`~~ — ELIMINADA (decisión usuario 2026-06-17)
+Los sistemas shadow **NO** aportan histórico simulado al ranking: solo cuentan cuando envían una
+**orden real a Alpaca** (a la fecha no han mandado ninguna a la cuenta paper). Al promoverse
+(Fase 4) escribirán filas normales en `trades` con su `strategy_id`. La vista `shadow_signals`
+(sobre `analysis_log`) se conserva como registro de señales, pero NO alimenta performance ni ranking.
 
 ### 3.4 `market_conditions` — clasificación por sesión (reusa gates)
 ```sql
@@ -113,30 +98,37 @@ create table strategy_performance (
 Una fila/día/estrategia/scope → la serie temporal sale gratis (tendencias mejora/deterioro).
 
 ### 3.6 Vistas de lectura (dashboard)
-- `v_strategy_trades` = `trades` (QQQ) ∪ `shadow_trades`, con `strategy_id` + condición de su sesión.
+- `v_strategy_trades` = `trades` con `strategy_id` + condición de su sesión (solo órdenes reales; sin simulados).
 - `v_strategy_ranking` = último snapshot `as_of`, scope `all`, window `inception`, ordenado por `score`.
 
 ## 4. Normalización del histórico (backfill, sin borrar)
 
-Mapeo (decisión usuario 06-17: **mapear TODO al sistema canónico más parecido e incluir legacy**):
+Mapeo (decisión usuario 06-17: **conservar versiones; unificar SOLO variantes de formato** del
+mismo nombre+versión — p.ej. `pulse-v2` = `pulse v2` = `pulse.v2`; pero `pulse_v2` ≠ `pulse_v25` ≠ `Pulse v1`):
 
-| strategy_id | status | family | aliases (raw) |
-|---|---|---|---|
-| `fvg` | live | fvg | `fvg_v1`, `fvg_v3` |
-| `vwappb` | live | vwap | `vwappb_v3`, `vwap_pullback_v2`, `pulse_v2`, `pulse-v2`, `pulse-v2-range`, `Pulse v2.0`, `Pulse v1`, `pulse_v25`, `pulse_v26` |
-| `rsi2` | shadow→live | mean_reversion | (histórico vía shadow_trades) |
-| `swp` | shadow→live | sweep | — |
-| `gapf` | shadow→live | gap | — |
-| `swp_short` | shadow→live | sweep (short) | — |
-| `orb` | archived | breakout | `orb_v2` |
-| `momentum` | archived | momentum | `momentum_breakout_v2.7.2` |
-| `carryover` | archived | other | `carry-over` |
+| strategy_id | status | family | dir | aliases (variantes de formato) |
+|---|---|---|---|---|
+| `fvg_v3` | live | fvg | long | `fvg_v3` |
+| `vwappb_v3` | live | vwap | long | `vwappb_v3` |
+| `rsi2_v3` | shadow | mean_reversion | long | — (0 trades; entra al enviar órdenes) |
+| `swp_v3` | shadow | sweep | long | — |
+| `gapf_v3` | shadow | gap | long | — |
+| `swp_short_v3` | shadow | sweep | short | — |
+| `fvg_v1` | archived | fvg | long | `fvg_v1` |
+| `vwap_pullback_v2` | archived | vwap | long | `vwap_pullback_v2` |
+| `pulse_v2` | archived | vwap | long | `pulse_v2`, `pulse-v2` |
+| `pulse_v1` | archived | vwap | long | `Pulse v1` |
+| `pulse_v25` | archived | vwap | long | `pulse_v25` |
+| `pulse_v26` | archived | vwap | long | `pulse_v26` |
+| `orb_v2` | archived | breakout | long | `orb_v2` |
+| `momentum_breakout_v2_7_2` | archived | momentum | long | `momentum_breakout_v2.7.2` |
+| `carryover` | archived | other | long | `carry-over` |
 
-La familia `pulse_*` (VWAP/EMA reclaim de la era v2) → `vwappb` por cercanía. Cada trade conserva
-su `asset`: el ranking incluye legacy (decisión usuario) pero el dashboard muestra **QQQ-only por
-defecto** + vista legacy aparte (resuelve DC2 sin perder el conteo). `orb`/`momentum`/`carryover`
-quedan `archived` (eliminados en v3) — incluidos en el histórico, su n minúsculo los deja en
-`insufficient_data`. Validación: `select count(*) from trades where strategy_id is null` = 0 (55 mapeados).
+Versiones distintas = estrategias distintas (p.ej. `fvg_v1` con su bug histórico NO contamina a
+`fvg_v3`). Cada trade conserva su `asset`; dashboard QQQ-only por defecto + legacy aparte.
+**Pendiente de tu confirmación (2 ambiguos, por defecto DISTINTOS):** `Pulse v2.0` (¿= `pulse_v2` o
+propia `pulse_v2_0`?) y `pulse-v2-range` (¿variante de `pulse_v2` o propia `pulse_v2_range`?).
+Validación: `select count(*) from trades where strategy_id is null` = 0 tras el backfill.
 
 ## 5. Clasificación de condiciones de mercado
 
@@ -201,7 +193,7 @@ escalado a rangos del playbook (PF 1.0→2.5, WR 50→80%, exp_lb por $/sh).
 ## 8. Integración con `/post-close` (flujo diario)
 
 `/post-close` (≥16:00 ET) se extiende, en orden:
-1. (ya hace) Resolver outcomes de `shadow_signals` → **insertar en `shadow_trades`** (resueltos).
+1. (sin cambio) Las señales shadow se siguen loggeando en `analysis_log.shadow_signals` (registro, NO performance — no entran al ranking hasta que el sistema envíe órdenes reales).
 2. Calcular la fila `market_conditions` del día (desde `session_state.gates` + barras).
 3. `select refresh_strategy_performance(CURRENT_DATE)` → inserta snapshots (idempotente por unique).
 4. Recalcular `v_strategy_ranking` → actualizar `champion_strategy` + recomendaciones.
@@ -246,12 +238,13 @@ Cada sub-fase es un PR independiente, revisable, sin tocar la lógica de trading
 - No borra nada.
 
 ## 13. Decisiones tomadas (2026-06-17)
-1. **Mapeo**: mapear TODO al canónico más parecido e incluir legacy en el ranking (§4); dashboard
-   QQQ-only por defecto + legacy aparte.
+1. **Mapeo**: conservar versiones; unificar SOLO variantes de formato del mismo nombre+versión (§4).
+   Legacy incluido; dashboard QQQ-only por defecto. Pendiente: 2 etiquetas ambiguas (`Pulse v2.0`, `pulse-v2-range`).
 2. **Umbrales de muestra**: `provisional` n≥20 / `established` n≥50. ✅
 3. **Pesos del Score** (§6): Calidad 0.45 (WR por Wilson LB), expectancy-LB 0.25, robustez×consist. 0.30, drawdown −10.
 4. **Volatilidad**: `day_range_pct` vs mediana móvil. ✅
-5. **Promoción**: TODOS los shadows pasan a órdenes reales (paper) con su `strategy_id`. Es un
-   **build de Fase 4** (order-placement de los 4 long + mecánica short de S6), NO un switch. El
-   aprendizaje se autoprotege (n bajo → `insufficient_data`, sin prioridad falsa).
+5. **Promoción/shadows**: TODOS los shadows pasan a órdenes reales (paper) con su `strategy_id`
+   (build Fase 4: order-placement long + mecánica short S6). Los shadows entran al ranking SOLO al
+   enviar órdenes reales — **sin backfill de histórico simulado** (a la fecha no han operado).
+   `shadow_trades` eliminada (§3.3).
 6. **Orden**: 3A–3D (datos) primero, 3E (dashboard) después. ✅
