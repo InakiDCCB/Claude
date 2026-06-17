@@ -9,7 +9,7 @@ create table if not exists trades (
   id            uuid primary key default gen_random_uuid(),
   created_at    timestamptz not null default now(),
   filled_at     timestamptz,
-  asset         text not null,              -- e.g. 'TQQQ', 'QQQ'
+  asset         text not null,              -- QQQ only (trades_asset_qqq_check NOT VALID; históricos TSLA/RIVN/TQQQ grandfathered)
   side          text not null check (side in ('buy','sell')),
   quantity      numeric not null,
   price         numeric not null,           -- entry fill price
@@ -203,6 +203,24 @@ cross join lateral jsonb_array_elements(al.indicators->'shadow_signals') as s
 where al.indicators ? 'shadow_signals';
 
 grant select on public.shadow_signals to anon;
+
+-- ============================================================
+-- QQQ-only enforcement (migration qqq_only_check_constraints_not_valid, 2026-06-17)
+-- NOT VALID: las filas históricas no-QQQ (era v2: TSLA/RIVN/TQQQ) quedan grandfathered;
+-- solo los INSERT nuevos se validan. situational_analysis ya trae su propio check QQQ.
+-- Idempotente para re-ejecución de este archivo.
+-- ============================================================
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'trades_asset_qqq_check') then
+    alter table public.trades add constraint trades_asset_qqq_check check (asset = 'QQQ') not valid;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'analysis_log_asset_qqq_check') then
+    alter table public.analysis_log add constraint analysis_log_asset_qqq_check check (asset = 'QQQ') not valid;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'volume_profiles_symbol_qqq_check') then
+    alter table public.volume_profiles add constraint volume_profiles_symbol_qqq_check check (symbol = 'QQQ') not valid;
+  end if;
+end $$;
 
 -- ============================================================
 -- Row Level Security
