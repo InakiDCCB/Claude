@@ -261,3 +261,44 @@ grant select on public.session_state        to anon;
 grant select on public.alpaca_state         to anon;
 grant select on public.volume_profiles      to anon;
 grant select on public.situational_analysis to anon;
+
+-- ============================================================
+-- Fase 3A (2026-06-17): registro canónico de estrategias + normalización
+-- migration: fase3a_strategy_registry_and_backfill
+-- Versiones granulares: cada (nombre+versión) es su propia estrategia; `aliases`
+-- solo unifica variantes de formato del MISMO nombre+versión (p.ej. pulse_v2/pulse-v2).
+-- ============================================================
+create table if not exists strategy_registry (
+  strategy_id  text primary key,
+  name         text not null,
+  family       text,
+  direction    text not null default 'long' check (direction in ('long','short')),
+  status       text not null check (status in ('live','shadow','archived','research')),
+  spec_version text,
+  since        date,
+  aliases      text[] default '{}',
+  notes        text,
+  updated_at   timestamptz default now()
+);
+
+-- columna canónica en trades (nullable, aditiva; el `strategy` raw se conserva como provenance)
+alter table trades add column if not exists strategy_id text references strategy_registry(strategy_id);
+
+-- auto-mapeo de trades nuevos: etiqueta raw -> strategy_id canónico (sin tocar cycle_prompt)
+create or replace function trades_set_strategy_id() returns trigger as $$
+begin
+  if new.strategy_id is null and new.strategy is not null then
+    select strategy_id into new.strategy_id from strategy_registry where new.strategy = any(aliases);
+  end if;
+  return new;
+end $$ language plpgsql;
+
+drop trigger if exists trg_trades_strategy_id on trades;
+create trigger trg_trades_strategy_id
+  before insert or update of strategy on trades
+  for each row execute function trades_set_strategy_id();
+
+alter table public.strategy_registry enable row level security;
+drop policy if exists "anon_select" on public.strategy_registry;
+create policy "anon_select" on public.strategy_registry for select to anon using (true);
+grant select on public.strategy_registry to anon;
