@@ -118,25 +118,25 @@ Una fila/día/estrategia/scope → la serie temporal sale gratis (tendencias mej
 
 ## 4. Normalización del histórico (backfill, sin borrar)
 
-Mapeo PROPUESTO (requiere tu confirmación — algunas legacy son ambiguas):
+Mapeo (decisión usuario 06-17: **mapear TODO al sistema canónico más parecido e incluir legacy**):
 
-| strategy_id | status | aliases (raw) |
-|---|---|---|
-| `fvg` | live | `fvg_v1`, `fvg_v3` |
-| `vwappb` | live | `vwappb_v3`, `vwap_pullback_v2` |
-| `rsi2` | shadow | (sin trades live; histórico vía shadow_trades) |
-| `swp` | shadow | — |
-| `gapf` | shadow | — |
-| `swp_short` | shadow | — |
-| `legacy_pulse_v2` | archived | `pulse_v2`, `pulse-v2`, `Pulse v2.0`, `pulse-v2-range` |
-| `legacy_pulse_v25` | archived | `pulse_v25`, `pulse_v26`, `Pulse v1` |
-| `legacy_orb` | archived | `orb_v2` |
-| `legacy_momentum` | archived | `momentum_breakout_v2.7.2` |
-| `legacy_carryover` | archived | `carry-over` |
+| strategy_id | status | family | aliases (raw) |
+|---|---|---|---|
+| `fvg` | live | fvg | `fvg_v1`, `fvg_v3` |
+| `vwappb` | live | vwap | `vwappb_v3`, `vwap_pullback_v2`, `pulse_v2`, `pulse-v2`, `pulse-v2-range`, `Pulse v2.0`, `Pulse v1`, `pulse_v25`, `pulse_v26` |
+| `rsi2` | shadow→live | mean_reversion | (histórico vía shadow_trades) |
+| `swp` | shadow→live | sweep | — |
+| `gapf` | shadow→live | gap | — |
+| `swp_short` | shadow→live | sweep (short) | — |
+| `orb` | archived | breakout | `orb_v2` |
+| `momentum` | archived | momentum | `momentum_breakout_v2.7.2` |
+| `carryover` | archived | other | `carry-over` |
 
-**Decisión de diseño:** solo `fvg`/`vwappb` reciben histórico legacy (mapeo limpio); el resto se
-archiva 1:1 para no atribuir trades de otra época/instrumento a sistemas actuales. Validación:
-`select count(*) from trades where strategy_id is null` = 0 tras el backfill (los 55 mapeados).
+La familia `pulse_*` (VWAP/EMA reclaim de la era v2) → `vwappb` por cercanía. Cada trade conserva
+su `asset`: el ranking incluye legacy (decisión usuario) pero el dashboard muestra **QQQ-only por
+defecto** + vista legacy aparte (resuelve DC2 sin perder el conteo). `orb`/`momentum`/`carryover`
+quedan `archived` (eliminados en v3) — incluidos en el histórico, su n minúsculo los deja en
+`insufficient_data`. Validación: `select count(*) from trades where strategy_id is null` = 0 (55 mapeados).
 
 ## 5. Clasificación de condiciones de mercado
 
@@ -164,12 +164,15 @@ robustness  = 1 si exp_lb ≥ 0 en ≥2 condiciones de liquidez, si no penaliza
 ```
 Score (0–100), solo si `n ≥ n_provisional`:
 ```
-Score = 100·( 0.45·norm(exp_lb) + 0.20·(0.5·norm(pf)+0.5·norm(wr)) + 0.25·(consistency·robustness) )
+quality_lb = 0.5·norm(pf) + 0.5·norm(wr_wilson_lb)      # WR por su lower bound de Wilson
+Score = 100·( 0.25·norm(exp_lb) + 0.45·quality_lb + 0.30·(consistency·robustness) )
         − 10·penalty(max_drawdown)
 ```
-Pesos por defecto (tunables): **expectancy-LB domina (0.45)** porque ES el objetivo; calidad 0.20;
-robustez/consistencia 0.25; drawdown resta. `norm()` = escalado a rangos del playbook
-(p.ej. PF 1.0→2.5, WR 50→80%, exp_lb por $/sh).
+Pesos (decididos por el usuario 2026-06-17): **Calidad (PF+WR) domina 0.45** (meta "máximo hit
+ratio"); expectancy-LB 0.25; robustez×consistencia 0.30; drawdown −10. Para que el peso alto en
+Calidad NO reintroduzca fragilidad por muestra chica, **WR entra por su lower bound de Wilson**
+(sample-adjusted) y el tier `insufficient_data` (n<20) sigue excluyendo del Score. `norm()` =
+escalado a rangos del playbook (PF 1.0→2.5, WR 50→80%, exp_lb por $/sh).
 
 **Tiers por muestra mínima** (anti-overfit, núcleo del principio basado en evidencia):
 
@@ -242,10 +245,13 @@ Cada sub-fase es un PR independiente, revisable, sin tocar la lógica de trading
 - No crea estrategias nuevas ni cambia gates/sizing.
 - No borra nada.
 
-## 13. Decisiones abiertas que necesito de ti (antes de 3A)
-1. **Mapeo de alias** (§4): ¿OK mapear solo `fvg`/`vwappb` y archivar el resto 1:1?
-2. **Umbrales de muestra**: ¿`provisional` n≥20 / `established` n≥50? (alineado con tu playbook)
-3. **Pesos del Score** (§6): ¿OK que expectancy-LB domine (0.45)?
-4. **Métrica de volatilidad**: ¿`day_range_pct` vs mediana móvil, o prefieres ATR?
-5. **Shadow en el ranking**: ¿incluirlo (marcado `simulated`) o rankear solo live hasta promover?
-6. **Alcance dashboard ahora**: ¿3A–3D primero (datos) y 3E (UI) después, o todo junto?
+## 13. Decisiones tomadas (2026-06-17)
+1. **Mapeo**: mapear TODO al canónico más parecido e incluir legacy en el ranking (§4); dashboard
+   QQQ-only por defecto + legacy aparte.
+2. **Umbrales de muestra**: `provisional` n≥20 / `established` n≥50. ✅
+3. **Pesos del Score** (§6): Calidad 0.45 (WR por Wilson LB), expectancy-LB 0.25, robustez×consist. 0.30, drawdown −10.
+4. **Volatilidad**: `day_range_pct` vs mediana móvil. ✅
+5. **Promoción**: TODOS los shadows pasan a órdenes reales (paper) con su `strategy_id`. Es un
+   **build de Fase 4** (order-placement de los 4 long + mecánica short de S6), NO un switch. El
+   aprendizaje se autoprotege (n bajo → `insufficient_data`, sin prioridad falsa).
+6. **Orden**: 3A–3D (datos) primero, 3E (dashboard) después. ✅
