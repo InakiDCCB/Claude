@@ -302,3 +302,46 @@ alter table public.strategy_registry enable row level security;
 drop policy if exists "anon_select" on public.strategy_registry;
 create policy "anon_select" on public.strategy_registry for select to anon using (true);
 grant select on public.strategy_registry to anon;
+
+-- ============================================================
+-- Fase 3B/3C (2026-06-17): aprendizaje continuo
+-- migrations: fase3b_market_conditions, fase3c_strategy_performance_ranking
+-- La función refresh_strategy_performance() y la vista v_strategy_ranking viven en
+-- la migración fase3c (lógica procedural) — aquí solo se documentan las tablas.
+-- ============================================================
+create table if not exists market_conditions (
+  session_date  date primary key,
+  symbol        text not null default 'QQQ' check (symbol = 'QQQ'),
+  rvol30 numeric, gap_pct numeric, open_loc text, xvwap60 int,
+  day_range_pct numeric,
+  liquidity  text check (liquidity in ('low','high')),   -- rvol30 >=/< 0.85
+  volatility text check (volatility in ('low','high')),  -- day_range_pct vs mediana
+  regime     text,                                         -- choppy/trend (xvwap60>=6)
+  quadrant   text,                                         -- liq×vol (HH/HL/LH/LL)
+  created_at timestamptz default now()
+);
+
+create table if not exists strategy_performance (
+  id bigserial primary key,
+  as_of        date not null,
+  strategy_id  text not null references strategy_registry(strategy_id),
+  scope        text not null default 'all',          -- 'all'|'liq:high'|'liq:low'|'vol:high'|'vol:low'
+  time_window  text not null default 'inception',
+  n int, wins int, wr numeric, wr_wilson_lb numeric, pf numeric,
+  expectancy numeric, exp_se numeric, exp_lb numeric,
+  pnl_total numeric, avg_win numeric, avg_loss numeric,
+  max_drawdown numeric, avg_duration_min numeric,
+  consistency numeric, robustness numeric,
+  tier text, score numeric,
+  created_at timestamptz default now(),
+  unique (as_of, strategy_id, scope, time_window)
+);
+
+alter table public.market_conditions    enable row level security;
+alter table public.strategy_performance enable row level security;
+drop policy if exists "anon_select" on public.market_conditions;
+drop policy if exists "anon_select" on public.strategy_performance;
+create policy "anon_select" on public.market_conditions    for select to anon using (true);
+create policy "anon_select" on public.strategy_performance for select to anon using (true);
+grant select on public.market_conditions    to anon;
+grant select on public.strategy_performance to anon;
