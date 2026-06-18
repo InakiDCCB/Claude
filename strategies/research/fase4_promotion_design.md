@@ -113,8 +113,8 @@ update strategy_registry set aliases = array['rsi2_v3'], status='live' where str
 - Exposición agregada ≤ 70% en todo momento; loss diario hard-stop a −$500.
 - N sesiones paper sin incidente de reconciliación antes de pasar al siguiente incremento.
 
-## 12. Decisiones abiertas restantes
-- **A.** ¿Cuántas sesiones paper sin incidente exiges por incremento antes de avanzar (p.ej. 3)?
-- **B.** ¿Tope de nº de posiciones concurrentes (p.ej. máx 4) además del cap 70%, o solo el cap?
-- **C.** Cuando el cap/loss bloquea y varias estrategias señalan a la vez, ¿prioriza el de **mayor
-  score del ranking** (recomendado) o el primero en el tiempo?
+## 12. Decisiones tomadas (2026-06-17)
+- **A.** **5 sesiones** paper sin incidente de reconciliación por incremento antes de avanzar.
+- **B.** Tope de **4 posiciones concurrentes** (además del cap 70%).
+- **C.** Cuando el cap/loss bloquea y varias señalan a la vez, entra el de **mayor score del ranking**
+  (empate → mayor n; si ninguno tiene score → tier más alto, luego el primero en el tiempo).

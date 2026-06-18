@@ -1,4 +1,11 @@
-# Pulse v3.0.3 — cycle prompt (2026-06-16)
+# Pulse v3.1.0 — cycle prompt (2026-06-17)
+
+v3.1.0 (2026-06-17, Fase 4.1): **S1 RSI2 promovido a LIVE** (envía órdenes reales). Infra
+**multi-posición**: varias estrategias largas concurrentes (cada una su slot + su OCO), **máx 4**
+posiciones, cap de exposición 70% como SUMA, prioridad por **score del ranking** (`v_strategy_ranking`),
+y **exclusión mutua long/short** sobre QQQ (se activa cuando S6 sea live en 4.3). **Sizing 8%** para
+todos. `state.position` (objeto) → `state.positions` (LISTA). Diseño: `strategies/research/fase4_promotion_design.md`.
+Validación: 5 sesiones paper sin incidente de reconciliación antes de 4.2.
 
 v3.0.3 (2026-06-16): nuevo sistema SHADOW **S6 SWP-short** (sweep de session HIGH + rechazo).
 Único short con edge a ambos lados en el backtest (76.9% hit, PF 2.66, n=13 — `backtest_short_2026_06_16.md`;
@@ -26,13 +33,14 @@ cubierta aquí, no operes y loguea el caso.
 |---|---|---|---|
 | S2 FVG | **LIVE** | gap alcista 3 barras 1-min → limit al midpoint | rvol30 ≥ 0.85 (SIN tope de fills/día desde v3.0.2; fills secuenciales) |
 | S3 VWAPPB | **LIVE** | pullback a VWAP (5 condiciones) | xvwap60 ≥ 6 |
-| S1 RSI2 | **SHADOW** (no ordenar) | RSI2(5m) < 15 al sellar barra 5-min | open ≥ VAL ayer |
+| S1 RSI2 | **LIVE** (v3.1.0) | RSI2(5m) < 15 al sellar barra 5-min → limit al close del bloque | open ≥ VAL ayer |
 | S4 SWP | **SHADOW** | sweep de session low + reclaim con volumen | ninguno |
 | S5 GAPF | **SHADOW** | gap −0.3% + cierre sobre EMA9 | gap_pct < −0.3 |
 | S6 SWP-short | **SHADOW** (short, no ordenar) | sweep de session high + rechazo con volumen | ninguno |
 
 C4 (todos los sistemas): tras 2 pérdidas consecutivas de un sistema en el día → ese sistema queda apagado hasta mañana.
 SHADOW = computar señal + loggearla con precios exactos; CERO órdenes reales.
+**MULTI-POSICIÓN (v3.1.0):** varios sistemas LIVE pueden tener posición a la vez. Cada estrategia tiene ≤1 posición (su slot), trackeada en `state.positions[]` con su propio OCO (el `oco_id` identifica quién cerró). Límites COMPARTIDOS: **máx 4 posiciones**, **Σ exposición ≤ 70% equity**, **pérdida diaria ≤ −$500**. Si varios sistemas señalan y no caben todos, entra el de **mayor `score`** en `v_strategy_ranking` (empate→mayor n→tier→primero). **Sizing = 8% equity** por entrada. **Exclusión long/short:** no abrir un short si hay longs abiertos ni viceversa (activo en 4.3 con S6).
 ELIMINADOS en v3.0 (no evaluar, no mencionar): ORB, Volume Absorption, filtro EMA, filtro VP, régimen TREND/RANGE, VP developing intradía, tick fetches.
 
 ## OUTPUT (imprime PRIMERO, antes de tool calls)
@@ -93,14 +101,19 @@ infla el denominador y además el SIP de hoy está bloqueado (desvío de 10 min 
 
 ## STEP 3 — SEGURIDAD (prioridad absoluta, antes de cualquier cómputo)
 
-`get_all_positions`:
-1. Posición abierta SIN `state.position.oco_id` válido (o el OCO no existe/cancelled) →
-   posición DESPROTEGIDA: armar OCO YA (STEP 7-fill). Si falla 2 veces → market sell todo,
-   loguear "emergency close: unprotected", limpiar state.
-2. `positions == []` pero `state.position != null` → un OCO disparó entre ciclos:
-   `get_order_by_id` a las legs, registrar exit (UPDATE de la fila buy original: exit_price,
-   pnl, exit_type TP|SL), actualizar contador C4 del sistema, limpiar `state.position`.
-3. qty real ≠ qty en estado → reconciliar igual que (2).
+`get_all_positions` → `net_qty` de QQQ (puede ser 0). Reconciliar contra la LISTA `state.positions[]`.
+**Invariante:** `Σ positions[].qty (long) == net_qty` (o `−net_qty` si todas short).
+Por cada `positions[i]`, en orden:
+0. **Sin `oco_id` válido** (o su OCO no existe/cancelled) → DESPROTEGIDA: re-armar su OCO YA por su
+   qty/tp/sl (STEP 7-fill). Si falla 2 veces → market close de ESA qty, log "emergency close: unprotected",
+   quitar de `positions`.
+1. **OCO disparado entre ciclos** (su qty ya no está en el bróker / net_qty bajó): `get_order_by_id`
+   a sus legs → registrar exit (UPDATE de la fila buy por `order_id`: exit_price, pnl, exit_type TP|SL),
+   actualizar C4 de ESE sistema, quitar de `positions`.
+2. **Time-stop S1 RSI2:** si `strategy_id='rsi2_v3'` y `now − opened_ET ≥ 15 min` y sigue abierta →
+   cancelar su OCO + market sell su qty (exit_type=TIME), registrar exit, C4. (Su edge es el rebote inmediato.)
+3. **Desajuste** `Σqty ≠ net_qty` no explicado por (1) → cancelar OCOs, market-flat lo no atribuible,
+   log "reconcile mismatch", reconstruir `positions` desde el bróker. NUNCA dejar qty sin OCO.
 
 ## STEP 4 — INDICADORES (incremental, por cada 1-min nueva sellada)
 
@@ -141,12 +154,20 @@ gates.computed_1030 = true
 ```
 Imprimir los gates en la tabla la única vez que se computan.
 
-## STEP 6 — SEÑALES LIVE
+## STEP 6 — SEÑALES LIVE (multi-posición v3.1.0)
 
-**S2 FVG** (solo si `gates.fvg_on` Y `c4.fvg < 2` Y sin limit FVG activo Y sin posición — SIN tope de fills/día desde v3.0.2; el `sin limit activo Y sin posición` fuerza que los fills sean secuenciales, no concurrentes):
+**Gating de entrada (aplica a TODA entrada LIVE; evaluar ANTES de colocar):**
+- El sistema no tiene ya posición propia en `state.positions[]` (cada sistema ≤1 slot).
+- `len(state.positions) < 4` (máx concurrentes).
+- `Σ(positions[].qty × precio_actual) + (shares × precio) ≤ 0.70 × equity` (cap); si no cabe → skip `exposure_cap`.
+- `pnl_realizado_hoy > −$500` (si no → hard stop, sin entradas el resto del día).
+- **Exclusión long/short:** en 4.1 todas las entradas son LONG (no aplica aún; con S6 en 4.3: no abrir short con longs abiertos ni viceversa).
+- **Prioridad:** si en el MISMO ciclo señalan varios y no caben todos, ordenar por `score` desc de `v_strategy_ranking` (empate→mayor n→tier→primero) y colocar mientras quepan.
+
+**S2 FVG** (solo si `gates.fvg_on` Y `c4.fvg < 2` Y sin limit FVG activo Y sin posición PROPIA de FVG en `positions[]` Y pasa el gating — SIN tope de fills/día desde v3.0.2; el `sin limit activo Y sin posición propia` fuerza fills secuenciales dentro del slot FVG):
 - Por cada triplete de 1-min SELLADAS (n, n+1, n+2): si `low(n+2) > high(n)` → FVG.
   `midpoint = round((high(n)+low(n+2))/2, 2)` ; `sl = round(low(n)−0.02, 2)`.
-- `shares = floor(equity × 0.05 / midpoint)` (escalado 0.025→0.05 aprobado por usuario 06-12, junto con el pre-submit check de abajo; skip si < 2).
+- `shares = floor(equity × 0.08 / midpoint)` (sizing 8% v3.1.0; skip si < 2). El gating de entrada (cap/máx-4) se evalúa antes de colocar.
 - **Pre-submit (obligatorio, inmediatamente antes del place — no vale el close del fetch del STEP 2):**
   `get_stock_latest_trade(QQQ)` → ABORT (no colocar; loguear `fvg_abort`) si CUALQUIERA:
   (a) `last ≤ sl` — con `≤`, no `<`: el 06-12 precio==sl pasó el check y costó −$4.62;
@@ -158,7 +179,7 @@ Imprimir los gates en la tabla la única vez que se computan.
 - Mantenimiento del limit activo: si `get_order_by_id` = filled → STEP 7-fill. Si una 1-min sella
   `close < sl` o expiró → `cancel_order_by_id`, limpiar.
 
-**S3 VWAPPB** (solo si `gates.vwappb_on` Y `c4.vwappb < 2` Y sin posición, ET ≥ 10:30):
+**S3 VWAPPB** (solo si `gates.vwappb_on` Y `c4.vwappb < 2` Y sin posición PROPIA de VWAPPB Y pasa el gating, ET ≥ 10:30):
 Las 5 condiciones sobre la última 1-min sellada (TODAS):
 1. close > VWAP y low ≤ VWAP × 1.001 (tocó VWAP desde arriba)
 2. volumen decreciente en las últimas 2 barras
@@ -166,7 +187,15 @@ Las 5 condiciones sobre la última 1-min sellada (TODAS):
 4. RSI14 1-min entre 45 y 65
 5. no es nuevo session low
 → `place_stock_order(QQQ, shares, buy, type="limit", limit_price=close_señal, tif="day")`,
-  `shares = floor(equity × 0.05 / close)`. Cancelar si no fillea en 3 minutos.
+  `shares = floor(equity × 0.08 / close)`. Cancelar si no fillea en 3 minutos.
+
+**S1 RSI2** (LIVE v3.1.0 — solo si `gates.rsi2_on` Y `c4.rsi2 < 2` Y sin posición propia de RSI2 Y pasa el gating, ATR5m válido):
+- Al sellar un bloque 5-min con `RSI2(5m) < 15`: `entry = close del bloque`;
+  `place_stock_order(QQQ, shares, buy, type="limit", limit_price=entry, tif="day")`, `shares = floor(equity × 0.08 / entry)`.
+  Colocar en el PRIMER wake tras el sello (playbook §7b — a >1 min tarde el edge cae). Cancelar el limit si no fillea en 3 min.
+- Al fill (STEP 7-fill): OCO `tp = round(fill + 0.5×atr5m, 2)`, `sl = round(fill − 1.0×atr5m, 2)`.
+  **Time-stop 15 min** gestionado por el loop (STEP 3.2): si no salió por OCO en 15 min → market sell (exit_type=TIME).
+- Guardar `opened_ET` para el time-stop. RSI2 ya NO es shadow (su validación de 5 sesiones ahora es por desempeño real).
 
 ## STEP 6b — SEÑALES SHADOW (loggear, NUNCA ordenar)
 
@@ -176,14 +205,8 @@ Evaluar y, si dispara, incluir en el JSONB del STEP 8:
   "latency_s":N,"entry":X.XX,"sl":X.XX,"tp":X.XX,"note":"1 línea"}]
 ```
 (`dir` por defecto "long" si se omite; S6 SWP-short es el único `dir:"short"`.)
-- **S1 RSI2** (gate `rsi2_on`, ATR5m válido, shadow-C4 < 2): al sellar bloque 5-min con RSI2 < 15 →
-  entry = close del bloque; `tp = round(entry + 0.5×atr5m, 2)`; `sl = round(entry − 1.0×atr5m, 2)`;
-  time-stop 15 min. `ts_signal_ET` = sello del bloque; `ts_eval_ET` = ahora; `latency_s` = diferencia.
-  **La latencia es EL dato.** Piso estructural medido 06-12: ~45-50s de lag de entrega del harness
-  + fetch/proceso → 100-150s es el mejor caso con scheduling correcto. El <30s del playbook solo
-  aplicará a colocar la orden real en el primer wake post-sello cuando S1 sea LIVE — loggear la
-  latencia real sin tratarla como fallo si <150s. Máximo 1 shadow RSI2 "abierto" a la vez
-  (asumir resuelto tras 15 min — post-close simula los outcomes).
+- **S1 RSI2 → ahora LIVE (v3.1.0, STEP 6)** — ya no se loggea como shadow; envía órdenes reales.
+  Los shadows restantes (S4 SWP / S5 GAPF / S6 SWP-short) siguen igual.
 - **S4 SWP**: una 1-min hizo nuevo session low y dentro de ≤3 barras una sella close > low_previo,
   verde, con vol ≥ 1.5× promedio de las 5 previas → entry=close; sl=sweep_low−0.05; tp=entry+0.5×(entry−sl).
 - **S5 GAPF** (gate `gapf_on`, máx 1/día): primera 1-min que sella close > EMA9 con close < yesterday.close
@@ -197,26 +220,28 @@ Evaluar y, si dispara, incluir en el JSONB del STEP 8:
 ## STEP 7-fill — POST-FILL (cuando un limit LIVE fillea; PRIMERA acción = proteger)
 
 1. `get_order_by_id` → `fill_price`.
-2. **Armar OCO INMEDIATAMENTE** (antes de loggear nada):
+2. **Armar OCO INMEDIATAMENTE** (antes de loggear nada), por la qty de ESA estrategia:
    - FVG: `tp = round(fill + 2×(fill − sl_fvg), 2)`; sl = sl_fvg.
    - VWAPPB: `tp = round(fill + 2×atr1m, 2)`; `sl = round(fill − 2×atr1m, 2)`.
+   - RSI2: `tp = round(fill + 0.5×atr5m, 2)`; `sl = round(fill − 1.0×atr5m, 2)` (+ time-stop 15min en STEP 3.2).
    ```
-   place_stock_order(QQQ, qty_total, "sell", order_class="oco", type="limit",
+   place_stock_order(QQQ, qty_estrategia, "sell", order_class="oco", type="limit",
      limit_price=TP, take_profit_limit_price=TP, stop_loss_stop_price=SL, time_in_force="day")
    ```
    (los 4 parámetros son obligatorios o Alpaca rechaza con 422; PROHIBIDO order_class="bracket").
-   Si falla → retry 1 vez → si falla otra vez → market sell todo + log "emergency close".
-3. `state.position = {sys, qty, entry:fill, tp, sl, oco_id, opened_ET}` ; si FVG → `fvg.fills_today += 1` (desde v3.0.2 ya NO es gate — solo cuenta el ordinal del fill para tracking en `/post-close`).
+   Si falla → retry 1 vez → si falla otra vez → market sell ESA qty + log "emergency close".
+3. **Añadir a `state.positions[]`**: `{strategy_id, dir:"long", qty, entry:fill, tp, sl, oco_id, opened_ET}`
+   (cada estrategia su entrada; ≤1 por sistema). Si FVG → `fvg.fills_today += 1` (desde v3.0.2 ya NO es gate — solo cuenta el ordinal para `/post-close`).
 4. Registrar trade (SQL directo — NO endpoints HTTP):
    ```sql
    INSERT INTO trades (asset, side, quantity, price, order_id, status, strategy, notes)
-   VALUES ('QQQ','buy',N,FILL,'<order_id>','filled','fvg_v3|vwappb_v3','sl=.. tp=.. rvol30=.. ordinal=<fvg.fills_today tras incrementar>');
+   VALUES ('QQQ','buy',N,FILL,'<order_id>','filled','fvg_v3|vwappb_v3|rsi2_v3','sl=.. tp=.. <gate/ordinal>=..');
    ```
-   Al cerrar (STEP 3.2): UPDATE de esa misma fila (por order_id) con exit_price/exit_type/pnl — NUNCA fila 'sell' nueva.
+   (`strategy_id` lo auto-asigna el trigger desde `strategy`.) Al cerrar (STEP 3.1): UPDATE de esa misma fila (por order_id) con exit_price/exit_type/pnl — NUNCA fila 'sell' nueva.
 
-**Gestión de posición abierta:** los exits viven en el broker (OCO). Este prompt solo:
-(a) detecta OCO disparado (STEP 3.2) y registra el exit + C4; (b) VWAPPB no tiene time-stop;
-FVG no tiene time-stop; el cierre 15:55 es el límite duro.
+**Gestión de posiciones abiertas:** los exits viven en el broker (OCO). Este prompt solo:
+(a) detecta OCO disparado (STEP 3.1) y registra el exit + C4; (b) **RSI2 sí tiene time-stop 15min**
+(STEP 3.2 lo cierra a market); FVG/VWAPPB sin time-stop; el cierre 15:55 es el límite duro para todas.
 
 ## STEP 8 — LOG
 
@@ -241,7 +266,7 @@ ON CONFLICT (name) DO UPDATE SET status=EXCLUDED.status, description=EXCLUDED.de
 UPDATE incremental (solo paths cambiados):
 ```
 UPDATE session_state SET state = state || jsonb_build_object('QQQ', <obj>::jsonb, 'last_1min_UTC', '<ts>',
-  'gates', <obj>::jsonb, 'c4', <obj>::jsonb, 'fvg', <obj>::jsonb, 'position', <obj o null>::jsonb,
+  'gates', <obj>::jsonb, 'c4', <obj>::jsonb, 'fvg', <obj>::jsonb, 'positions', <array>::jsonb,
   'session_low', X, 'session_high', X) WHERE date = CURRENT_DATE;
 ```
 
@@ -289,7 +314,7 @@ llamar ScheduleWakeup MATA el loop. Únicas excepciones: STEP 10 completado o me
 ## RESTRICCIONES PERMANENTES
 
 - Órdenes reales LONG only (S6 SWP-short = shadow short: computar + loggear, CERO órdenes). QQQ only. NUNCA: BA, LMT, TXN, NOC, RTX, GD, HII, MRNA, PFE.
-- Exposición total ≤ 70% equity. Una posición live a la vez en v3.0.
+- Exposición total ≤ 70% equity (SUMA de posiciones abiertas). Multi-posición v3.1.0: máx 4 concurrentes, cada estrategia ≤1 slot; ver §MULTI-POSICIÓN.
 - Todos los precios a 2 decimales. SL se calcula DESPUÉS de confirmar el fill.
 - Pérdida diaria ≤ −$500 → heartbeat idle y FIN del día.
 - Error de tool → loguear y continuar; nunca dejar una posición sin OCO.
