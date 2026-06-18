@@ -128,6 +128,42 @@ export type ShadowSignal = {
   note: string | null
 }
 
+// Fila de la vista v_strategy_ranking (Fase 3 — aprendizaje continuo)
+export type StrategyRanking = {
+  strategy_id:  string
+  name:         string
+  status:       'live' | 'shadow' | 'archived' | 'research'
+  direction:    'long' | 'short'
+  family:       string | null
+  n:            number
+  wr:           number | null
+  wr_wilson_lb: number | null
+  pf:           number | null
+  expectancy:   number | null
+  exp_lb:       number | null
+  max_drawdown: number | null
+  consistency:  number | null
+  robustness:   number | null
+  tier:         'insufficient_data' | 'provisional' | 'established'
+  score:        number | null
+  as_of:        string
+}
+
+// Fila de market_conditions (Fase 3B — clasificación por sesión)
+export type MarketCondition = {
+  session_date:  string
+  symbol:        string
+  rvol30:        number | null
+  gap_pct:       number | null
+  open_loc:      string | null
+  xvwap60:       number | null
+  day_range_pct: number | null
+  liquidity:     'low' | 'high' | null
+  volatility:    'low' | 'high' | null
+  regime:        string | null
+  quadrant:      string | null
+}
+
 // Server-only: bypasses RLS — use only in API routes, never in client components
 export function createSupabaseAdmin() {
   return createClient(

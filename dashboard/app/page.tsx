@@ -1,5 +1,5 @@
 import { createSupabase } from '@/lib/supabase'
-import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState, SessionStateRow, ShadowSignal, PnlPoint } from '@/lib/supabase'
+import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState, SessionStateRow, ShadowSignal, PnlPoint, StrategyRanking, MarketCondition } from '@/lib/supabase'
 import TradingPanel from '@/components/TradingPanel'
 import MarketStatus from '@/components/MarketStatus'
 
@@ -24,10 +24,12 @@ export default async function Page({
   let sessionState: SessionStateRow | null = null
   let shadowSignals: ShadowSignal[]     = []
   let pnlHistory:   PnlPoint[]          = []
+  let ranking:      StrategyRanking[]   = []
+  let conditions:   MarketCondition[]   = []
 
   try {
     const sb = createSupabase()
-    const [tradesRes, analysisRes, agentsRes, championRes, alpacaStateRes, sessionStateRes, shadowRes, pnlRes] = await Promise.all([
+    const [tradesRes, analysisRes, agentsRes, championRes, alpacaStateRes, sessionStateRes, shadowRes, pnlRes, rankingRes, conditionsRes] = await Promise.all([
       sb.from('trades').select('*')
         .gte('created_at', fromDate).lte('created_at', toDate)
         .order('created_at', { ascending: false }),
@@ -47,6 +49,9 @@ export default async function Page({
         .select('created_at,pnl')
         .not('pnl', 'is', null)
         .order('created_at', { ascending: true }).limit(5000),
+      // Fase 3 — ranking de estrategias (último snapshot) + condiciones recientes
+      sb.from('v_strategy_ranking').select('*'),
+      sb.from('market_conditions').select('*').order('session_date', { ascending: false }).limit(12),
     ])
     trades        = (tradesRes.data       ?? []) as Trade[]
     analysis      = (analysisRes.data     ?? []) as AnalysisEntry[]
@@ -56,6 +61,8 @@ export default async function Page({
     sessionState  = (sessionStateRes.data ?? null) as SessionStateRow | null
     shadowSignals = (shadowRes.data       ?? []) as ShadowSignal[]
     pnlHistory    = (pnlRes.data          ?? []) as PnlPoint[]
+    ranking       = (rankingRes.data      ?? []) as StrategyRanking[]
+    conditions    = (conditionsRes.data   ?? []) as MarketCondition[]
   } catch {
     // Supabase unavailable (missing env vars or network) — render empty state
   }
@@ -83,6 +90,8 @@ export default async function Page({
           sessionState={sessionState}
           shadowSignals={shadowSignals}
           pnlHistory={pnlHistory}
+          ranking={ranking}
+          conditions={conditions}
         />
       </div>
     </main>

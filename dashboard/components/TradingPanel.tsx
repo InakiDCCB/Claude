@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createSupabase } from '@/lib/supabase'
-import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState, SessionStateRow, ShadowSignal, PnlPoint } from '@/lib/supabase'
+import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState, SessionStateRow, ShadowSignal, PnlPoint, StrategyRanking, MarketCondition } from '@/lib/supabase'
 import AccountSummary from './AccountSummary'
 import PerformanceCard from './PerformanceCard'
 import AgentGrid from './AgentGrid'
@@ -11,6 +11,8 @@ import DataTabs from './DataTabs'
 import MarketCalendarCard from './MarketCalendarCard'
 import SessionGatesCard from './SessionGatesCard'
 import ShadowPanel from './ShadowPanel'
+import StrategyRankingCard from './StrategyRankingCard'
+import MarketConditionsCard from './MarketConditionsCard'
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
@@ -80,6 +82,8 @@ export default function TradingPanel({
   sessionState,
   shadowSignals,
   pnlHistory,
+  ranking,
+  conditions,
 }: {
   initialTrades:   Trade[]
   initialAnalysis: AnalysisEntry[]
@@ -89,6 +93,8 @@ export default function TradingPanel({
   sessionState:    SessionStateRow | null
   shadowSignals:   ShadowSignal[]
   pnlHistory:      PnlPoint[]
+  ranking:         StrategyRanking[]
+  conditions:      MarketCondition[]
 }) {
   const [trades,        setTrades]        = useState<Trade[]>(initialTrades)
   const [liveAgents,    setLiveAgents]    = useState<AgentStatus[]>(agents)
@@ -203,6 +209,19 @@ export default function TradingPanel({
         <SessionGatesCard sessionState={sessionState} />
         <ShadowPanel signals={shadowSignals} />
       </div>
+
+      {/* Nivel 5c (Fase 3): Ranking de estrategias · Condiciones de mercado */}
+      <section>
+        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+          Aprendizaje continuo
+        </h2>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2">
+            <StrategyRankingCard ranking={ranking} />
+          </div>
+          <MarketConditionsCard conditions={conditions} />
+        </div>
+      </section>
 
       {/* Nivel 6: Trades · P&L · Analysis Log */}
       <section>
