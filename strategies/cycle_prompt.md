@@ -1,4 +1,9 @@
-# Pulse v3.0.3 — cycle prompt (2026-06-16)
+# Pulse v3.0.4 — cycle prompt (2026-06-18)
+
+v3.0.4 (2026-06-18): **instrumentación de latencia** (SOLO observabilidad, cero cambio de lógica de
+trading): STEP 0 captura `t0 = now()`; STEP 8 escribe `cycle_s` (duración del ciclo en segundos) y
+`cycle_type` en `indicators`, para diagnosticar los ciclos que superan la ventana de 5 min. Ver
+`strategies/research/` (análisis de ciclos lentos).
 
 v3.0.3 (2026-06-16): nuevo sistema SHADOW **S6 SWP-short** (sweep de session HIGH + rechazo).
 Único short con edge a ambos lados en el backtest (76.9% hit, PF 2.66, n=13 — `backtest_short_2026_06_16.md`;
@@ -51,7 +56,7 @@ Máximo 1 línea de comentario después. Nada más.
 
 ```
 mcp__claude_ai_Supabase__execute_sql(project_id="rdenehqcxgvffyvlwvba",
-  query="SELECT state FROM session_state WHERE date = CURRENT_DATE;")
+  query="SELECT state, now() AS t0 FROM session_state WHERE date = CURRENT_DATE;")
 ```
 Si no hay fila → cold start: ejecuta el seeding mínimo del STEP 2-bis.
 
@@ -227,6 +232,13 @@ INSERT INTO analysis_log (asset, timeframe, signal, confidence, indicators, thes
 VALUES ('QQQ','5m','bullish|bearish|neutral|watching',N,'<JSON>'::jsonb,'1 línea');
 ```
 indicators JSONB: `{vwap, ema9, rsi14, atr1m, rsi2_5m, atr5m, last_close, gates:{...solo el ciclo que se computan}, shadow_signals:[...solo si hubo]}`
+
+**Instrumentación (v3.0.4) — añadir SIEMPRE `cycle_s` y `cycle_type` a indicators.** Computa `cycle_s`
+server-side usando el `t0` del STEP 0: construye el indicators con
+`<JSON>::jsonb || jsonb_build_object('cycle_s', round(extract(epoch from now() - '<t0>'::timestamptz))::int, 'cycle_type', '<tag>')`.
+`cycle_type` = la actividad dominante del ciclo ∈ {`scan`, `fill`, `gap_recovery`, `shadow`, `idle`}
+(precedencia: gap_recovery > fill > shadow > scan). Mide solo el trabajo del agente (STEP 0→8); el lag
+de entrega del harness (~50s) va aparte. Objetivo del análisis: ver qué `cycle_type` produce los `cycle_s` > 300.
 
 Heartbeat (cada ciclo, barato — puede ir en la misma llamada execute_sql que el log):
 ```sql
