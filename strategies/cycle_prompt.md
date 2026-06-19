@@ -1,3 +1,10 @@
+# Pulse v3.0.4-A1lean — cycle prompt (agente LIVE del split multi-agente, 2026-06-18)
+
+**Variante LEAN multi-agente:** A1 = SOLO trading live (S2 FVG, S3 VWAPPB). Las señales shadow
+(S1/S4/S5/S6) las maneja el agente **A4** (`strategies/shadow_prompt.md`); A1 publica los indicadores
+que A4 lee. Diseño: `strategies/research/multiagent_architecture.md`. (Monolítico clásico con shadows
+in-cycle: rama `feat/swp-short-shadow`.)
+
 # Pulse v3.0.4 — cycle prompt (2026-06-18)
 
 v3.0.4 (2026-06-18): **instrumentación de latencia** (SOLO observabilidad, cero cambio de lógica de
@@ -31,10 +38,7 @@ cubierta aquí, no operes y loguea el caso.
 |---|---|---|---|
 | S2 FVG | **LIVE** | gap alcista 3 barras 1-min → limit al midpoint | rvol30 ≥ 0.85 (SIN tope de fills/día desde v3.0.2; fills secuenciales) |
 | S3 VWAPPB | **LIVE** | pullback a VWAP (5 condiciones) | xvwap60 ≥ 6 |
-| S1 RSI2 | **SHADOW** (no ordenar) | RSI2(5m) < 15 al sellar barra 5-min | open ≥ VAL ayer |
-| S4 SWP | **SHADOW** | sweep de session low + reclaim con volumen | ninguno |
-| S5 GAPF | **SHADOW** | gap −0.3% + cierre sobre EMA9 | gap_pct < −0.3 |
-| S6 SWP-short | **SHADOW** (short, no ordenar) | sweep de session high + rechazo con volumen | ninguno |
+| S1/S4/S5/S6 | **→ agente A4** | shadow (RSI2 / SWP / GAPF / SWP-short) — los maneja A4, NO A1 | ver `strategies/shadow_prompt.md` |
 
 C4 (todos los sistemas): tras 2 pérdidas consecutivas de un sistema en el día → ese sistema queda apagado hasta mañana.
 SHADOW = computar señal + loggearla con precios exactos; CERO órdenes reales.
@@ -173,31 +177,13 @@ Las 5 condiciones sobre la última 1-min sellada (TODAS):
 → `place_stock_order(QQQ, shares, buy, type="limit", limit_price=close_señal, tif="day")`,
   `shares = floor(equity × 0.05 / close)`. Cancelar si no fillea en 3 minutos.
 
-## STEP 6b — SEÑALES SHADOW (loggear, NUNCA ordenar)
+## STEP 6b — SHADOW: movido al agente A4 (split multi-agente)
 
-Evaluar y, si dispara, incluir en el JSONB del STEP 8:
-```json
-"shadow_signals":[{"sys":"RSI2|SWP|GAPF|SWPS","dir":"long|short","ts_signal_ET":"HH:MM:SS","ts_eval_ET":"HH:MM:SS",
-  "latency_s":N,"entry":X.XX,"sl":X.XX,"tp":X.XX,"note":"1 línea"}]
-```
-(`dir` por defecto "long" si se omite; S6 SWP-short es el único `dir:"short"`.)
-- **S1 RSI2** (gate `rsi2_on`, ATR5m válido, shadow-C4 < 2): al sellar bloque 5-min con RSI2 < 15 →
-  entry = close del bloque; `tp = round(entry + 0.5×atr5m, 2)`; `sl = round(entry − 1.0×atr5m, 2)`;
-  time-stop 15 min. `ts_signal_ET` = sello del bloque; `ts_eval_ET` = ahora; `latency_s` = diferencia.
-  **La latencia es EL dato.** Piso estructural medido 06-12: ~45-50s de lag de entrega del harness
-  + fetch/proceso → 100-150s es el mejor caso con scheduling correcto. El <30s del playbook solo
-  aplicará a colocar la orden real en el primer wake post-sello cuando S1 sea LIVE — loggear la
-  latencia real sin tratarla como fallo si <150s. Máximo 1 shadow RSI2 "abierto" a la vez
-  (asumir resuelto tras 15 min — post-close simula los outcomes).
-- **S4 SWP**: una 1-min hizo nuevo session low y dentro de ≤3 barras una sella close > low_previo,
-  verde, con vol ≥ 1.5× promedio de las 5 previas → entry=close; sl=sweep_low−0.05; tp=entry+0.5×(entry−sl).
-- **S5 GAPF** (gate `gapf_on`, máx 1/día): primera 1-min que sella close > EMA9 con close < yesterday.close
-  → entry=close; tp=yesterday.close; sl=session_low−0.10.
-- **S6 SWP-short** (espejo de S4, shadow SHORT — CERO órdenes; validación 5 sesiones desde 06-17, shadow-C4 < 2):
-  una 1-min hizo nuevo session HIGH y dentro de ≤3 barras una sella close < high_previo, **ROJA** (close<open),
-  con vol ≥ 1.5× promedio de las 5 previas → `entry=close`; `sl=round(sweep_high+0.05,2)` (ARRIBA);
-  `tp=round(entry−0.5×(sl−entry),2)` (ABAJO); `dir:"short"`; sin time-stop. Único short con edge en el
-  backtest (76.9% hit, n=13); el resto del espejo fue rechazado — NO añadir otros shorts sin backtest.
+**Este agente (A1 live) NO evalúa ni loggea señales shadow.** Las señales S1 RSI2 / S4 SWP / S5 GAPF /
+S6 SWP-short las computa y loggea el agente **A4** (`strategies/shadow_prompt.md`, read-only, Haiku).
+A1 SÍ sigue computando y **PUBLICANDO** todos los indicadores (incluido el buffer 5-min) en STEP 4 y
+STEP 9, para que A4 los lea sin recomputar. (Modo monolítico clásico con shadows in-cycle: rama
+`feat/swp-short-shadow` v3.0.4.)
 
 ## STEP 7-fill — POST-FILL (cuando un limit LIVE fillea; PRIMERA acción = proteger)
 
@@ -231,7 +217,7 @@ Todo por SQL directo (Supabase MCP) — los endpoints HTTP del dashboard NO se u
 INSERT INTO analysis_log (asset, timeframe, signal, confidence, indicators, thesis)
 VALUES ('QQQ','5m','bullish|bearish|neutral|watching',N,'<JSON>'::jsonb,'1 línea');
 ```
-indicators JSONB: `{vwap, ema9, rsi14, atr1m, rsi2_5m, atr5m, last_close, gates:{...solo el ciclo que se computan}, shadow_signals:[...solo si hubo]}`
+indicators JSONB: `{vwap, ema9, rsi14, atr1m, rsi2_5m, atr5m, last_close, gates:{...solo el ciclo que se computan}}` (A1 ya NO loggea `shadow_signals` — lo hace A4).
 
 **Instrumentación (v3.0.4) — añadir SIEMPRE `cycle_s` y `cycle_type` a indicators.** Computa `cycle_s`
 server-side usando el `t0` del STEP 0: construye el indicators con
