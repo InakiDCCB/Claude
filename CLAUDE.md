@@ -24,9 +24,13 @@ Session phases:
 | Active trading | 10:00–15:30 | Ciclos ALINEADOS a velas 5-min (wake = sello + 10s)          |
 | Passive        | 15:30–15:55 | Solo gestión de posición; sin entries nuevos                  |
 | Close          | 15:55       | Cierre forzado total (exit_type=TIME)                         |
-| Post-close     | ≥16:00      | `/post-close`: niveles de mañana + resolución de shadows      |
+| Post-close     | ≥16:00      | `/post-close`: niveles de mañana + resolución de shadows + **aprendizaje** (clasifica condición + recalcula ranking) |
 
 Sistemas v3.0: **LIVE** = S2 FVG (limit al midpoint on-formation; gate rvol30 ≥ 0.85; SIN tope de fills/día desde v3.0.2 — francotirador secuencial gobernado por rvol30 + pre-submit + C4 + 1-posición) y S3 VWAPPB (pullback a VWAP; solo días choppy con xvwap60 ≥ 6). **SHADOW** (computar y loggear señal con precios exactos, CERO órdenes; validación 5 sesiones) = S1 RSI2-dip, S4 Sweep&Reclaim, S5 GapFill. **C4 global**: 2 pérdidas consecutivas de un sistema → ese sistema apagado hasta mañana. **ELIMINADOS en v3.0** (no evaluar): ORB, Volume Absorption, filtro EMA, filtro VP, régimen TREND/RANGE, VP developing intradía, tick fetches.
+
+**Aprendizaje continuo (Fase 3, aplicado 2026-06-17 — capa de datos LIVE):** cada `/post-close` clasifica la sesión en `market_conditions` (liquidez = rvol30 ≷ 0.85, volatilidad = rango vs mediana, régimen = xvwap60) y recalcula el ranking (`refresh_strategy_performance()` → vista `v_strategy_ranking`): por `strategy_id` canónico, métricas n / WR (Wilson LB) / PF / expectancy-LB / drawdown → **Score** (0.45 calidad + 0.25 exp_lb + 0.30 robustez − drawdown) + **tier** (n<20 `insufficient_data` / <50 `provisional` / ≥50 `established`). Sólo informa y prioriza — NO crea reglas ni promueve a real (decisión del usuario). Taxonomía en `strategy_registry`; `trades.strategy_id` se auto-asigna por trigger. El dashboard expone ranking + condiciones (sección "Aprendizaje continuo"). Detalle: `strategies/research/learning_system_design.md`.
+
+**Fase 4.1 (multi-posición + S1 RSI2 LIVE) — IMPLEMENTADA pero SIN ADOPTAR:** vive en la rama `feat/fase4.1-rsi2-live` (cycle_prompt **v3.1.0**). NO está en el loop en vivo (sigue **v3.0.3**) hasta revisión + 5 sesiones paper. Cambios: `state.positions[]` (lista), varias posiciones long concurrentes (máx 4, cap 70% como suma, prioridad por score), exclusión long/short, sizing 8%. Diseño: `strategies/research/fase4_promotion_design.md`.
 
 Claves de ejecución: una sola fuente de datos (1-min IEX; las 5-min se derivan por resampleo — sin SIP ni su lag de 15min), indicadores incrementales persistidos en `session_state`, exits SIEMPRE broker-side vía OCO (4 params obligatorios; `order_class="bracket"` PROHIBIDO), safety-net de posición desprotegida como primera acción de cada ciclo, wakeup alineado al próximo múltiplo de 5 min ET (~290-310s; 60s tras placear un limit o con precio cerca de TP/SL). Timing crítico: las señales RSI2 pierden el edge si la orden llega >1 min tarde del sello (playbook §7b).
 
@@ -93,7 +97,7 @@ Configured in `.mcp.json` (gitignored — contains Alpaca paper keys). Use `mcp_
 
 ## Supabase Schema
 
-Defined in `supabase/schema.sql`. Tables: `trades`, `analysis_log`, `agent_status`, `champion_strategy`, `session_memory`, `alpaca_state`, `session_state`, `volume_profiles`, `situational_analysis`. All have RLS enabled with `anon` SELECT policies; writes go through `service_role` in `/api/db/*` routes or direct service_role SQL.
+Defined in `supabase/schema.sql`. Tables: `trades`, `analysis_log`, `agent_status`, `champion_strategy`, `session_memory`, `alpaca_state`, `session_state`, `volume_profiles`, `situational_analysis`, y (Fase 3) `strategy_registry`, `market_conditions`, `strategy_performance` + vista `v_strategy_ranking`. All have RLS enabled with `anon` SELECT policies; writes go through `service_role` in `/api/db/*` routes or direct service_role SQL. QQQ-only forzado por constraint `NOT VALID` en `trades`/`analysis_log`/`volume_profiles`/`market_conditions` (históricos no-QQQ grandfathered).
 
 Full table reference:
 
@@ -108,6 +112,9 @@ Full table reference:
 | `session_state` | Intraday loop state | Per-date row; state JSONB v3.0: VWAP num/den, EMAs, RSI14, ATR1m, buffer 5-min (closes/RSI2/ATR5m), gates diarios, c4 counters, fvg fills, position |
 | `volume_profiles` | Daily VP snapshots | Per-date×symbol row; VPOC/VAH/VAL + day_high/low + session_close + bin_size. Written by post-close. |
 | `situational_analysis` | D-1 → D bias snapshots | Per-date×symbol×timestamp row; written by `/situational` skill (informational only — does not affect loop) |
+| `strategy_registry` | Catálogo canónico de estrategias (Fase 3A) | `strategy_id` PK (versiones granulares); `status` ∈ {live, shadow, archived, research}; `aliases[]` (variantes de formato); trigger auto-mapea `trades.strategy` → `trades.strategy_id` |
+| `market_conditions` | Clasificación por sesión (Fase 3B) | Per-date; liquidez/volatilidad/régimen/cuadrante desde gates. Escrita por post-close (`upsert_market_condition`) |
+| `strategy_performance` | Snapshots de ranking (Fase 3C) | Per (as_of, strategy_id, scope, time_window); n/WR/PF/exp_lb/score/tier. Recalculada por post-close (`refresh_strategy_performance`); vista pública `v_strategy_ranking` |
 
 TypeScript types for all tables live in `lib/supabase.ts` (`Trade`, `AnalysisEntry`, `AgentStatus`, `ChampionConfig`, `AlpacaState`, `AlpacaPosition`).
 
@@ -119,7 +126,7 @@ Skills live in `~/.claude/commands/` (local git-only repo, no remote). Invoke wi
 |---|---|---|
 | `/load-memory` | Carga memoria: default = modo trading lean (7 reglas); `full` = research | No — contexto |
 | `/pre-market` | 9:30–9:55 ET: seeds incrementales + niveles ayer + vol30_baseline + gates conocibles → `session_state` | Yes — seeds state |
-| `/post-close` | ≥16:00 ET: snapshot niveles mañana (`volume_profiles`) + resolución shadow trades (validación 5 sesiones) + `session_memory` | Yes — produce los gates de mañana |
+| `/post-close` | ≥16:00 ET: niveles mañana (`volume_profiles`) + resolución shadows (validación 5 sesiones) + **aprendizaje** (`upsert_market_condition` + `refresh_strategy_performance` → ranking) + `session_memory` | Yes — gates de mañana + ranking |
 | `/situational` | D-1 → D multi-day bias analysis → writes `situational_analysis` | **No — informational only**, manual trigger any time |
 
 ## Ethical Constraints (permanent)
