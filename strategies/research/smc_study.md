@@ -59,6 +59,22 @@ muestra mínima del ranking (n<20 = insufficient).
   definición SMC estándar y lo tratamos como "SMC genérico"?
 - **Prioridad:** ¿empiezo formalizando Order Block + BOS, o prefieres otro concepto primero?
 
+## 8. Resultados — Backtest #1 (Bullish Order Block, SMC estándar, 06-18)
+`smc_backtest.py` sobre 32 sesiones (05-01→06-16), grid n∈{1,2,3} × tp∈{1.5,2,3} × C4: **NO hay edge.**
+PF agrupa en 0.81–1.07 (mayoría < 1.0), hit 22–44%, pnl mayormente negativo. Las 2 variantes apenas
+positivas (n2 tp3.0 +2.15/PF1.07; n1 tp2.0+C4 +1.44/PF1.06) están dentro del ruido e inconsistentes con
+sus vecinas → artefacto de grid-search. **Anti-hallazgo: NO re-probar OB naïve.** El framework cazó la
+falta de edge antes de cualquier shadow/live.
+
+## 9. Decisión 06-18: validar por SHADOW (no por backtest)
+El usuario prefiere validación sobre **datos reales** (la divergencia backtest↔real le ha dado problemas).
+→ Los mecanismos SMC (incl. OB) se shadowean. **Implementación: en `/post-close`** sobre las barras del
+día (`smc_shadow.py`, detección causal = mismas señales que en vivo), **NO en cada ciclo** → cero coste
+de latencia (clave porque hay un problema abierto de ciclos lentos, ver [[cycle-latency-overrun]]).
+Shadow = guarda entry/SL/TP/outcome, SIN órdenes. Sobre N sesiones decidimos si OB tiene edge real
+(el backtest dice que no; el forward-test real lo confirma o no). **Regla `no-time-gates` RELAJADA**
+(killzones SMC permitidas, justificadas por evidencia).
+
 ## Fuentes (investigación 2026-06-18)
 - Canal YouTube "TRD Angel Casapia" (@ACATRADING); Instagram @iamacatrading; cursos Hotmart
   ("SALA Trader Angel Casapia", "Traders Estoicos", "Aprende Viéndome Operar"). Método = price action /
