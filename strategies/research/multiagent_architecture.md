@@ -52,10 +52,15 @@ multiplicador a ~1.3–1.8× en vez de 3×. Si aun así preocupa, A5 en batch (e
   publica los indicadores en una tabla `live_indicators` (o en `session_state`) y A4/A5 los LEEN.
   Centralizar el cómputo en A1 ahorra tokens en los shadow.
 
-## 5. Aislamiento de ejecución (seguridad — crítico)
-- Solo A1 coloca órdenes. El spec de A4/A5 **jamás** incluye `place_order` (read-only por diseño).
-- Refuerzo extra a investigar: **keys data-only de Alpaca** para A4/A5 (si Alpaca permite keys de
-  solo-lectura/market-data, los shadow físicamente NO pueden operar aunque el modelo se confunda).
+## 5. Aislamiento de ejecución (seguridad — crítico) — 3 CAPAS
+1. **Spec:** A4/A5 jamás incluyen `place_order`; son read-only por diseño.
+2. **Tool permissions** (settings del agente shadow): denegar `mcp__alpaca__place_*`, `cancel_*`,
+   `close_*`, `replace_*`, `exercise_*`. El agente físicamente no puede llamar esas tools.
+3. **Key Read-only de Alpaca** (CONFIRMADO posible 06-18): Alpaca ofrece 3 niveles — Read&Write /
+   **Read only** / No Access, + scopes custom (Trading=No Access, Data=Read). A4/A5 usan una key
+   Read-only → físicamente NO pueden operar aunque el modelo alucine. ⚠️ La doc de read-only keys es
+   del Broker API/BrokerDash; **verificar en el dashboard de paper** si el generador la ofrece. Si no,
+   las capas 1+2 bastan. Fuente: docs.alpaca.markets/docs/credential-management.
 
 ## 6. Orquestación (manual, como hoy)
 5 terminales locales, cada una con su rol:
