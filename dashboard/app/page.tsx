@@ -1,5 +1,5 @@
 import { createSupabase } from '@/lib/supabase'
-import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState, SessionStateRow, ShadowSignal, PnlPoint, StrategyRanking, MarketCondition } from '@/lib/supabase'
+import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState, SessionStateRow, ShadowSignal, PnlPoint, StrategyRanking, MarketCondition, StrategyRegistry } from '@/lib/supabase'
 import TradingPanel from '@/components/TradingPanel'
 import MarketStatus from '@/components/MarketStatus'
 
@@ -26,10 +26,11 @@ export default async function Page({
   let pnlHistory:   PnlPoint[]          = []
   let ranking:      StrategyRanking[]   = []
   let conditions:   MarketCondition[]   = []
+  let registry:     StrategyRegistry[]  = []
 
   try {
     const sb = createSupabase()
-    const [tradesRes, analysisRes, agentsRes, championRes, alpacaStateRes, sessionStateRes, shadowRes, pnlRes, rankingRes, conditionsRes] = await Promise.all([
+    const [tradesRes, analysisRes, agentsRes, championRes, alpacaStateRes, sessionStateRes, shadowRes, pnlRes, rankingRes, conditionsRes, registryRes] = await Promise.all([
       sb.from('trades').select('*')
         .gte('created_at', fromDate).lte('created_at', toDate)
         .order('created_at', { ascending: false }),
@@ -52,6 +53,7 @@ export default async function Page({
       // Fase 3 — ranking de estrategias (último snapshot) + condiciones recientes
       sb.from('v_strategy_ranking').select('*'),
       sb.from('market_conditions').select('*').order('session_date', { ascending: false }).limit(12),
+      sb.from('strategy_registry').select('*').order('strategy_id'),
     ])
     trades        = (tradesRes.data       ?? []) as Trade[]
     analysis      = (analysisRes.data     ?? []) as AnalysisEntry[]
@@ -63,6 +65,7 @@ export default async function Page({
     pnlHistory    = (pnlRes.data          ?? []) as PnlPoint[]
     ranking       = (rankingRes.data      ?? []) as StrategyRanking[]
     conditions    = (conditionsRes.data   ?? []) as MarketCondition[]
+    registry      = (registryRes.data     ?? []) as StrategyRegistry[]
   } catch {
     // Supabase unavailable (missing env vars or network) — render empty state
   }
@@ -92,6 +95,7 @@ export default async function Page({
           pnlHistory={pnlHistory}
           ranking={ranking}
           conditions={conditions}
+          registry={registry}
         />
       </div>
     </main>

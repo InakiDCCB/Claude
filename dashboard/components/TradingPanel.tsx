@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createSupabase } from '@/lib/supabase'
-import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState, SessionStateRow, ShadowSignal, PnlPoint, StrategyRanking, MarketCondition } from '@/lib/supabase'
+import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState, SessionStateRow, ShadowSignal, PnlPoint, StrategyRanking, MarketCondition, StrategyRegistry } from '@/lib/supabase'
 import AccountSummary from './AccountSummary'
 import PerformanceCard from './PerformanceCard'
 import AgentGrid from './AgentGrid'
@@ -84,6 +84,7 @@ export default function TradingPanel({
   pnlHistory,
   ranking,
   conditions,
+  registry,
 }: {
   initialTrades:   Trade[]
   initialAnalysis: AnalysisEntry[]
@@ -95,6 +96,7 @@ export default function TradingPanel({
   pnlHistory:      PnlPoint[]
   ranking:         StrategyRanking[]
   conditions:      MarketCondition[]
+  registry:        StrategyRegistry[]
 }) {
   const [trades,        setTrades]        = useState<Trade[]>(initialTrades)
   const [liveAgents,    setLiveAgents]    = useState<AgentStatus[]>(agents)
@@ -207,7 +209,7 @@ export default function TradingPanel({
       {/* Nivel 5b (v3.0): Gates del día · Shadow validation */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <SessionGatesCard sessionState={sessionState} />
-        <ShadowPanel signals={shadowSignals} />
+        <ShadowPanel signals={shadowSignals} registry={registry} />
       </div>
 
       {/* Nivel 5c (Fase 3): Ranking de estrategias · Condiciones de mercado */}
