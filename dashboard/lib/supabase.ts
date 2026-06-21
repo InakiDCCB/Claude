@@ -149,6 +149,17 @@ export type StrategyRanking = {
   as_of:        string
 }
 
+// Fila de strategy_registry (catálogo canónico de estrategias + su status)
+export type StrategyRegistry = {
+  strategy_id:  string
+  name:         string
+  family:       string | null
+  direction:    'long' | 'short'
+  status:       'live' | 'shadow' | 'archived' | 'research'
+  spec_version: string | null
+  notes:        string | null
+}
+
 // Fila de market_conditions (Fase 3B — clasificación por sesión)
 export type MarketCondition = {
   session_date:  string
