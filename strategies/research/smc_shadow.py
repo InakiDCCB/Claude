@@ -21,17 +21,37 @@ from smc_backtest import run_ob
 DATA = Path(__file__).parent / "data" / "qqq_1min.json"
 
 
+def _fetch_alpaca_day(date):
+    """Barras 1-min IEX (RTH) de QQQ para `date` desde Alpaca (keys de .mcp.json)."""
+    import urllib.request
+    import urllib.parse
+    env = json.loads((Path(__file__).parents[2] / ".mcp.json").read_text())["mcpServers"]["alpaca"]["env"]
+    headers = {"APCA-API-KEY-ID": env["ALPACA_API_KEY"], "APCA-API-SECRET-KEY": env["ALPACA_SECRET_KEY"]}
+    params = {"symbols": "QQQ", "timeframe": "1Min", "start": f"{date}T13:30:00Z",
+              "end": f"{date}T20:00:00Z", "limit": "10000", "feed": "iex", "adjustment": "raw"}
+    url = "https://data.alpaca.markets/v2/stocks/bars?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=30) as r:
+        resp = json.loads(r.read().decode())
+    return [b for b in resp.get("bars", {}).get("QQQ", []) if "13:30" <= b["t"][11:16] < "20:00"]
+
+
 def day_obj(date):
+    """Day del `date`. Usa qqq_1min.json si lo tiene; si no (p.ej. HOY), fetchea de Alpaca.
+    OB solo usa estructura intradía → prev=None es válido cuando se fetchea."""
     bars = json.loads(DATA.read_text())
     bydate = {}
     for b in bars:
         bydate.setdefault(b["t"][:10], []).append(b)
-    dates = sorted(bydate)
-    if date not in bydate:
-        raise SystemExit(f"sin barras para {date} (fechas disponibles: {dates[0]}..{dates[-1]})")
-    idx = dates.index(date)
-    prev = Day(dates[idx - 1], bydate[dates[idx - 1]]) if idx > 0 else None
-    return Day(date, bydate[date], prev)
+    if date in bydate:
+        dates = sorted(bydate)
+        idx = dates.index(date)
+        prev = Day(dates[idx - 1], bydate[dates[idx - 1]]) if idx > 0 else None
+        return Day(date, bydate[date], prev)
+    day_bars = _fetch_alpaca_day(date)
+    if not day_bars:
+        raise SystemExit(f"sin barras para {date} (ni en cache ni en Alpaca)")
+    return Day(date, day_bars, None)
 
 
 def ob_shadow(day, n=2, tp_r=2.0):
