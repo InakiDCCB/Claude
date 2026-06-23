@@ -48,22 +48,25 @@ export default function ShadowPanel({ signals, registry }: { signals: ShadowSign
             const latAvg = lats.length ? lats.reduce((a, b) => a + b, 0) / lats.length : null
             const last = list[0]
             return (
-              <div key={s.strategy_id} className="flex items-baseline justify-between gap-3 text-[12px] border-t border-gray-800/40 py-2 first:border-0 first:pt-0">
-                <div className="min-w-0">
-                  <span className="text-gray-200 font-medium">{s.name}</span>
-                  {s.direction === 'short' && <span className="ml-1 text-[9px] text-red-400">SHORT</span>}
-                  <span className={`ml-2 px-1.5 py-px rounded text-[9px] uppercase font-semibold ${STATUS_STYLE[s.status] ?? ''}`}>{s.status}</span>
-                  {s.family && <span className="ml-2 text-[10px] text-gray-600">{s.family}</span>}
+              <div key={s.strategy_id} className="border-t border-gray-800/40 py-2 first:border-0 first:pt-0">
+                <div className="flex items-baseline justify-between gap-3 text-[12px]">
+                  <div className="min-w-0">
+                    <span className="text-gray-200 font-medium">{s.name}</span>
+                    {s.direction === 'short' && <span className="ml-1 text-[9px] text-red-400">SHORT</span>}
+                    <span className={`ml-2 px-1.5 py-px rounded text-[9px] uppercase font-semibold ${STATUS_STYLE[s.status] ?? ''}`}>{s.status}</span>
+                    {s.family && <span className="ml-2 text-[10px] text-gray-600">{s.family}</span>}
+                  </div>
+                  <div className="shrink-0 font-mono text-[11px] text-gray-400 text-right">
+                    {list.length === 0
+                      ? <span className="text-gray-600">sin señales aún</span>
+                      : <>
+                          {list.length} señal{list.length === 1 ? '' : 'es'}
+                          {latAvg != null && <span className="text-gray-500"> · lat {latAvg.toFixed(0)}s</span>}
+                          {last?.entry != null && <span className="text-gray-600"> · últ ${last.entry.toFixed(2)}</span>}
+                        </>}
+                  </div>
                 </div>
-                <div className="shrink-0 font-mono text-[11px] text-gray-400 text-right">
-                  {list.length === 0
-                    ? <span className="text-gray-600">sin señales aún</span>
-                    : <>
-                        {list.length} señal{list.length === 1 ? '' : 'es'}
-                        {latAvg != null && <span className="text-gray-500"> · lat {latAvg.toFixed(0)}s</span>}
-                        {last?.entry != null && <span className="text-gray-600"> · últ ${last.entry.toFixed(2)}</span>}
-                      </>}
-                </div>
+                {s.notes && <p className="text-[10.5px] text-gray-500 mt-1 leading-snug">{s.notes}</p>}
               </div>
             )
           })}
