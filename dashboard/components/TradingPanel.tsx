@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createSupabase } from '@/lib/supabase'
-import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState, SessionStateRow, ShadowSignal, PnlPoint, StrategyRanking, MarketCondition, StrategyRegistry } from '@/lib/supabase'
+import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState, SessionStateRow, ShadowSignal, PnlPoint, StrategyRanking, MarketCondition, StrategyRegistry, MarketContext, MarketPattern, MarketHypothesis, EmergingLabel, MarketIntel } from '@/lib/supabase'
 import AccountSummary from './AccountSummary'
 import PerformanceCard from './PerformanceCard'
 import AgentGrid from './AgentGrid'
@@ -13,6 +13,7 @@ import SessionGatesCard from './SessionGatesCard'
 import ShadowPanel from './ShadowPanel'
 import StrategyRankingCard from './StrategyRankingCard'
 import MarketConditionsCard from './MarketConditionsCard'
+import MarketIntelligencePanel from './MarketIntelligencePanel'
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
@@ -85,6 +86,11 @@ export default function TradingPanel({
   ranking,
   conditions,
   registry,
+  miContexts,
+  miPatterns,
+  miHypotheses,
+  miEmerging,
+  miIntel,
 }: {
   initialTrades:   Trade[]
   initialAnalysis: AnalysisEntry[]
@@ -97,6 +103,11 @@ export default function TradingPanel({
   ranking:         StrategyRanking[]
   conditions:      MarketCondition[]
   registry:        StrategyRegistry[]
+  miContexts:      MarketContext[]
+  miPatterns:      MarketPattern[]
+  miHypotheses:    MarketHypothesis[]
+  miEmerging:      EmergingLabel[]
+  miIntel:         MarketIntel | null
 }) {
   const [trades,        setTrades]        = useState<Trade[]>(initialTrades)
   const [liveAgents,    setLiveAgents]    = useState<AgentStatus[]>(agents)
@@ -223,6 +234,20 @@ export default function TradingPanel({
           </div>
           <MarketConditionsCard conditions={conditions} />
         </div>
+      </section>
+
+      {/* Nivel 5d (Fase 3.1): Market Intelligence — contexto, patrones, hipótesis (advisory) */}
+      <section>
+        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+          Market Intelligence
+        </h2>
+        <MarketIntelligencePanel
+          intel={miIntel}
+          contexts={miContexts}
+          patterns={miPatterns}
+          hypotheses={miHypotheses}
+          emerging={miEmerging}
+        />
       </section>
 
       {/* Nivel 6: Trades · P&L · Analysis Log */}

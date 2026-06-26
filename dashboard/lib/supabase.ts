@@ -175,6 +175,73 @@ export type MarketCondition = {
   quadrant:      string | null
 }
 
+// ─── Fase 3.1 — Market Intelligence (capa cualitativa/contextual, advisory) ────
+
+// Contexto cualitativo por sesión (v_market_context). signature = vector de features usado.
+export type MarketContext = {
+  session_date:    string
+  symbol:          string
+  context_label:   string | null
+  context_tags:    string[] | null
+  signature:       Record<string, unknown> | null
+  agent_note:      string | null
+  candidate_label: string | null
+}
+
+// Patrón recurrente descubierto por el motor (v_market_patterns)
+export type MarketPattern = {
+  pattern_key:    string
+  kind:           'context_strategy' | 'context_transition' | 'context_outcome' | 'precursor'
+  context_bucket: string | null
+  subject:        string | null
+  description:    string | null
+  n_support:      number
+  n_contra:       number
+  effect:         number | null
+  baseline:       number | null
+  stability:      number | null
+  status:         'emerging' | 'consolidated' | 'dormant'
+  first_seen:     string | null
+  last_seen:      string | null
+}
+
+// Hipótesis en validación continua (v_market_hypotheses)
+export type MarketHypothesis = {
+  pattern_key:        string
+  hypothesis:         string
+  context_bucket:     string | null
+  subject:            string | null
+  status:             'active' | 'observing' | 'discarded' | 'consolidated'
+  n_support:          number
+  n_contra:           number
+  stability:          number | null
+  since:              string | null
+  last_evidence_date: string | null
+  discarded_reason:   string | null
+}
+
+// Etiqueta de contexto emergente propuesta por el agente (v_emerging_context_labels)
+export type EmergingLabel = {
+  candidate_label: string
+  n_sessions:      number
+  first_seen:      string | null
+  last_seen:       string | null
+  recognized:      boolean
+}
+
+// Roll-up compacto para cabecera + memoria (v_market_intelligence, fila única)
+export type MarketIntel = {
+  latest_context:        string | null
+  dominant_recent:       string | null
+  sessions_classified:   number
+  patterns_consolidated: number
+  patterns_emerging:     number
+  hypotheses_active:     number
+  hypotheses_discarded:  number
+  emerging_labels:       number
+  favored_strategies:    string[] | null
+}
+
 // Server-only: bypasses RLS — use only in API routes, never in client components
 export function createSupabaseAdmin() {
   return createClient(
