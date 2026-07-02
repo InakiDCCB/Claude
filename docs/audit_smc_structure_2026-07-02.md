@@ -51,10 +51,29 @@ declarado, no es bug).
 | Killzones | **Dato primero** (decisión 07-01) — medido en backtest + etiquetado en shadow vivo |
 | BOS/CHoCH determinista | **Formalizado y backtesteado** — sin edge standalone (este doc) |
 
-## 5. Siguiente experimento propuesto (research, NO construido — requiere OK)
+## 5. Siguiente experimento propuesto → EJECUTADO mismo día (addendum §6)
 
-**Confluencia estructura×zona:** la tesis SMC real nunca fue "OB solo" ni "BOS solo", sino su
+**Confluencia estructura×OB:** la tesis SMC real nunca fue "OB solo" ni "BOS solo", sino su
 confluencia (entrada en OB solo cuando el estado de estructura es favorable, p.ej. OB post-CHoCH).
-OB solo = PF ~0.95 · estructura sola = PF ~1.0 · ¿confluencia? — es la última pregunta abierta del
-stream SMC. Barato de probar (ambos motores ya existen y comparten swings). Si tampoco muestra edge,
-el stream SMC se cierra con OB shadow como único superviviente en validación.
+OB solo = PF ~0.95 · estructura sola = PF ~1.0 · ¿confluencia? — era la última pregunta abierta.
+
+## 6. ADDENDUM — Confluencia OB × carácter (aprobado usuario, `smc_confluence_backtest.py`)
+
+| Corte (39 sesiones) | N | HIT% | PnL/sh | PF |
+|---|---|---|---|---|
+| OB×CHoCH tp1.5 / tp2.0 / tp3.0 | 115/115/110 | 42/34/28 | −1.85 / +0.61 / +7.78 | 0.95 / 1.02 / **1.21** |
+| **OB×BOS** (continuación) tp* | 8-10 | **0-25** | negativo | **0.00-0.50** |
+| OB×first | 3 | — | — | n irrelevante |
+| CHoCH×open / ×mid (tp2.0, dato killzone) | 22 / 8 | 36/38 | +2.02 / +0.71 | 1.24 / 1.26 |
+
+**Veredicto: la confluencia NO rescata al stream — SMC se CIERRA.** El mejor corte honesto
+(OB×CHoCH tp3.0, PF 1.21) sigue bajo el listón 1.65. Dos datos útiles quedan registrados:
+1. **OB post-continuación (×BOS) es TÓXICO** (≤25% hit, PF ≤0.5, n=10): comprar el retroceso tras
+   una continuación ya extendida = comprar agotamiento. Si el OB shadow vivo llegara a veredicto,
+   este filtro negativo (excluir post-BOS, ~8% de señales) sería el único ajuste con base.
+2. Killzone reconfirma: lo poco positivo vive en open/mid y muere en lunch/pm — consistente con §2 y C.1.
+
+**Cierre del stream SMC (07-02):** FVG (S2, live) y sweep (S4/S6, shadow) ya estaban dentro del
+sistema y SON los conceptos SMC que funcionan. Las formalizaciones nuevas — OB crudo (~0.95),
+estructura sola (≤1.13), confluencia (≤1.21) — no pagan en QQQ 1-min. Único superviviente en
+validación: **OB shadow batch** (n=22, en curso). NO re-abrir sin premisa nueva o mercado distinto.
