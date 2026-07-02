@@ -65,4 +65,16 @@ reales existen (documentados 06-16/17/22) pero su magnitud no es cuantificable h
   ciclo; el problema es la SECUENCIA de trabajos en un turno, no el cómputo).
 
 **Siguiente paso propuesto:** aplicar O1 (solo instrumentación) ya; con 3-5 sesiones de cadencia real,
-decidir O2 con números. Ambos requieren tocar `cycle_prompt.md` (v3.0.5) → OK del usuario.
+decidir O2 con números. Ambos requieren tocar `cycle_prompt.md` → OK del usuario.
+
+---
+
+## RESULTADO (mismo día — usuario aprobó O1 + O2 juntos → APLICADOS en v3.0.6)
+
+- **O1:** `state.cycle_log` += timestamp ET en el UPDATE del STEP 9, SIEMPRE (incl. ciclos de 1 línea),
+  server-side, cero llamadas extra. Reset diario automático (fila por-fecha).
+- **O2:** STEP 6b se difiere al ciclo siguiente cuando el ciclo actual hizo gap_recovery / fill / gates
+  (`state.shadow_deferred`; nunca 2 diferimientos seguidos; jamás difiere STEP 3 ni STEP 6 LIVE).
+- Nota: el spec ya estaba en v3.0.5 (06-30, batching de I/O de otra sesión) → estos cambios son **v3.0.6**.
+- **Verificación pendiente de datos:** re-medir cadencia (`cycle_log`) y cola de `cycle_s` tras 3-5
+  sesiones con v3.0.6; entonces re-evaluar el gate 4.1 con números.

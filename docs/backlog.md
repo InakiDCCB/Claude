@@ -22,7 +22,7 @@
 | **A.1** Auditoría Supabase | Esquema, calidad de datos, rendimiento, preparación aprendizaje | 🔄 EN CURSO (07-01) → `docs/audit_supabase_2026-07-01.md` |
 | **A.2** GitHub / Vercel / Dashboard | Ramas, workflows, secrets, builds, env vars, consistencia métricas | Parcial. **Bloqueado Vercel**: conector OAuth conecta pero scope vacío (0 teams) → re-auth del usuario |
 | **A.3** Integridad general | Sincronización dashboard ↔ Supabase ↔ engine ↔ memorias | Pendiente (tras A.1) |
-| **B.1** Optimización de ciclos | cycle_s, consultas lentas, paralelización. **Prerrequisito de 4.1** | ✅ Diagnóstico HECHO 07-01 → `docs/audit_cycles_2026-07-01.md` (5 ses, 65 ciclos). Gate 4.1 = CONDICIONADO; propuestas O1 (instrumentar cadencia) + O2 (diferir shadow en ciclos con acción) pendientes de OK |
+| **B.1** Optimización de ciclos | cycle_s, consultas lentas, paralelización. **Prerrequisito de 4.1** | ✅ Diagnóstico + **O1/O2 APLICADOS (cycle_prompt v3.0.6, 07-01)** → `docs/audit_cycles_2026-07-01.md`. Re-medir cadencia tras 3-5 sesiones y re-evaluar gate 4.1 con números |
 | **C.1** Auditoría sistema Shadow | WR/PF/expectancy/DD por estrategia × horario × vol × liquidez; comparativa | ✅ HECHO 07-01 → `docs/audit_shadow_2026-07-01.md` (spec en `docs/specs/C1_shadow_audit.md`); re-auditar en S6 n≥25 o celda ≥5 ses |
 | **C.2** Integración `/situational` | Qué conservar/sintetizar/descartar; relación con rendimiento | Diseño primero (propuesta antes de tocar) |
 | **C.3** Comandos semanales | fetch_data / analysis_30d / final_portfolio → cadencia + integración /post-close | Diseño primero |

@@ -1,4 +1,20 @@
-# Pulse v3.0.4 — cycle prompt (2026-06-18)
+# Pulse v3.0.6 — cycle prompt (2026-07-01)
+
+v3.0.6 (2026-07-01): **optimización de ciclos B.1** (SOLO ejecución/observabilidad, cero cambio de
+lógica de trading; diagnóstico `docs/audit_cycles_2026-07-01.md`):
+- **O1 — cadencia medible:** el UPDATE del STEP 9 añade SIEMPRE (también en ciclos de 1 línea) un
+  timestamp a `state.cycle_log` → la cadencia real del loop queda auditable (antes los ciclos
+  silenciosos eran invisibles en la DB). Cero llamadas extra.
+- **O2 — shadow diferido en ciclos con trabajo pesado:** si el ciclo ya hizo gap_recovery, fill/OCO
+  o cómputo de gates, el STEP 6b (shadow) se DIFIERE al ciclo siguiente (`state.shadow_deferred`).
+  Elimina la cola de ciclos multi-trabajo >300s (4 de 6 outliers medidos). Las señales conservan su
+  `ts_signal_ET` de barra; la latencia loggeada refleja el diferimiento (honesto).
+
+v3.0.5 (2026-06-30): **batching de I/O** (SOLO ejecución, cero cambio de lógica de trading). Las
+lecturas (estado, clock, posiciones, barras) se emiten en UN batch paralelo y las escrituras
+(log + heartbeat + estado) en UNA sola `execute_sql` → ~6 round-trips secuenciales por ciclo bajan
+a 2. Mismos datos, mismos gates/señales/sizing, mismo orden de procesamiento. Ver
+"CICLO RÁPIDO — BATCHING OBLIGATORIO".
 
 v3.0.4 (2026-06-18): **instrumentación de latencia** (SOLO observabilidad, cero cambio de lógica de
 trading): STEP 0 captura `t0 = now()`; STEP 8 escribe `cycle_s` (duración del ciclo en segundos) y
@@ -52,6 +68,32 @@ ELIMINADOS en v3.0 (no evaluar, no mencionar): ORB, Volume Absorption, filtro EM
 ```
 Máximo 1 línea de comentario después. Nada más.
 
+## CICLO RÁPIDO — BATCHING OBLIGATORIO (v3.0.5)
+
+Cada llamada a tool es un turno + ida/vuelta de red; encadenarlas en serie es el grueso de la
+latencia del ciclo. Por eso TODO el I/O va en 2 batches. **La lógica de trading NO cambia — solo
+cómo se emiten las llamadas.** El orden de PROCESAMIENTO de los resultados sigue siendo el de los STEPs.
+
+**Batch de LECTURA (primer turno — las 4 llamadas EN PARALELO, en el mismo bloque de tool calls):**
+1. STEP 0 — `execute_sql`: `SELECT state, now() AS t0 FROM session_state WHERE date = CURRENT_DATE;`
+2. STEP 1 — `get_clock`
+3. STEP 3 — `get_all_positions`
+4. STEP 2 — `get_stock_bars(symbols="QQQ","1Min", start=<now−45min UTC>, feed="iex")` — ventana móvil
+   fija (cubre de sobra los wakes de 5 min). Cuando llegue el estado, FILTRAR a barras selladas con
+   `t > last_1min`. **Gap-fallback:** si no hay fila (cold start) o `now − last_1min > 40 min` →
+   2º fetch ancho desde 13:30Z y seguir STEP 2-bis. (El sobre-fetch normal son ~45 barras, trivial.)
+
+Procesar luego en el orden de siempre: STEP 1 fase → STEP 3 seguridad (prioridad absoluta) →
+STEP 4 indicadores → STEP 5 gates → STEP 6/6b señales.
+
+**Batch de ESCRITURA (último turno — UNA sola `execute_sql`, sentencias separadas por `;`):**
+STEP 8 (`INSERT analysis_log`) + heartbeat (`agent_status`) + STEP 9 (`UPDATE session_state`) juntas.
+Después `ScheduleWakeup` (STEP 9).
+
+**NO se baten** (son condicionales y/o dependientes — van en su turno cuando toca): pre-submit
+`get_stock_latest_trade` (STEP 6, solo si hay señal FVG), `get_order_by_id` (STEP 3.2/7, solo en
+fill/exit), `place_stock_order` y el OCO. Nunca paralelizar un place con su confirmación.
+
 ## STEP 0 — ESTADO
 
 ```
@@ -79,8 +121,11 @@ Sanity check: si la fase calculada salta más de un nivel vs el ciclo anterior (
 ## STEP 2 — DATOS (1 sola fuente: 1-min IEX)
 
 ```
-get_stock_bars(symbols="QQQ", timeframe="1Min", start=<last_1min_UTC del estado, o hoy 13:30Z>, feed="iex")
+get_stock_bars(symbols="QQQ", timeframe="1Min", start=<now−45min UTC>, feed="iex")   # va en el batch de lectura
 ```
+- **Va en el batch de lectura paralelo** (ventana móvil now−45min, no depende del estado). Tras recibir
+  el estado: descartar barras con `t ≤ last_1min` (ya procesadas). **Gap-fallback:** si no hay fila
+  (cold start) o `now − last_1min > 40 min` → re-fetch ancho desde 13:30Z (STEP 2-bis).
 - Filtrar SELLADAS: `bar.t + 1min ≤ now`. Si no hay barra nueva sellada Y no hay posición NI limit pendiente → imprime 1 línea "HH:MM — sin barra nueva — skip" → STEP 9 (wakeup) directo.
 - Las barras 5-min se DERIVAN aquí: agrupar 1-min por bloques de 5 alineados a 9:30 ET
   (bloque k = barras [9:30+5k, 9:35+5k)). Un bloque está sellado cuando tiene sus 5 barras
@@ -175,6 +220,17 @@ Las 5 condiciones sobre la última 1-min sellada (TODAS):
 
 ## STEP 6b — SEÑALES SHADOW (loggear, NUNCA ordenar)
 
+**Diferimiento en ciclos con trabajo pesado (v3.0.6 — O2):** si ESTE ciclo ya ejecutó
+gap_recovery, un fill/OCO (STEP 7-fill) o el cómputo de gates (primer ciclo ≥10:00 / ≥10:30) →
+NO evaluar STEP 6b ahora: setea `state.shadow_deferred = true` y sigue a STEP 7/8. En el ciclo
+siguiente, si `shadow_deferred` es true: evaluar STEP 6b PRIMERO (tras la seguridad del STEP 3)
+sobre TODOS los bloques/barras sellados desde la última evaluación, y limpiar el flag — **nunca
+diferir dos veces seguidas** (si el ciclo de catch-up también trae trabajo pesado, el catch-up
+shadow va antes). `ts_signal_ET` = sello real de la barra de la señal; `latency_s` reflejará el
+diferimiento (es el dato honesto). Los outcomes los resuelve el bar-sim de `/post-close`, así que
+diferir 1 ciclo NO altera la validación. Este diferimiento aplica SOLO al shadow — JAMÁS a la
+seguridad (STEP 3) ni a las señales LIVE (STEP 6).
+
 Evaluar y, si dispara, incluir en el JSONB del STEP 8:
 ```json
 "shadow_signals":[{"sys":"RSI2|SWP|GAPF|SWPS","dir":"long|short","ts_signal_ET":"HH:MM:SS","ts_eval_ET":"HH:MM:SS",
@@ -226,7 +282,9 @@ FVG no tiene time-stop; el cierre 15:55 es el límite duro.
 ## STEP 8 — LOG
 
 Todo por SQL directo (Supabase MCP) — los endpoints HTTP del dashboard NO se usan desde local
-(AGENT_SECRET no existe aquí). Una fila por ciclo CON CAMBIOS (skip en ciclos de 1 línea):
+(AGENT_SECRET no existe aquí). **Batch de escritura: este INSERT + el heartbeat + el UPDATE del STEP 9
+van en UNA sola llamada `execute_sql`** (sentencias separadas por `;`). Una fila por ciclo CON CAMBIOS
+(skip el INSERT en ciclos de 1 línea — el heartbeat y el UPDATE de estado igual van):
 ```sql
 INSERT INTO analysis_log (asset, timeframe, signal, confidence, indicators, thesis)
 VALUES ('QQQ','5m','bullish|bearish|neutral|watching',N,'<JSON>'::jsonb,'1 línea');
@@ -250,12 +308,20 @@ ON CONFLICT (name) DO UPDATE SET status=EXCLUDED.status, description=EXCLUDED.de
 
 ## STEP 9 — GUARDAR ESTADO + WAKEUP ALINEADO
 
-UPDATE incremental (solo paths cambiados):
+UPDATE incremental (solo paths cambiados) — **va en la MISMA `execute_sql` que el log + heartbeat del
+STEP 8** (un solo round-trip de escritura por ciclo):
 ```
 UPDATE session_state SET state = state || jsonb_build_object('QQQ', <obj>::jsonb, 'last_1min_UTC', '<ts>',
   'gates', <obj>::jsonb, 'c4', <obj>::jsonb, 'fvg', <obj>::jsonb, 'position', <obj o null>::jsonb,
-  'session_low', X, 'session_high', X) WHERE date = CURRENT_DATE;
+  'session_low', X, 'session_high', X,
+  'cycle_log', coalesce(state->'cycle_log','[]'::jsonb)
+               || to_jsonb(to_char(now() AT TIME ZONE 'America/New_York','HH24:MI:SS')))
+WHERE date = CURRENT_DATE;
 ```
+**`cycle_log` va SIEMPRE (v3.0.6 — O1), incluso en ciclos de 1 línea** (en esos el UPDATE puede
+llevar solo `cycle_log`): 1 timestamp ET por ciclo, se computa server-side, cero llamadas extra.
+Es la evidencia de cadencia real del loop (diagnóstico B.1: sin esto, un ciclo silencioso y un
+loop muerto son indistinguibles en la DB). La fila es por-fecha → el array se resetea solo cada día.
 
 **Wakeup — REGLA v3.0.1 (timing crítico del playbook §7b):**
 ```

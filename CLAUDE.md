@@ -4,15 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A paper trading research system for studying market behavior and developing strategies. Execution and market data go through **Alpaca** (paper account, configured in `.mcp.json`). All trade records and analysis are stored in **Supabase**. Strategy specs live in `strategies/` (current: `cycle_prompt.md` v3.0.3; older specs in `strategies/history/`).
+A paper trading research system for studying market behavior and developing strategies. Execution and market data go through **Alpaca** (paper account, configured in `.mcp.json`). All trade records and analysis are stored in **Supabase**. Strategy specs live in `strategies/` (current: `cycle_prompt.md` v3.0.6; older specs in `strategies/history/`).
 
 ## Key Principle
 
 Claude uses the `mcp__alpaca__*` MCP tools directly for market data and order execution. No separate Python agent scripts — Claude IS the agent.
 
-## Trading Loop (Pulse v3.0.3 — 2026-06-16)
+## Trading Loop (Pulse v3.0.6 — 2026-07-01)
 
-**`strategies/cycle_prompt.md` es la ÚNICA fuente de verdad operacional** (sistemas, gates, fórmulas, wakeups). Este resumen es orientativo; si difieren, manda el cycle_prompt. v3.0 sale del playbook validado en 32 sesiones (`strategies/research/playbook_2026_06_10.md`); v3.0.1 (2026-06-12) añade fixes de ejecución post-mortem: fase solo desde get_clock, pre-submit check FVG con precio fresco, delay de wakeup computado al momento de la llamada, baseline vol30 en IEX. v3.0.2 (2026-06-15) elimina el tope de 1 fill/día del FVG (experimento de usuario): ahora francotirador secuencial gobernado por rvol30 + pre-submit + C4 + 1-posición; `/post-close` trackea performance por ordinal. v3.0.3 (2026-06-16) añade el shadow **S6 SWP-short** (sweep de session high + rechazo; único short que sobrevivió al backtest espejo — `strategies/research/backtest_short.py`); órdenes reales siguen LONG-only, S6 es shadow (cero órdenes) en validación 5 sesiones. Versión anterior archivada en `strategies/history/cycle_prompt_v2.9.2_2026-06-10.md`.
+**`strategies/cycle_prompt.md` es la ÚNICA fuente de verdad operacional** (sistemas, gates, fórmulas, wakeups). Este resumen es orientativo; si difieren, manda el cycle_prompt. v3.0 sale del playbook validado en 32 sesiones (`strategies/research/playbook_2026_06_10.md`); v3.0.1 (2026-06-12) añade fixes de ejecución post-mortem: fase solo desde get_clock, pre-submit check FVG con precio fresco, delay de wakeup computado al momento de la llamada, baseline vol30 en IEX. v3.0.2 (2026-06-15) elimina el tope de 1 fill/día del FVG (experimento de usuario): ahora francotirador secuencial gobernado por rvol30 + pre-submit + C4 + 1-posición; `/post-close` trackea performance por ordinal. v3.0.3 (2026-06-16) añade el shadow **S6 SWP-short** (sweep de session high + rechazo; único short que sobrevivió al backtest espejo — `strategies/research/backtest_short.py`); órdenes reales siguen LONG-only, S6 es shadow (cero órdenes) en validación 5 sesiones. v3.0.4 (2026-06-18) instrumenta latencia (`cycle_s`/`cycle_type`) + OB shadow batch en `/post-close`. v3.0.5 (2026-06-30) batching de I/O (lecturas en 1 batch paralelo + escrituras en 1 `execute_sql`). v3.0.6 (2026-07-01, diagnóstico B.1 `docs/audit_cycles_2026-07-01.md`) añade `state.cycle_log` (cadencia real medible, 1 timestamp/ciclo) + diferimiento del shadow en ciclos con trabajo pesado (`state.shadow_deferred`) — todo sin cambio de lógica de trading. Versión anterior archivada en `strategies/history/cycle_prompt_v2.9.2_2026-06-10.md`.
 
 Session phases:
 
