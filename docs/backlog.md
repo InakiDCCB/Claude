@@ -23,7 +23,7 @@
 | **A.2** GitHub / Vercel / Dashboard | Ramas, workflows, secrets, builds, env vars, consistencia métricas | Parcial. **Bloqueado Vercel**: conector OAuth conecta pero scope vacío (0 teams) → re-auth del usuario |
 | **A.3** Integridad general | Sincronización dashboard ↔ Supabase ↔ engine ↔ memorias | Pendiente (tras A.1) |
 | **B.1** Optimización de ciclos | cycle_s, consultas lentas, paralelización. **Prerrequisito de 4.1** | Parcial: 1 día instrumentado (06-22, ~130s avg); necesita más sesiones con loop |
-| **C.1** Auditoría sistema Shadow | WR/PF/expectancy/DD por estrategia × horario × vol × liquidez; comparativa | Ejecutable ya (siguiente tras A.1); con n chicos el output es honesto (tiers), no veredicto |
+| **C.1** Auditoría sistema Shadow | WR/PF/expectancy/DD por estrategia × horario × vol × liquidez; comparativa | ✅ HECHO 07-01 → `docs/audit_shadow_2026-07-01.md` (spec en `docs/specs/C1_shadow_audit.md`); re-auditar en S6 n≥25 o celda ≥5 ses |
 | **C.2** Integración `/situational` | Qué conservar/sintetizar/descartar; relación con rendimiento | Diseño primero (propuesta antes de tocar) |
 | **C.3** Comandos semanales | fetch_data / analysis_30d / final_portfolio → cadencia + integración /post-close | Diseño primero |
 | **C.4** Fuente única de conocimiento | Unificar histórico + shadow + situacional + semanal + mercado en Market Intelligence | Diseño primero; depende de hallazgos A.1 |
