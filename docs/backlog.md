@@ -6,6 +6,8 @@
 > Metodología: planificación completa antes de ejecutar; toda decisión respaldada por evidencia;
 > mejoras arquitectónicas se documentan y proponen ANTES de implementarse.
 
+> **Orden de ejecución** (secuencia por dependencia + método por tarea): `docs/execution_plan.md`.
+
 ## Decisiones registradas (2026-07-01)
 
 | Fork | Decisión |
