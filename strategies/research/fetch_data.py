@@ -45,7 +45,7 @@ def main():
         "symbols": "QQQ",
         "timeframe": "1Min",
         "start": "2026-04-20T13:30:00Z",
-        "end": "2026-06-16T20:00:00Z",
+        "end": "2026-06-26T20:00:00Z",
         "limit": "10000",
         "feed": "sip",
         "adjustment": "raw",

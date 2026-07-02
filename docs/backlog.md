@@ -32,7 +32,7 @@
 | **D.1** Veredicto S1/S4/S5 | Ventana expiró sin veredicto; acumular | ⛔ Evidencia (loop corriendo) |
 | **D.2** Promoción 4.1 → 4.2 → 4.3 | RSI2 LIVE → SWP/GAPF LIVE → SWPS LIVE | ⛔ Gates: veredicto S1 + ciclos <5min + STEP 3 (4.1); encadenadas |
 | **D.3** Ranking dinámico | Tiers, champion_strategy, prioridades | ⛔ Evidencia (nunca con muestra insuficiente) |
-| **E.1** Research SMC | BOS/CHoCH determinista (SMC estándar, killzones como dato) | Activable (research offline, no bloquea operativo) |
+| **E.1** Research SMC | BOS/CHoCH determinista (SMC estándar, killzones como dato) | ✅ HECHO 07-02 → `docs/audit_smc_structure_2026-07-02.md`. BOS/CHoCH standalone SIN edge (PF ≤1.13, anti-hallazgo); killzone medida: edge en `open` (CHoCH×open PF 1.49 n=34, post-hoc — NO sistema); `kz` etiquetada en OB shadow vivo. Propuesto (requiere OK): confluencia OB×estructura |
 | **E.2** FVG multi-fill | Mantener / revertir / alternativa | ⛔ Evidencia (usuario: esperar; señal mixta 06-26 vs 06-30) |
 | **F.1** Limpieza memorias | Trim "En validación" + fvg experiment en /load-memory | ✅ HECHO 07-01 |
 | **F.2** Mejoras técnicas | `trades.strategy_id NOT NULL`; DataTabs filtro/agrupación por estrategia | ✅ HECHO 07-01 — NOT NULL aplicado (migración `f2a_...`); DataTabs con selector + chips por estrategia (pendiente deploy a main) |

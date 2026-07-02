@@ -54,6 +54,17 @@ def day_obj(date):
     return Day(date, day_bars, None)
 
 
+def _killzone(i):
+    """Killzone ET por índice de barra 1-min desde 9:30 — DATO (decisión E.1), no gate."""
+    if i < 90:
+        return "open"
+    if i < 120:
+        return "mid"
+    if i < 240:
+        return "lunch"
+    return "pm"
+
+
 def ob_shadow(day, n=2, tp_r=2.0):
     """Señales OB del día con su outcome (TP/SL/TIME) — para loggear como shadow."""
     out = []
@@ -61,6 +72,7 @@ def ob_shadow(day, n=2, tp_r=2.0):
         tp = round(t["entry"] + tp_r * (t["entry"] - t["sl"]), 2)
         out.append({"sys": "OB", "dir": "long", "date": t["day"],
                     "entry": round(t["entry"], 2), "sl": round(t["sl"], 2), "tp": tp,
+                    "kz": _killzone(t["ei"]),
                     "outcome": t["xt"], "pnl_ps": round(t["pnl"], 3)})
     return out
 
