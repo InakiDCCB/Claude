@@ -26,6 +26,22 @@ del **primer snapshot QQQ del día** (el predictivo — antes de conocer el dese
 **Fix obligatorio detectado:** `situational.md` aún referencia **TSLA/RIVN** (pre QQQ-only; el
 constraint de la tabla ya rechazaría esos INSERTs) → actualizar el skill a QQQ únicamente.
 
+### C.2 **v2** (decisión usuario 2026-07-02 — supersede la mecánica intradía de arriba)
+El usuario pidió NO correr `/situational` a mano: queda **integrado en /post-close** y reorientado a
+"comportamientos interdía comprobables con datos". Implementación (migración `c2v2_situational_autopostclose`):
+- `situational_analysis.rule` (columna nueva) + función **`situational_snapshot(d)`**: al cierre de D
+  computa estructura D-1→D (desde volume_profiles + gap_pct de market_conditions; t_open derivado) y
+  **teoriza D+1** con reglas fijas: `gap_up/down_sin_llenar` (0.6) · `naked_vpoc_iman` (0.55) ·
+  `hh/ll_agotamiento` (0.5) · `inside_breakout_esperado` / `expansion_reversion` (mixed, no evaluables
+  direccional) · `default` neutral. Fila única idempotente `notes='auto_postclose_d1'`.
+- `refresh_market_patterns` **v3**: precursor con semántica D→D+1 — precisión por **bias** (`sit:*`) y
+  por **regla** (`sitr:*`) contra el cierre de la sesión siguiente. Solo evalúa filas auto; las
+  manuales del skill (ad-hoc intradía) son informativas. Legacy 06-02 excluida (semántica distinta).
+- post-close 4d: `situational_snapshot()` corre ANTES de `classify_market_context()` (los tags `sit_*`
+  del contexto ahora significan "al cierre de D, sesgo para D+1").
+- Backfill 07-02 sobre 12 sesiones: reglas pobladas; sit:bearish 3/3, gap_up_sin_llenar 2/2,
+  naked_vpoc 0/1 — todo `emerging`, 0 hipótesis (gates min-N intactos).
+
 ## C.3 — Comandos semanales → `/post-close`
 
 **Análisis de cadencia:** `fetch_data.py` + `analysis_30d.py` + `final_portfolio.py` se QUEDAN
