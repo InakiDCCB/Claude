@@ -355,6 +355,52 @@ function AnalysisLog({ entries }: { entries: AnalysisEntry[] }) {
   )
 }
 
+// ─── Strategy grouping (F.2b) ────────────────────────────────────────────────
+
+// Resumen por estrategia (n, WR, P&L) sobre los trades del rango de fechas.
+// Cada chip filtra la tabla y el P&L; click de nuevo = quitar filtro.
+function StrategySummary({ trades, selected, onSelect }: {
+  trades: Trade[]; selected: string; onSelect: (s: string) => void
+}) {
+  const groups = new Map<string, { n: number; closed: number; wins: number; pnl: number }>()
+  for (const t of trades) {
+    const k = t.strategy ?? '—'
+    const g = groups.get(k) ?? { n: 0, closed: 0, wins: 0, pnl: 0 }
+    g.n += 1
+    if (t.pnl != null) { g.closed += 1; g.pnl += t.pnl; if (t.pnl > 0) g.wins += 1 }
+    groups.set(k, g)
+  }
+  if (groups.size === 0) return null
+  const rows = [...groups.entries()].sort((a, b) => b[1].pnl - a[1].pnl)
+  return (
+    <div className="flex flex-wrap gap-2 mb-3">
+      {rows.map(([name, g]) => {
+        const active = selected === name
+        const wr = g.closed ? Math.round(g.wins / g.closed * 100) : null
+        return (
+          <button
+            key={name}
+            onClick={() => onSelect(active ? 'all' : name)}
+            className={`px-2.5 py-1.5 rounded-lg border text-[11px] transition-colors ${
+              active ? 'border-gray-600 bg-gray-800 text-gray-200'
+                     : 'border-gray-800 bg-gray-900/60 text-gray-400 hover:border-gray-700'
+            }`}
+          >
+            <span className="font-medium">{name}</span>
+            <span className="text-gray-600"> · {g.n} trade{g.n === 1 ? '' : 's'}</span>
+            {wr != null && <span className="text-gray-500"> · {wr}%</span>}
+            <span className={`font-mono ml-1 ${
+              g.pnl > 0 ? 'text-emerald-400' : g.pnl < 0 ? 'text-red-400' : 'text-gray-500'
+            }`}>
+              {g.pnl >= 0 ? '+' : ''}${g.pnl.toFixed(2)}
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 type TabId = 'trades' | 'pnl' | 'analysis'
@@ -366,18 +412,32 @@ export default function DataTabs({ trades, analysis, newTradeId, isLive }: {
   isLive?:     boolean
 }) {
   const [tab, setTab] = useState<TabId>('trades')
+  const [strategy, setStrategy] = useState<string>('all')
   const today = new Date().toISOString().split('T')[0]
   const [from, setFrom] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() - 14); return d.toISOString().split('T')[0]
   })
   const [to, setTo] = useState(today)
 
-  const filteredTrades = useMemo(
+  // Estrategias presentes en el dataset (para el selector)
+  const strategies = useMemo(
+    () => [...new Set(trades.map(t => t.strategy).filter((s): s is string => s != null))].sort(),
+    [trades]
+  )
+
+  // Filtro por fecha (base para el resumen por estrategia)
+  const dateTrades = useMemo(
     () => trades.filter(t => {
       const d = (t.filled_at ?? t.created_at).split('T')[0]
       return d >= from && d <= to
     }),
     [trades, from, to]
+  )
+
+  // + filtro por estrategia (aplica a tabla y a P&L)
+  const filteredTrades = useMemo(
+    () => strategy === 'all' ? dateTrades : dateTrades.filter(t => t.strategy === strategy),
+    [dateTrades, strategy]
   )
 
   const filteredAnalysis = useMemo(
@@ -403,6 +463,16 @@ export default function DataTabs({ trades, analysis, newTradeId, isLive }: {
           ))}
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {strategies.length > 0 && (
+            <select
+              value={strategy}
+              onChange={e => setStrategy(e.target.value)}
+              className="bg-gray-900 border border-gray-800 rounded-lg px-2.5 py-1 text-gray-400 text-xs focus:outline-none focus:ring-1 focus:ring-gray-700"
+            >
+              <option value="all">todas las estrategias</option>
+              {strategies.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
           <input
             type="date"
             value={from}
@@ -425,7 +495,12 @@ export default function DataTabs({ trades, analysis, newTradeId, isLive }: {
         </div>
       </div>
 
-      {tab === 'trades'   && <TradesTable trades={filteredTrades} newTradeId={newTradeId} />}
+      {tab === 'trades' && (
+        <>
+          <StrategySummary trades={dateTrades} selected={strategy} onSelect={setStrategy} />
+          <TradesTable trades={filteredTrades} newTradeId={newTradeId} />
+        </>
+      )}
       {tab === 'pnl'      && <PnLChart trades={filteredTrades} />}
       {tab === 'analysis' && <AnalysisLog entries={filteredAnalysis} />}
     </div>

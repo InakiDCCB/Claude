@@ -21,7 +21,10 @@
 
 ## 🟢 Cola accionable YA (sin gate de datos — orden recomendado)
 
-### 1. A.3 — Integridad general (verificación cruzada)
+> ✅ #1 A.3 y #2 F.2 completados 2026-07-01 (`docs/audit_integrity_2026-07-01.md`; migración
+> `f2a_trades_strategy_id_not_null`; DataTabs con filtro+chips). Siguiente: #3 C.2.
+
+### 1. A.3 — Integridad general (verificación cruzada) — ✅ HECHO
 - **Qué:** confirmar que dashboard ↔ Supabase ↔ engine (session_state) ↔ memorias cuentan lo mismo
   (P&L, nº trades, ranking, gates del último día).
 - **Método:** queries read-only de reconciliación (trades vs alpaca_state vs session_memory;
@@ -29,7 +32,7 @@
   discrepancias en `docs/audit_integrity_<fecha>.md`. **Sin cambios**, solo verificación + hallazgos.
 - **Entregable:** informe corto; si hay drift, propuestas gated por OK.
 
-### 2. F.2 — Mejoras técnicas (2 sub-tareas independientes)
+### 2. F.2 — Mejoras técnicas (2 sub-tareas independientes) — ✅ HECHO
 - **2a · `trades.strategy_id NOT NULL`** — A.1 lo validó seguro (0 nulls). **Método:** migración
   `ALTER TABLE trades ALTER COLUMN strategy_id SET NOT NULL` (el trigger ya lo rellena). Verificar
   con un INSERT de prueba en transacción abortada.
