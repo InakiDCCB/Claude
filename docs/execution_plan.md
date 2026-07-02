@@ -22,7 +22,11 @@
 ## 🟢 Cola accionable YA (sin gate de datos — orden recomendado)
 
 > ✅ #1 A.3 y #2 F.2 completados 2026-07-01 (`docs/audit_integrity_2026-07-01.md`; migración
-> `f2a_trades_strategy_id_not_null`; DataTabs con filtro+chips). Siguiente: #3 C.2.
+> `f2a_trades_strategy_id_not_null`; DataTabs con filtro+chips).
+> ✅ #3 C.2+C.3+C.4 completados 2026-07-02 (spec + migración `c234_knowledge_integration`:
+> `v_shadow_accumulated` + classify/patterns/hypotheses v2 con precursor situacional; /situational
+> QQQ-only; /post-close paso 4e viernes). La cola accionable sin gate de datos queda VACÍA —
+> lo restante espera evidencia (D/E.2/G), re-medición (gate 4.1) o acción del usuario (Vercel).
 
 ### 1. A.3 — Integridad general (verificación cruzada) — ✅ HECHO
 - **Qué:** confirmar que dashboard ↔ Supabase ↔ engine (session_state) ↔ memorias cuentan lo mismo

@@ -26,9 +26,9 @@
 | **A.3** Integridad general | Sincronización dashboard ↔ Supabase ↔ engine ↔ memorias | ✅ HECHO 07-01 → `docs/audit_integrity_2026-07-01.md` (match exacto trades↔memoria; equity −$1.14 = 0.001%) |
 | **B.1** Optimización de ciclos | cycle_s, consultas lentas, paralelización. **Prerrequisito de 4.1** | ✅ Diagnóstico + **O1/O2 APLICADOS (cycle_prompt v3.0.6, 07-01)** → `docs/audit_cycles_2026-07-01.md`. Re-medir cadencia tras 3-5 sesiones y re-evaluar gate 4.1 con números |
 | **C.1** Auditoría sistema Shadow | WR/PF/expectancy/DD por estrategia × horario × vol × liquidez; comparativa | ✅ HECHO 07-01 → `docs/audit_shadow_2026-07-01.md` (spec en `docs/specs/C1_shadow_audit.md`); re-auditar en S6 n≥25 o celda ≥5 ses |
-| **C.2** Integración `/situational` | Qué conservar/sintetizar/descartar; relación con rendimiento | Diseño primero (propuesta antes de tocar) |
-| **C.3** Comandos semanales | fetch_data / analysis_30d / final_portfolio → cadencia + integración /post-close | Diseño primero |
-| **C.4** Fuente única de conocimiento | Unificar histórico + shadow + situacional + semanal + mercado en Market Intelligence | Diseño primero; depende de hallazgos A.1 |
+| **C.2** Integración `/situational` | Qué conservar/sintetizar/descartar; relación con rendimiento | ✅ HECHO 07-02 — tags `sit_*` en contexto + patrón `precursor` (precisión del bias vs cierre); skill QQQ-only. Spec `docs/specs/C2_C3_C4_knowledge_integration.md` |
+| **C.3** Comandos semanales | fetch_data / analysis_30d / final_portfolio → cadencia + integración /post-close | ✅ HECHO 07-02 — siguen semanales; resultados persisten como `strategy_performance` scope='backtest' 30d (post-close 4e) |
+| **C.4** Fuente única de conocimiento | Unificar histórico + shadow + situacional + semanal + mercado en Market Intelligence | ✅ HECHO 07-02 — `v_shadow_accumulated` (nueva) + mapa de 6 vistas; dashboard/memoria/agente leen las MISMAS |
 | **D.1** Veredicto S1/S4/S5 | Ventana expiró sin veredicto; acumular | ⛔ Evidencia (loop corriendo) |
 | **D.2** Promoción 4.1 → 4.2 → 4.3 | RSI2 LIVE → SWP/GAPF LIVE → SWPS LIVE | ⛔ Gates: veredicto S1 + ciclos <5min + STEP 3 (4.1); encadenadas |
 | **D.3** Ranking dinámico | Tiers, champion_strategy, prioridades | ⛔ Evidencia (nunca con muestra insuficiente) |
