@@ -87,3 +87,15 @@ Riesgo futuro = ninguno estructural.
 
 **Verificación post-fix:** re-correr `get_advisors` (security → 0 ERROR; performance → sin WARN),
 smoke del dashboard (vistas MI siguen sirviendo datos con anon), y un ciclo de heartbeat.
+
+---
+
+## RESULTADO (mismo día — P0+P1 aprobados y APLICADOS)
+
+Migración `audit_a1_fixes_p0_p1` (2026-07-01): RLS + policy en strategy_registry, security_invoker
+en las 6 vistas MI, search_path fijo en las 7 funciones, drop de `trades_order_id_key`, delete de
+los 3 heartbeats huérfanos.
+
+**Verificado:** security advisors → **0 hallazgos** (14 lints resueltos). Smoke como `anon`:
+v_market_* + strategy_registry + v_strategy_ranking sirven datos; agent_status = solo `pulse-v3`.
+**P2 queda pendiente** (índices FK de cobertura, drop trades_asset_idx) — opcional, sin urgencia.
