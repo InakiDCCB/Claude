@@ -77,3 +77,13 @@ operativa es dejar correr el loop sin interrupciones: el cuello es muestra, no a
 2. **P-C1b:** backfill 06-18/07-01 → claves canónicas (UPDATE 2 filas; hace visible su historia a MI).
 3. **P-C1c (diferida):** retro-clasificación de market_conditions para días sin loop.
 4. Re-auditar al llegar S6 a n≥25 o cuando alguna celda condición×estrategia cruce 5 sesiones.
+
+---
+
+## RESULTADO (mismo día — P-C1a + P-C1b aprobados y APLICADOS)
+
+- `post-close.md`: claves canónicas ahora OBLIGATORIAS (advertencia explícita con la lección C.1).
+- Backfill aplicado (originales preservados, campo `src` marca el origen). Re-corrido el motor MI:
+  13 patrones context×strategy actualizados; celdas antes invisibles ya presentes
+  (`swps×slow` n=2, `gapf×slow` n=1, `rsi2×slow` n=3); **0 hipótesis** — gates min-N aguantan. ✔
+- P-C1c queda diferida como estaba.
