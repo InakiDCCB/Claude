@@ -91,6 +91,26 @@ export type SessionGates = {
   computed_1030?: boolean
 }
 
+// Posición abierta que escribe el loop (STEP 7): null cuando flat
+export type SessionPosition = {
+  sys?: string
+  qty?: number
+  entry?: number
+  tp?: number
+  sl?: number
+  oco_id?: string
+  opened_ET?: string
+}
+
+// Señales Golden Ticket computadas por /pre-market 4b (desde 2026-07-03)
+export type GtState = {
+  rsi2_d?: number
+  consec_down?: number
+  rsi2d_on?: boolean
+  d3_on?: boolean
+  open?: number
+}
+
 export type SessionStateRow = {
   date: string
   updated_at: string
@@ -98,10 +118,12 @@ export type SessionStateRow = {
     gates?: SessionGates
     c4?: Record<string, number>
     fvg?: { fills_today?: number; active?: Record<string, unknown> | null }
-    position?: Record<string, unknown> | null
+    position?: SessionPosition | null
     session_low?: number
     session_high?: number
     QQQ?: { vwap?: number; last_close?: number; atr1m?: number; [k: string]: unknown }
+    cycle_log?: string[]          // v3.0.6 — timestamps ET "HH:MM:SS", 1 por ciclo
+    gt?: GtState | null           // Golden Ticket (pre-market 4b)
     [k: string]: unknown
   }
 }
@@ -126,6 +148,22 @@ export type ShadowSignal = {
   sl: number | null
   tp: number | null
   note: string | null
+}
+
+// Fila de v_shadow_accumulated (C.4 — outcomes shadow acumulados, fuente reconciliada C.1)
+export type ShadowAccum = {
+  sys:           string
+  strategy_id:   string
+  sessions:      number
+  n:             number
+  tp:            number
+  sl:            number
+  time_stops:    number
+  miss:          number
+  wr_pct:        string | number | null
+  pnl_sh:        string | number | null
+  first_session: string | null
+  last_session:  string | null
 }
 
 // Fila de la vista v_strategy_ranking (Fase 3 — aprendizaje continuo)

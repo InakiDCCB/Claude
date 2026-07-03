@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { Fragment, useState, useMemo } from 'react'
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid,
+  LineChart, ComposedChart, Bar, Cell, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import type { Trade, AnalysisEntry } from '@/lib/supabase'
@@ -128,7 +128,15 @@ const STRATEGY_COLORS: Record<string, string> = {
   'TOB-V2 Pipeline': 'bg-violet-500/10 text-violet-400',
 }
 
+const EXIT_STYLE: Record<string, string> = {
+  TP:     'bg-emerald-500/15 text-emerald-400',
+  SL:     'bg-red-500/15 text-red-400',
+  TIME:   'bg-amber-500/15 text-amber-400',
+  MANUAL: 'bg-gray-700/60 text-gray-400',
+}
+
 function TradesTable({ trades, newTradeId }: { trades: Trade[]; newTradeId?: string | null }) {
+  const [expanded, setExpanded] = useState<string | null>(null)
   if (!trades.length) return <Empty text="No trades in this period." />
 
   function exportCSV() {
@@ -156,11 +164,14 @@ function TradesTable({ trades, newTradeId }: { trades: Trade[]; newTradeId?: str
 
   return (
     <div>
-      <div className="flex justify-end mb-3"><ExportBtn onClick={exportCSV} /></div>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[10px] text-gray-600">Click en una fila para ver notas del trade · QQQ only</p>
+        <ExportBtn onClick={exportCSV} />
+      </div>
       <TableWrap>
         <thead>
           <tr>
-            {['ID', 'Date', 'Ticker', 'Side', 'Qty', 'Entry', 'Exit', 'Notional', 'P&L', 'Strategy', 'Status'].map(h => (
+            {['Fecha (ET)', 'Side', 'Qty', 'Entry', 'Exit', 'Salida', 'P&L', 'Estrategia', 'Status'].map(h => (
               <Th key={h}>{h}</Th>
             ))}
           </tr>
@@ -169,64 +180,184 @@ function TradesTable({ trades, newTradeId }: { trades: Trade[]; newTradeId?: str
           {trades.map((t, i) => {
             const exitPrice = resolveExitPrice(t)
             const notional  = t.total_value ?? t.quantity * t.price
+            const isOpen    = expanded === t.id
             return (
-              <Row key={t.id} odd={i % 2 === 1} flash={t.id === newTradeId}>
-                <Td className="font-mono text-[11px] text-gray-600 whitespace-nowrap">
-                  T - {t.order_id?.split('-')[0] ?? t.id.slice(0, 8)}
-                </Td>
-                <Td className="font-mono text-xs text-gray-500 whitespace-nowrap">
-                  {etDateTime(t.filled_at ?? t.created_at)}
-                </Td>
-                <Td className="font-semibold text-white">{t.asset}</Td>
-                <Td>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase ${
-                    SIDE_COLORS[t.side] ?? 'bg-gray-700 text-gray-400'
-                  }`}>
-                    {t.side}
-                  </span>
-                </Td>
-                <Td className="font-mono text-gray-300 text-xs">{t.quantity}</Td>
-                <Td className="font-mono text-gray-300 text-xs">${t.price.toFixed(2)}</Td>
-                <Td className="font-mono text-gray-300 text-xs">
-                  {exitPrice != null ? `$${exitPrice.toFixed(2)}` : '—'}
-                </Td>
-                <Td className="font-mono text-gray-400 text-xs">${notional.toFixed(2)}</Td>
-                <Td className={`font-mono font-semibold text-xs ${
-                  t.pnl == null ? 'text-gray-600'
-                  : t.pnl > 0   ? 'text-emerald-400'
-                  : t.pnl < 0   ? 'text-red-400'
-                  : 'text-gray-400'
-                }`}>
-                  {t.pnl != null ? `${t.pnl > 0 ? '+' : ''}$${t.pnl.toFixed(2)}` : '—'}
-                </Td>
-                <Td>
-                  {t.strategy ? (
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                      STRATEGY_COLORS[t.strategy] ?? 'bg-gray-700/60 text-gray-400'
+              <Fragment key={t.id}>
+                <tr
+                  onClick={() => setExpanded(isOpen ? null : t.id)}
+                  className={`border-b border-gray-800/40 hover:bg-gray-800/20 transition-colors cursor-pointer ${
+                    i % 2 === 1 ? 'bg-gray-900/10' : ''} ${t.id === newTradeId ? 'animate-row-flash' : ''} ${
+                    isOpen ? 'bg-gray-800/30' : ''}`}
+                >
+                  <Td className="font-mono text-xs text-gray-500 whitespace-nowrap">
+                    <span className={`inline-block mr-1.5 text-gray-600 transition-transform ${isOpen ? 'rotate-90' : ''}`}>▸</span>
+                    {etDateTime(t.filled_at ?? t.created_at)}
+                  </Td>
+                  <Td>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase ${
+                      SIDE_COLORS[t.side] ?? 'bg-gray-700 text-gray-400'
                     }`}>
-                      {t.strategy}
+                      {t.side}
                     </span>
-                  ) : <span className="text-gray-600 text-xs">—</span>}
-                </Td>
-                <Td>
-                  <span className={`flex items-center gap-1.5 text-xs whitespace-nowrap ${
-                    t.status === 'filled'     ? 'text-emerald-400'
-                    : t.status === 'cancelled' ? 'text-gray-500'
-                    : 'text-amber-400'
+                  </Td>
+                  <Td className="font-mono text-gray-300 text-xs">{t.quantity}</Td>
+                  <Td className="font-mono text-gray-300 text-xs">${t.price.toFixed(2)}</Td>
+                  <Td className="font-mono text-gray-300 text-xs">
+                    {exitPrice != null ? `$${exitPrice.toFixed(2)}` : '—'}
+                  </Td>
+                  <Td>
+                    {t.exit_type ? (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${EXIT_STYLE[t.exit_type] ?? 'bg-gray-700 text-gray-400'}`}>
+                        {t.exit_type}
+                      </span>
+                    ) : <span className="text-gray-600 text-xs">—</span>}
+                  </Td>
+                  <Td className={`font-mono font-semibold text-xs ${
+                    t.pnl == null ? 'text-gray-600'
+                    : t.pnl > 0   ? 'text-emerald-400'
+                    : t.pnl < 0   ? 'text-red-400'
+                    : 'text-gray-400'
                   }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full inline-block flex-shrink-0 ${
-                      t.status === 'filled'     ? 'bg-emerald-400'
-                      : t.status === 'cancelled' ? 'bg-gray-600'
-                      : 'bg-amber-400'
-                    }`} />
-                    {t.status}
-                  </span>
-                </Td>
-              </Row>
+                    {t.pnl != null ? `${t.pnl > 0 ? '+' : ''}$${t.pnl.toFixed(2)}` : '—'}
+                  </Td>
+                  <Td>
+                    {t.strategy ? (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                        STRATEGY_COLORS[t.strategy] ?? 'bg-gray-700/60 text-gray-400'
+                      }`}>
+                        {t.strategy}
+                      </span>
+                    ) : <span className="text-gray-600 text-xs">—</span>}
+                  </Td>
+                  <Td>
+                    <span className={`flex items-center gap-1.5 text-xs whitespace-nowrap ${
+                      t.status === 'filled'     ? 'text-emerald-400'
+                      : t.status === 'cancelled' ? 'text-gray-500'
+                      : 'text-amber-400'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full inline-block flex-shrink-0 ${
+                        t.status === 'filled'     ? 'bg-emerald-400'
+                        : t.status === 'cancelled' ? 'bg-gray-600'
+                        : 'bg-amber-400'
+                      }`} />
+                      {t.status}
+                    </span>
+                  </Td>
+                </tr>
+                {isOpen && (
+                  <tr className="bg-gray-900/40">
+                    <td colSpan={9} className="px-4 py-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-x-6 gap-y-2 text-[11px]">
+                        <div>
+                          <p className="text-gray-600 uppercase text-[9px] tracking-wider mb-0.5">Orden</p>
+                          <p className="font-mono text-gray-400 break-all">{t.order_id ?? t.id}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-600 uppercase text-[9px] tracking-wider mb-0.5">Notional</p>
+                          <p className="font-mono text-gray-300">${notional.toFixed(2)}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-600 uppercase text-[9px] tracking-wider mb-0.5">Creada / Fill (ET)</p>
+                          <p className="font-mono text-gray-400">
+                            {etDateTime(t.created_at)}{t.filled_at ? ` → ${etDateTime(t.filled_at)}` : ''}
+                          </p>
+                        </div>
+                        <div className="sm:col-span-4">
+                          <p className="text-gray-600 uppercase text-[9px] tracking-wider mb-0.5">Notas del agente</p>
+                          <p className="text-gray-300 leading-relaxed whitespace-pre-wrap">{t.notes ?? 'sin notas'}</p>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             )
           })}
         </tbody>
       </TableWrap>
+    </div>
+  )
+}
+
+// ─── Horario (P&L por franja de 30 min ET) ───────────────────────────────────
+
+function HourlyPnL({ trades }: { trades: Trade[] }) {
+  const closed = trades.filter(t => t.pnl != null)
+  if (!closed.length) return <Empty text="No closed trades in this period." />
+
+  // buckets de 30 min de 9:30 a 16:00 ET (hora de ENTRADA del trade)
+  const buckets = new Map<number, { pnl: number; n: number; w: number }>()
+  for (let b = 0; b < 13; b++) buckets.set(b, { pnl: 0, n: 0, w: 0 })
+  for (const t of closed) {
+    const et = new Date(t.filled_at ?? t.created_at)
+      .toLocaleTimeString('en-GB', { timeZone: 'America/New_York', hour12: false })
+    const [h, m] = et.split(':').map(Number)
+    const mins = h * 60 + m - (9 * 60 + 30)
+    const b = Math.min(Math.max(Math.floor(mins / 30), 0), 12)
+    const g = buckets.get(b)!
+    g.pnl += t.pnl!
+    g.n   += 1
+    if (t.pnl! > 0) g.w += 1
+  }
+
+  const label = (b: number) => {
+    const mins = 9 * 60 + 30 + b * 30
+    return `${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}`
+  }
+  const data = [...buckets.entries()].map(([b, g]) => ({
+    hora: label(b), pnl: Number(g.pnl.toFixed(2)), n: g.n,
+    wr: g.n > 0 ? Math.round((g.w / g.n) * 100) : null,
+  }))
+
+  const active = data.filter(d => d.n > 0)
+  const best   = active.length ? active.reduce((a, b) => (b.pnl > a.pnl ? b : a)) : null
+  const worst  = active.length ? active.reduce((a, b) => (b.pnl < a.pnl ? b : a)) : null
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4">
+          <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">Mejor franja</p>
+          <p className="text-xl font-mono font-semibold text-emerald-400">{best ? best.hora : '—'}</p>
+          {best && <p className="text-[11px] text-gray-600 mt-0.5">+${best.pnl.toFixed(2)} · {best.n} trades · WR {best.wr}%</p>}
+        </div>
+        <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4">
+          <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">Peor franja</p>
+          <p className="text-xl font-mono font-semibold text-red-400">{worst ? worst.hora : '—'}</p>
+          {worst && <p className="text-[11px] text-gray-600 mt-0.5">{worst.pnl >= 0 ? '+' : ''}${worst.pnl.toFixed(2)} · {worst.n} trades · WR {worst.wr}%</p>}
+        </div>
+        <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4 col-span-2 sm:col-span-1">
+          <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">Trades analizados</p>
+          <p className="text-xl font-mono font-semibold text-white">{closed.length}</p>
+          <p className="text-[11px] text-gray-600 mt-0.5">por hora de entrada (ET)</p>
+        </div>
+      </div>
+
+      <div className="bg-gray-900/30 border border-gray-800/60 rounded-xl p-4" style={{ height: 280 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+            <ReferenceLine y={0} stroke="#374151" strokeDasharray="4 4" />
+            <XAxis dataKey="hora" tick={{ fill: '#4b5563', fontSize: 11 }} tickLine={false} />
+            <YAxis tick={{ fill: '#4b5563', fontSize: 11 }} tickFormatter={v => `$${v}`} tickLine={false} axisLine={false} />
+            <Tooltip
+              contentStyle={{ backgroundColor: '#111827', border: '1px solid #374151', borderRadius: '8px', fontSize: 13 }}
+              labelStyle={{ color: '#9ca3af', marginBottom: 4 }}
+              formatter={(v: number, name: string) => name === 'pnl'
+                ? [`${v >= 0 ? '+' : ''}$${v.toFixed(2)}`, 'P&L neto'] : [v, 'trades']}
+            />
+            <Bar dataKey="pnl" barSize={22} radius={[3, 3, 0, 0]}>
+              {data.map((d, i) => (
+                <Cell key={i} fill={d.n === 0 ? '#1f2937' : d.pnl >= 0 ? '#10b981' : '#ef4444'} fillOpacity={0.85} />
+              ))}
+            </Bar>
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="text-[10px] text-gray-600">
+        P&L neto agrupado por la media hora ET en la que ENTRÓ el trade. El edge intradía se concentra
+        históricamente en la apertura (E.1) — esta vista lo verifica con tus trades reales.
+      </p>
     </div>
   )
 }
@@ -403,7 +534,7 @@ function StrategySummary({ trades, selected, onSelect }: {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-type TabId = 'trades' | 'pnl' | 'analysis'
+type TabId = 'trades' | 'pnl' | 'hourly' | 'analysis'
 
 export default function DataTabs({ trades, analysis, newTradeId, isLive }: {
   trades:      Trade[]
@@ -451,6 +582,7 @@ export default function DataTabs({ trades, analysis, newTradeId, isLive }: {
   const tabs: { id: TabId; label: string; count: number }[] = [
     { id: 'trades',   label: 'Trades',       count: filteredTrades.length },
     { id: 'pnl',      label: 'P&L',          count: filteredTrades.filter(t => t.pnl != null).length },
+    { id: 'hourly',   label: 'Horario',      count: filteredTrades.filter(t => t.pnl != null).length },
     { id: 'analysis', label: 'Analysis Log', count: filteredAnalysis.length },
   ]
 
@@ -502,6 +634,7 @@ export default function DataTabs({ trades, analysis, newTradeId, isLive }: {
         </>
       )}
       {tab === 'pnl'      && <PnLChart trades={filteredTrades} />}
+      {tab === 'hourly'   && <HourlyPnL trades={filteredTrades} />}
       {tab === 'analysis' && <AnalysisLog entries={filteredAnalysis} />}
     </div>
   )

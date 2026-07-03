@@ -1,5 +1,5 @@
 import { createSupabase } from '@/lib/supabase'
-import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState, SessionStateRow, ShadowSignal, PnlPoint, StrategyRanking, MarketCondition, StrategyRegistry, MarketContext, MarketPattern, MarketHypothesis, EmergingLabel, MarketIntel } from '@/lib/supabase'
+import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState, SessionStateRow, ShadowSignal, ShadowAccum, PnlPoint, StrategyRanking, MarketCondition, StrategyRegistry, MarketContext, MarketPattern, MarketHypothesis, EmergingLabel, MarketIntel } from '@/lib/supabase'
 import TradingPanel from '@/components/TradingPanel'
 import MarketStatus from '@/components/MarketStatus'
 
@@ -23,6 +23,7 @@ export default async function Page({
   let alpacaState:  AlpacaState | null  = null
   let sessionState: SessionStateRow | null = null
   let shadowSignals: ShadowSignal[]     = []
+  let shadowAccum:  ShadowAccum[]       = []
   let pnlHistory:   PnlPoint[]          = []
   let ranking:      StrategyRanking[]   = []
   let conditions:   MarketCondition[]   = []
@@ -35,7 +36,7 @@ export default async function Page({
 
   try {
     const sb = createSupabase()
-    const [tradesRes, analysisRes, agentsRes, championRes, alpacaStateRes, sessionStateRes, shadowRes, pnlRes, rankingRes, conditionsRes, registryRes, miCtxRes, miPatRes, miHypRes, miEmgRes, miIntelRes] = await Promise.all([
+    const [tradesRes, analysisRes, agentsRes, championRes, alpacaStateRes, sessionStateRes, shadowRes, shadowAccumRes, pnlRes, rankingRes, conditionsRes, registryRes, miCtxRes, miPatRes, miHypRes, miEmgRes, miIntelRes] = await Promise.all([
       sb.from('trades').select('*')
         .gte('created_at', fromDate).lte('created_at', toDate)
         .order('created_at', { ascending: false }),
@@ -49,6 +50,8 @@ export default async function Page({
       sb.from('shadow_signals').select('*')
         .gte('created_at', fromDate).lte('created_at', toDate)
         .order('created_at', { ascending: false }).limit(500),
+      // C.4 — outcomes shadow acumulados (misma fuente que MI y memoria)
+      sb.from('v_shadow_accumulated').select('*'),
       // Performance view: P&L realizado de TODA la vida de la cuenta (no filtrado por from/to);
       // fuente = trades (reconciliada con broker), no session_memory
       sb.from('trades')
@@ -73,6 +76,7 @@ export default async function Page({
     alpacaState   = (alpacaStateRes.data  ?? null) as AlpacaState | null
     sessionState  = (sessionStateRes.data ?? null) as SessionStateRow | null
     shadowSignals = (shadowRes.data       ?? []) as ShadowSignal[]
+    shadowAccum   = (shadowAccumRes.data  ?? []) as ShadowAccum[]
     pnlHistory    = (pnlRes.data          ?? []) as PnlPoint[]
     ranking       = (rankingRes.data      ?? []) as StrategyRanking[]
     conditions    = (conditionsRes.data   ?? []) as MarketCondition[]
@@ -108,6 +112,7 @@ export default async function Page({
           alpacaState={alpacaState}
           sessionState={sessionState}
           shadowSignals={shadowSignals}
+          shadowAccum={shadowAccum}
           pnlHistory={pnlHistory}
           ranking={ranking}
           conditions={conditions}

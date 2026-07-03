@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import { createSupabase } from '@/lib/supabase'
-import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState, SessionStateRow, ShadowSignal, PnlPoint, StrategyRanking, MarketCondition, StrategyRegistry, MarketContext, MarketPattern, MarketHypothesis, EmergingLabel, MarketIntel } from '@/lib/supabase'
+import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState, SessionStateRow, ShadowSignal, ShadowAccum, PnlPoint, StrategyRanking, MarketCondition, StrategyRegistry, MarketContext, MarketPattern, MarketHypothesis, EmergingLabel, MarketIntel } from '@/lib/supabase'
 import AccountSummary from './AccountSummary'
 import PerformanceCard from './PerformanceCard'
 import AgentGrid from './AgentGrid'
 import ChampionCard from './ChampionCard'
 import DataTabs from './DataTabs'
 import MarketCalendarCard from './MarketCalendarCard'
-import SessionGatesCard from './SessionGatesCard'
+import LiveSessionPanel from './LiveSessionPanel'
 import ShadowPanel from './ShadowPanel'
 import StrategyRankingCard from './StrategyRankingCard'
 import MarketConditionsCard from './MarketConditionsCard'
@@ -82,6 +82,7 @@ export default function TradingPanel({
   alpacaState,
   sessionState,
   shadowSignals,
+  shadowAccum,
   pnlHistory,
   ranking,
   conditions,
@@ -99,6 +100,7 @@ export default function TradingPanel({
   alpacaState:     AlpacaState | null
   sessionState:    SessionStateRow | null
   shadowSignals:   ShadowSignal[]
+  shadowAccum:     ShadowAccum[]
   pnlHistory:      PnlPoint[]
   ranking:         StrategyRanking[]
   conditions:      MarketCondition[]
@@ -185,10 +187,13 @@ export default function TradingPanel({
     <>
       {toast && <TradeToast trade={toast} onClose={() => setToast(null)} />}
 
-      {/* Niveles 1–3: Portfolio · Métricas · P&L por sistema */}
+      {/* 1 · Qué pasa AHORA: posición (ladder), gates, GT, pulso del loop */}
+      <LiveSessionPanel sessionState={sessionState} alpacaState={alpacaState} trades={trades} />
+
+      {/* 2 · Cuenta: portfolio · hit ratio · P&L por sistema · posiciones live */}
       <AccountSummary trades={trades} alpacaState={alpacaState} />
 
-      {/* Nivel 3b: Performance histórica de la cuenta (vista Asset Management) */}
+      {/* 3 · Performance histórica (equity por sesión, KPIs) */}
       <section>
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
           Performance
@@ -196,47 +201,36 @@ export default function TradingPanel({
         <PerformanceCard pnlHistory={pnlHistory} />
       </section>
 
-      {/* Niveles 4-5: Agente + Active Strategy (izq) · Market Calendar (der, full height) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 space-y-8">
-          <section>
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
-              Agent
-            </h2>
-            <AgentGrid agents={liveAgents} />
-          </section>
-          <section>
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
-              Active strategy
-            </h2>
-            <ChampionCard champion={champion} trades={trades} isBestPerformer={champion != null} />
-          </section>
-        </div>
-        <div className="lg:h-full">
-          <MarketCalendarCard />
-        </div>
-      </div>
-
-      {/* Nivel 5b (v3.0): Gates del día · Shadow validation */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <SessionGatesCard sessionState={sessionState} />
-        <ShadowPanel signals={shadowSignals} registry={registry} />
-      </div>
-
-      {/* Nivel 5c (Fase 3): Ranking de estrategias · Condiciones de mercado */}
+      {/* 4 · LOS TRADES: tabla expandible · P&L · horario · analysis log */}
       <section>
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
-          Aprendizaje continuo
+          Trades
         </h2>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2">
-            <StrategyRankingCard ranking={ranking} />
+        <DataTabs
+          trades={trades}
+          analysis={initialAnalysis}
+          newTradeId={newTradeId}
+          isLive={isLive}
+        />
+      </section>
+
+      {/* 5 · Validación y aprendizaje: shadows con outcomes reales · ranking · condiciones */}
+      <section>
+        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+          Validación & aprendizaje
+        </h2>
+        <div className="space-y-4">
+          <ShadowPanel signals={shadowSignals} accum={shadowAccum} registry={registry} />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-2">
+              <StrategyRankingCard ranking={ranking} />
+            </div>
+            <MarketConditionsCard conditions={conditions} />
           </div>
-          <MarketConditionsCard conditions={conditions} />
         </div>
       </section>
 
-      {/* Nivel 5d (Fase 3.1): Market Intelligence — contexto, patrones, hipótesis (advisory) */}
+      {/* 6 · Market Intelligence — contexto, patrones, hipótesis (advisory) */}
       <section>
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
           Market Intelligence
@@ -250,14 +244,16 @@ export default function TradingPanel({
         />
       </section>
 
-      {/* Nivel 6: Trades · P&L · Analysis Log */}
+      {/* 7 · Infraestructura: agente · estrategia activa · calendario */}
       <section>
-        <DataTabs
-          trades={trades}
-          analysis={initialAnalysis}
-          newTradeId={newTradeId}
-          isLive={isLive}
-        />
+        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+          Infraestructura
+        </h2>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <AgentGrid agents={liveAgents} />
+          <ChampionCard champion={champion} trades={trades} isBestPerformer={champion != null} />
+          <MarketCalendarCard />
+        </div>
       </section>
     </>
   )
