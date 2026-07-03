@@ -37,7 +37,7 @@
 | **F.1** Limpieza memorias | Trim "En validación" + fvg experiment en /load-memory | ✅ HECHO 07-01 |
 | **F.2** Mejoras técnicas | `trades.strategy_id NOT NULL`; DataTabs filtro/agrupación por estrategia | ✅ HECHO 07-01 — NOT NULL aplicado (migración `f2a_...`); DataTabs con selector + chips por estrategia (pendiente deploy a main) |
 | **G** Gated por evidencia | Promociones, champion, automatización MI, ajustes ranking, FVG | Guardrails permanentes — no son tareas |
-| **H · Golden Ticket** | Ingeniería inversa de principios Renaissance: fábrica de señales débiles + protocolo anti-overfit (FDR/walk-forward) + ensamble → pipeline shadow existente | 🟢 GT-0+GT-1+GT-2 HECHOS 07-03 → `docs/gt_batch1_2026-07-03.md`. Datos: 27y diario + ~1M barras 1-min. Lote 1: 51 hipótesis → FDR → **2 candidatas OOS** (gt_rsi2d PF 2.67, gt_3down PF 1.53; solape 61%). 44 anti-hallazgos. **Pendiente OK usuario**: shadow de las 2 candidatas · Lote 2 intradía · GT-3 ensamble |
+| **H · Golden Ticket** | Ingeniería inversa de principios Renaissance: fábrica de señales débiles + protocolo anti-overfit (FDR/walk-forward) + ensamble → pipeline shadow existente | 🟢 GT-0/1/2 HECHOS + **SHADOW ACTIVADO 07-03**: `gt_rsi2d_v1` (OOS PF 2.67) + `gt_3down_v1` (PF 1.53) en registry; señal en /pre-market 4b, outcome o2c en /post-close, claves `gtr2d`/`gt3d` (7 canónicas). Datos: 27y diario + **2.02M barras 1-min** (2016-26). 44 anti-hallazgos → `docs/gt_batch1_2026-07-03.md`. ⏭️ Lote 2 intradía · GT-3 ensamble (⛔ hasta ≥3 señales no-solapadas) |
 
 ## Bloqueadores actuales
 

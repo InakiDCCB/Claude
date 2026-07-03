@@ -5,6 +5,7 @@ import type { ShadowSignal, StrategyRegistry } from '@/lib/supabase'
 // strategy_id canónico -> código `sys` que usa shadow_signals
 const ID_TO_SYS: Record<string, string> = {
   rsi2_v3: 'RSI2', swp_v3: 'SWP', gapf_v3: 'GAPF', swp_short_v3: 'SWPS', ob_v3: 'OB',
+  gt_rsi2d_v1: 'GTR2D', gt_3down_v1: 'GT3D',
 }
 
 const STATUS_STYLE: Record<string, string> = {
