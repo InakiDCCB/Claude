@@ -77,6 +77,23 @@ def ob_shadow(day, n=2, tp_r=2.0):
     return out
 
 
+def obnb_shadow(day, n=2, tp_r=2.0):
+    """OBNB — OB filtrado SIN entradas post-BOS (E.1: subset post-BOS tóxico, ≤25% hit).
+    Motor run_ob_conf (tag de carácter choch/bos/first); sistema shadow propio para el
+    A/B contra OB crudo en v_shadow_accumulated."""
+    from smc_confluence_backtest import run_ob_conf
+    out = []
+    for t in run_ob_conf([day], n=n, tp_r=tp_r):
+        if t["kind"] == "bos":
+            continue
+        tp = round(t["entry"] + tp_r * (t["entry"] - t["sl"]), 2)
+        out.append({"sys": "OBNB", "dir": "long", "date": t["day"],
+                    "entry": round(t["entry"], 2), "sl": round(t["sl"], 2), "tp": tp,
+                    "kz": t["kz"], "kind": t["kind"],
+                    "outcome": t["xt"], "pnl_ps": round(t["pnl"], 3)})
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("date")
@@ -84,16 +101,19 @@ def main():
     ap.add_argument("--n", type=int, default=2)
     ap.add_argument("--tp", type=float, default=2.0)
     a = ap.parse_args()
-    out = ob_shadow(day_obj(a.date), n=a.n, tp_r=a.tp)
+    day = day_obj(a.date)
+    out = ob_shadow(day, n=a.n, tp_r=a.tp) + obnb_shadow(day, n=a.n, tp_r=a.tp)
     if a.json:
         print(json.dumps(out, ensure_ascii=False, indent=2))
         return
-    print(f"OB shadow {a.date}: {len(out)} señales")
-    for o in out:
-        print(f"  entry={o['entry']:.2f} sl={o['sl']:.2f} tp={o['tp']:.2f} -> {o['outcome']:<4} pnl={o['pnl_ps']:+.2f}/sh")
-    if out:
-        w = sum(1 for o in out if o["pnl_ps"] > 0)
-        print(f"  hit {w}/{len(out)} = {100*w/len(out):.0f}%   pnl {sum(o['pnl_ps'] for o in out):+.2f}/sh")
+    for sysname in ("OB", "OBNB"):
+        rows = [o for o in out if o["sys"] == sysname]
+        print(f"{sysname} shadow {a.date}: {len(rows)} señales")
+        for o in rows:
+            print(f"  entry={o['entry']:.2f} sl={o['sl']:.2f} tp={o['tp']:.2f} -> {o['outcome']:<4} pnl={o['pnl_ps']:+.2f}/sh")
+        if rows:
+            w = sum(1 for o in rows if o["pnl_ps"] > 0)
+            print(f"  hit {w}/{len(rows)} = {100*w/len(rows):.0f}%   pnl {sum(o['pnl_ps'] for o in rows):+.2f}/sh")
 
 
 if __name__ == "__main__":

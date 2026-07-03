@@ -215,7 +215,7 @@ function LivePositions({ alpacaState }: { alpacaState: AlpacaState | null }) {
     <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4">
       <div className="flex items-center justify-between mb-3">
         <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Live Positions</p>
-        <span className={`text-[10px] font-mono ${syncColor}`}>● {syncLabel}</span>
+        <span suppressHydrationWarning className={`text-[10px] font-mono ${syncColor}`}>● {syncLabel}</span>
       </div>
 
       {positions.length === 0 ? (

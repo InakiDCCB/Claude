@@ -47,7 +47,8 @@ def run_ob_conf(days, n=2, expiry=60, tp_r=2.0):
                     if slp < entry:
                         xi, xp, xt = simulate(day, i, entry, slp, ("r", tp_r))
                         trades.append({"day": day.date, "kind": pending["kind"], "kz": pending["kz"],
-                                       "xt": xt, "pnl": xp - entry})
+                                       "xt": xt, "pnl": xp - entry,
+                                       "entry": entry, "sl": slp, "ei": i})
                         pos_until = xi
                     pending = None
                     continue
