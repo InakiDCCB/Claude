@@ -49,12 +49,14 @@ cd dashboard && npx tsc --noEmit # type-check without building
 
 **Data flow:** `app/page.tsx` (server) fetches all Supabase data → passes as props to `TradingPanel` (client root) → distributed to child components.
 
-**Dashboard layout (7 levels):**
-1–3. Portfolio · Metrics · P&L by System → `AccountSummary`
-3b. Performance (equity curve por sesión, KPIs inception/MTD/maxDD/PF, sesiones recientes) → `PerformanceCard` (deriva de `trades` reconciliada con broker — NO de `session_memory`, que es diario cualitativo)
-4. Agent status → `AgentGrid`
-5. Strategies grid (champion) → `ChampionCard`
-6. Trades · P&L · Analysis Log → `DataTabs`
+**Dashboard layout (rediseño 2026-07-03, orden por prioridad de lectura):**
+1. Sesión de hoy → `LiveSessionPanel` (posición como ladder SL/entry/TP + precio, gates del día, chip Golden Ticket, pulso del loop desde `state.cycle_log` v3.0.6, trades de la sesión)
+2. Cuenta → `AccountSummary` (portfolio, hit ratio, P&L por sistema, posiciones live)
+3. Performance → `PerformanceCard` (equity por sesión, KPIs inception/MTD/maxDD/PF — deriva de `trades` reconciliada con broker, NO de `session_memory`)
+4. Trades → `DataTabs` (tabla expandible con notas del agente, columna Salida TP/SL/TIME/MANUAL, filtro por estrategia, P&L, pestaña Horario por franja 30-min ET, analysis log)
+5. Validación & aprendizaje → `ShadowPanel` (outcomes reales desde `v_shadow_accumulated`: WR, TP/SL/TIME, P&L sombra) + `StrategyRankingCard` + `MarketConditionsCard`
+6. Market Intelligence → `MarketIntelligencePanel` (contexto, patrones, hipótesis — advisory)
+7. Infraestructura → `AgentGrid` + `ChampionCard` + `MarketCalendarCard`
 
 **Key files:**
 - `app/page.tsx` — server component; parallel-fetches trades, analysis_log, agent_status, champion_strategy, alpaca_state filtered by date range (`from`/`to` search params)
@@ -71,9 +73,15 @@ cd dashboard && npx tsc --noEmit # type-check without building
 
 | Component | Role |
 |---|---|
-| `TradingPanel.tsx` | Root client component; owns trade-event toast notifications; Supabase realtime subscription |
-| `AccountSummary.tsx` | Reads live Alpaca data from `alpaca_state` table; displays equity, cash, buying power, day P&L as stat cards |
-| `DataTabs.tsx` | Tabbed interface for trades & analysis; line charts (Recharts); CSV export |
+| `TradingPanel.tsx` | Root client component; owns trade-event toast notifications; Supabase realtime subscription; section ordering |
+| `LiveSessionPanel.tsx` | Today's session: position ladder (SL/entry/TP + live price + R), daily gates, Golden Ticket chip (`state.gt`), loop pulse from `state.cycle_log` (cadence bars + last-cycle age), session trades strip |
+| `AccountSummary.tsx` | Reads live Alpaca data from `alpaca_state` table; equity, cash, buying power, day P&L, P&L by system |
+| `PerformanceCard.tsx` | Equity curve per session + KPIs (inception/MTD/maxDD/PF); derived from reconciled `trades` |
+| `DataTabs.tsx` | Tabbed trades & analysis: expandable rows with agent notes, exit-type column, strategy filter + summary chips, hourly P&L tab (30-min ET buckets), CSV export |
+| `ShadowPanel.tsx` | Shadow strategies from `strategy_registry` (status=shadow) + real outcomes from `v_shadow_accumulated` (WR, TP/SL/TIME bar, shadow P&L $/sh); `ID_TO_SYS` maps strategy_id → sys code (incl. GTR2D/GT3D) |
+| `StrategyRankingCard.tsx` | `v_strategy_ranking` — score/tier per canonical strategy |
+| `MarketConditionsCard.tsx` | `market_conditions` per session (liquidez/volatilidad/régimen) |
+| `MarketIntelligencePanel.tsx` | Fase 3.1: context badges, patterns, hypotheses, emerging labels (advisory) |
 | `MarketStatus.tsx` | ET clock + market open/closed indicator; pings `/api/ping` every 30s for latency |
 | `ChampionCard.tsx` | Displays active strategy config from `champion_strategy` table |
 | `AgentGrid.tsx` | Lists agents from `agent_status`; renders status pill (running/idle/error/disconnected) + optional progress bar from `metadata.progress` |
@@ -125,9 +133,9 @@ Skills live in `~/.claude/commands/` (local git-only repo, no remote). Invoke wi
 | Skill | Purpose | Affects loop? |
 |---|---|---|
 | `/load-memory` | Carga memoria: default = modo trading lean (7 reglas); `full` = research | No — contexto |
-| `/pre-market` | 9:30–9:55 ET: seeds incrementales + niveles ayer + vol30_baseline + gates conocibles → `session_state` | Yes — seeds state |
-| `/post-close` | ≥16:00 ET: niveles mañana (`volume_profiles`) + resolución shadows (validación 5 sesiones) + **aprendizaje** (`upsert_market_condition` + `refresh_strategy_performance` → ranking) + `session_memory` | Yes — gates de mañana + ranking |
-| `/situational` | D-1 → D multi-day bias analysis → writes `situational_analysis` | **No — informational only**, manual trigger any time |
+| `/pre-market` | 9:30–9:55 ET: seeds incrementales + niveles ayer + vol30_baseline + gates conocibles → `session_state`; paso 4b (desde 07-03): señales Golden Ticket GTR2D/GT3D desde closes diarios | Yes — seeds state |
+| `/post-close` | ≥16:00 ET: niveles mañana (`volume_profiles`) + resolución shadows (7 claves canónicas, incl. GT o2c) + **aprendizaje** (condición + ranking) + **Market Intelligence + situacional v2 automático** (paso 4d) + snapshots backtest viernes (4e) + `session_memory` | Yes — gates de mañana + ranking |
+| `/situational` | D-1 → D multi-day bias analysis → writes `situational_analysis`. **INTEGRADO a /post-close desde 07-02** (snapshot automático + predicción D+1 evaluada por el engine); la invocación manual es ad-hoc y NO se evalúa | **No — informational only** |
 
 ## Ethical Constraints (permanent)
 
