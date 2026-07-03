@@ -37,7 +37,7 @@
 | **F.1** Limpieza memorias | Trim "En validación" + fvg experiment en /load-memory | ✅ HECHO 07-01 |
 | **F.2** Mejoras técnicas | `trades.strategy_id NOT NULL`; DataTabs filtro/agrupación por estrategia | ✅ HECHO 07-01 — NOT NULL aplicado (migración `f2a_...`); DataTabs con selector + chips por estrategia (pendiente deploy a main) |
 | **G** Gated por evidencia | Promociones, champion, automatización MI, ajustes ranking, FVG | Guardrails permanentes — no son tareas |
-| **H · Golden Ticket** | Ingeniería inversa de principios Renaissance: fábrica de señales débiles + protocolo anti-overfit (FDR/walk-forward) + ensamble → pipeline shadow existente | 🔬 Research HECHO 07-02 → `docs/specs/golden_ticket_research.md`. **Implementación NO iniciada** (decisión usuario: próxima sesión). 4 decisiones abiertas en §5. Hitos M1-M3 en vez de "igualar 66%" (no comprometible — ver §3) |
+| **H · Golden Ticket** | Ingeniería inversa de principios Renaissance: fábrica de señales débiles + protocolo anti-overfit (FDR/walk-forward) + ensamble → pipeline shadow existente | 🟢 GT-0+GT-1+GT-2 HECHOS 07-03 → `docs/gt_batch1_2026-07-03.md`. Datos: 27y diario + ~1M barras 1-min. Lote 1: 51 hipótesis → FDR → **2 candidatas OOS** (gt_rsi2d PF 2.67, gt_3down PF 1.53; solape 61%). 44 anti-hallazgos. **Pendiente OK usuario**: shadow de las 2 candidatas · Lote 2 intradía · GT-3 ensamble |
 
 ## Bloqueadores actuales
 
