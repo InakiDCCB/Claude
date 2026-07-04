@@ -37,6 +37,7 @@ function PositionLadder({ pos, currentPrice, unrealized }: {
   pos: SessionPosition; currentPrice: number | null; unrealized: number | null
 }) {
   const entry = pos.entry, tp = pos.tp, sl = pos.sl
+  const label = pos.sys ?? pos.strategy_id ?? '?'
   if (entry == null || tp == null || sl == null) {
     return <p className="text-xs text-gray-500">Posición sin niveles completos: {JSON.stringify(pos)}</p>
   }
@@ -59,7 +60,7 @@ function PositionLadder({ pos, currentPrice, unrealized }: {
     <div>
       <div className="flex items-baseline justify-between mb-2">
         <p className="text-sm font-semibold text-white">
-          {pos.sys ?? '?'}
+          {label}
           <span className={`ml-2 text-[10px] font-semibold ${isLong ? 'text-emerald-400' : 'text-red-400'}`}>
             {isLong ? 'LONG' : 'SHORT'}
           </span>
@@ -242,7 +243,10 @@ export default function LiveSessionPanel({ sessionState, alpacaState, trades }: 
     )
   }
 
-  const pos      = st.position ?? null
+  // v3.1.0: lista multi-posición; fallback al objeto único legacy (v3.0)
+  const positions = (st.positions && st.positions.length > 0)
+    ? st.positions
+    : st.position ? [st.position] : []
   const alpacaPos = alpacaState?.positions?.find(p => p.symbol === 'QQQ') ?? null
   const curPrice  = alpacaPos?.price ?? st.QQQ?.last_close ?? null
   const c4        = st.c4 ?? {}
@@ -255,7 +259,7 @@ export default function LiveSessionPanel({ sessionState, alpacaState, trades }: 
       detail: g?.rvol30 != null ? `rvol ${fmt(g.rvol30)}` : undefined },
     { label: 'S3 VWAPPB', on: g?.computed_1030 ? (g.vwappb_on ?? false) : null,
       detail: g?.xvwap60 != null ? `xvwap ${g.xvwap60}` : undefined },
-    { label: 'S1 RSI2 sh', on: g?.computed_10 ? (g.rsi2_on ?? false) : null, detail: g?.open_loc ?? undefined },
+    { label: 'S1 RSI2', on: g?.computed_10 ? (g.rsi2_on ?? false) : null, detail: g?.open_loc ?? undefined },
     { label: 'S5 GAPF sh', on: g?.computed_10 ? (g.gapf_on ?? false) : null,
       detail: g?.gap_pct != null ? `gap ${fmt(g.gap_pct)}%` : undefined },
   ]
@@ -277,9 +281,21 @@ export default function LiveSessionPanel({ sessionState, alpacaState, trades }: 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-x-8 gap-y-6">
         {/* Col 1: posición + trades de hoy */}
         <div>
-          <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Posición</p>
-          {pos ? (
-            <PositionLadder pos={pos} currentPrice={curPrice} unrealized={alpacaPos?.pl ?? null} />
+          <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+            {positions.length > 1 ? `Posiciones (${positions.length}/4)` : 'Posición'}
+          </p>
+          {positions.length > 0 ? (
+            <div className="space-y-4">
+              {positions.map((p, i) => (
+                <PositionLadder key={p.oco_id ?? i} pos={p} currentPrice={curPrice}
+                  unrealized={positions.length === 1 ? (alpacaPos?.pl ?? null) : null} />
+              ))}
+              {positions.length > 1 && alpacaPos?.pl != null && (
+                <p className={`text-[11px] font-mono ${alpacaPos.pl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  unrealized total {alpacaPos.pl >= 0 ? '+' : ''}${alpacaPos.pl.toFixed(2)}
+                </p>
+              )}
+            </div>
           ) : (
             <div className="flex items-center gap-2 text-sm text-gray-400">
               <span className="w-2 h-2 rounded-full bg-gray-600" /> Flat — sin posición abierta

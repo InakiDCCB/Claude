@@ -91,9 +91,12 @@ export type SessionGates = {
   computed_1030?: boolean
 }
 
-// Posición abierta que escribe el loop (STEP 7): null cuando flat
+// Posición abierta que escribe el loop (STEP 7). v3.0: objeto único en state.position;
+// v3.1.0: lista en state.positions (multi-posición, ≤1 por estrategia).
 export type SessionPosition = {
   sys?: string
+  strategy_id?: string
+  dir?: string
   qty?: number
   entry?: number
   tp?: number
@@ -118,7 +121,8 @@ export type SessionStateRow = {
     gates?: SessionGates
     c4?: Record<string, number>
     fvg?: { fills_today?: number; active?: Record<string, unknown> | null }
-    position?: SessionPosition | null
+    position?: SessionPosition | null            // legacy v3.0 (objeto único)
+    positions?: SessionPosition[] | null         // v3.1.0 (lista multi-posición)
     session_low?: number
     session_high?: number
     QQQ?: { vwap?: number; last_close?: number; atr1m?: number; [k: string]: unknown }
