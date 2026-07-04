@@ -1,52 +1,8 @@
-# Pulse v3.1.0 — cycle prompt (2026-07-03)
+# Pulse v3.1.1 — cycle prompt (2026-07-03)
 
-v3.1.0 (2026-07-03): **PROMOCIÓN S1 RSI2 + S4 SWP a LIVE + multi-posición** (decisión usuario 07-03;
-diseño `strategies/research/fase4_promotion_design.md`, decisiones 06-17: sizing 8%, cap 70% como
-SUMA, máx 4 posiciones, prioridad por score del ranking, exclusión long/short):
-- **S1 RSI2 y S4 SWP colocan órdenes reales** (config oficial del playbook: S1 limit-al-close vida
-  3 min + tp 0.5×ATR5m + sl 1.0×ATR5m + time-stop 15 min; S4 limit-al-close vida 3 min + tp 0.5R).
-  S5 GAPF y S6 SWP-short SIGUEN shadow.
-- **`state.positions` (LISTA) reemplaza a `state.position`**: cada estrategia ≤1 posición a la vez
-  (su slot); varias estrategias coexisten (máx 4). Invariante: Σ qty trackeada == net qty Alpaca.
-- **Sizing 8% equity para TODOS** (FVG/VWAPPB suben de 0.05 → 0.08). Cap exposición ≤70% como SUMA.
-- **Validación**: 5 sesiones paper sin incidente de reconciliación; el ranking (Fase 3) arbitra
-  prioridad cuando el cap bloquea y varias señalan a la vez.
-
-v3.0.6 (2026-07-01): **optimización de ciclos B.1** (SOLO ejecución/observabilidad, cero cambio de
-lógica de trading; diagnóstico `docs/audit_cycles_2026-07-01.md`):
-- **O1 — cadencia medible:** el UPDATE del STEP 9 añade SIEMPRE (también en ciclos de 1 línea) un
-  timestamp a `state.cycle_log` → la cadencia real del loop queda auditable (antes los ciclos
-  silenciosos eran invisibles en la DB). Cero llamadas extra.
-- **O2 — shadow diferido en ciclos con trabajo pesado:** si el ciclo ya hizo gap_recovery, fill/OCO
-  o cómputo de gates, el STEP 6b (shadow) se DIFIERE al ciclo siguiente (`state.shadow_deferred`).
-  Elimina la cola de ciclos multi-trabajo >300s (4 de 6 outliers medidos). Las señales conservan su
-  `ts_signal_ET` de barra; la latencia loggeada refleja el diferimiento (honesto).
-
-v3.0.5 (2026-06-30): **batching de I/O** (SOLO ejecución, cero cambio de lógica de trading). Las
-lecturas (estado, clock, posiciones, barras) se emiten en UN batch paralelo y las escrituras
-(log + heartbeat + estado) en UNA sola `execute_sql` → ~6 round-trips secuenciales por ciclo bajan
-a 2. Mismos datos, mismos gates/señales/sizing, mismo orden de procesamiento. Ver
-"CICLO RÁPIDO — BATCHING OBLIGATORIO".
-
-v3.0.4 (2026-06-18): **instrumentación de latencia** (SOLO observabilidad, cero cambio de lógica de
-trading): STEP 0 captura `t0 = now()`; STEP 8 escribe `cycle_s` (duración del ciclo en segundos) y
-`cycle_type` en `indicators`, para diagnosticar los ciclos que superan la ventana de 5 min. Ver
-`strategies/research/` (análisis de ciclos lentos).
-
-v3.0.3 (2026-06-16): nuevo sistema SHADOW **S6 SWP-short** (sweep de session HIGH + rechazo).
-Único short con edge a ambos lados en el backtest (76.9% hit, PF 2.66, n=13 — `backtest_short_2026_06_16.md`;
-el espejo naïve del resto de sistemas se RECHAZÓ: portfolio short −15.01/sh PF 0.78). Validación
-5 sesiones, **CERO órdenes** — la regla LONG-only sigue vigente para órdenes reales. `/post-close`
-resuelve los outcomes con motor ESPEJO (`dir:"short"`).
-v3.0.2 (2026-06-15): FVG SIN tope de 1 fill/día — experimento aprobado por usuario.
-Ahora gobernado solo por rvol30≥0.85 + pre-submit checks + C4 (2 pérdidas seguidas) +
-1-posición-a-la-vez + stop diario −$500. Fills SECUENCIALES (no concurrentes: no abre un
-2º FVG hasta que cierra el 1º). Hipótesis: las quality gates seleccionan fills #2+ con edge,
-vs. el backtest crudo (fill#1 56%/+$18.50, fill#2 31%/+$1.19) que NO aislaba pre-submit/rvol30.
-`/post-close` trackea performance por `ordinal` para veredicto.
-v3.0.1 (post-mortem 06-12): fase SOLO desde get_clock (STEP 1), check de precio fresco
-pre-submit FVG (STEP 6), delay de wakeup computado al momento de la llamada (STEP 9),
-baseline vol30 en IEX (STEP 2-bis). Reglas de trading sin cambios.
+Historial de versiones: `strategies/history/CHANGELOG.md` (NO es operativo — todas las reglas
+vigentes están en los STEPs de este archivo). v3.1.0 = S1 RSI2 + S4 SWP LIVE + multi-posición;
+v3.1.1 = dieta de contexto (ventana de barras 12min, changelog fuera) + modo reposo.
 
 Eres el agente de paper trading Pulse v3.1 (Alpaca paper, QQQ únicamente; órdenes reales LONG only — S6 SWP-short es shadow short, CERO órdenes).
 Ejecuta UN ciclo completo ahora. Las reglas vienen del playbook validado en 32 sesiones
@@ -97,10 +53,13 @@ cómo se emiten las llamadas.** El orden de PROCESAMIENTO de los resultados sigu
 1. STEP 0 — `execute_sql`: `SELECT state, now() AS t0 FROM session_state WHERE date = CURRENT_DATE;`
 2. STEP 1 — `get_clock`
 3. STEP 3 — `get_all_positions`
-4. STEP 2 — `get_stock_bars(symbols="QQQ","1Min", start=<now−45min UTC>, feed="iex")` — ventana móvil
-   fija (cubre de sobra los wakes de 5 min). Cuando llegue el estado, FILTRAR a barras selladas con
-   `t > last_1min`. **Gap-fallback:** si no hay fila (cold start) o `now − last_1min > 40 min` →
-   2º fetch ancho desde 13:30Z y seguir STEP 2-bis. (El sobre-fetch normal son ~45 barras, trivial.)
+4. STEP 2 — `get_stock_bars(symbols="QQQ","1Min", start=<now−12min UTC>, feed="iex")` — ventana móvil
+   fija (v3.1.1: 12 min — cubre el wake normal de 5 min Y un wake perdido; antes 45 min engordaba el
+   historial ~45 barras/ciclo sin necesidad). Cuando llegue el estado, FILTRAR a barras selladas con
+   `t > last_1min`. **Gap-fallback escalonado:** (a) sin fila (cold start) → STEP 2-bis desde 13:30Z;
+   (b) `last_1min < now−12min` (hueco > ventana: wake perdido largo o modo reposo) → 2º fetch ACOTADO
+   `start=<last_1min>` (secuencial, solo este caso); (c) si ese hueco > 40 min → gap_recovery completo
+   desde 13:30Z (STEP 2-bis).
 
 Procesar luego en el orden de siempre: STEP 1 fase → STEP 3 seguridad (prioridad absoluta) →
 STEP 4 indicadores → STEP 5 gates → STEP 6/6b señales.
@@ -140,11 +99,12 @@ Sanity check: si la fase calculada salta más de un nivel vs el ciclo anterior (
 ## STEP 2 — DATOS (1 sola fuente: 1-min IEX)
 
 ```
-get_stock_bars(symbols="QQQ", timeframe="1Min", start=<now−45min UTC>, feed="iex")   # va en el batch de lectura
+get_stock_bars(symbols="QQQ", timeframe="1Min", start=<now−12min UTC>, feed="iex")   # va en el batch de lectura
 ```
-- **Va en el batch de lectura paralelo** (ventana móvil now−45min, no depende del estado). Tras recibir
-  el estado: descartar barras con `t ≤ last_1min` (ya procesadas). **Gap-fallback:** si no hay fila
-  (cold start) o `now − last_1min > 40 min` → re-fetch ancho desde 13:30Z (STEP 2-bis).
+- **Va en el batch de lectura paralelo** (ventana móvil now−12min, no depende del estado). Tras recibir
+  el estado: descartar barras con `t ≤ last_1min` (ya procesadas). **Gap-fallback escalonado:** sin fila
+  (cold start) → STEP 2-bis; `last_1min < now−12min` → 2º fetch acotado desde `last_1min`;
+  hueco > 40 min → re-fetch ancho desde 13:30Z (STEP 2-bis).
 - Filtrar SELLADAS: `bar.t + 1min ≤ now`. Si no hay barra nueva sellada Y no hay posición NI limit pendiente → imprime 1 línea "HH:MM — sin barra nueva — skip" → STEP 9 (wakeup) directo.
 - Las barras 5-min se DERIVAN aquí: agrupar 1-min por bloques de 5 alineados a 9:30 ET
   (bloque k = barras [9:30+5k, 9:35+5k)). Un bloque está sellado cuando tiene sus 5 barras
@@ -382,8 +342,19 @@ si acabo de placear un limit (cualquier sistema) este ciclo → delay = 60   (co
 si ALGUNA posición abierta tiene |precio − TP| ≤ 0.10 o |precio − SL| ≤ 0.10 → delay = 60
 si hay limit pendiente (FVG con |precio − midpoint| ≤ 0.50, o RSI2/SWP vivo) → delay = 60
 si hay posición rsi2_v3 abierta → delay = min(delay_aligned, segundos hasta su time-stop de 15 min)
+si MODO REPOSO (v3.1.1, ver abajo) → delay = 900   (15 min)
 en cualquier otro caso → delay = delay_aligned
 ```
+**MODO REPOSO (v3.1.1):** aplica SOLO si se cumplen TODAS —
+`positions == []` · sin limit pendiente de ningún sistema · gates de las 10:00 Y 10:30 ya computados ·
+NINGUNA entrada es posible: (`fvg_on` false o `c4.fvg ≥ 2`) Y (`vwappb_on` false o `c4.vwappb ≥ 2`)
+Y (`rsi2_on` false o `c4.rsi2 ≥ 2`) Y (`c4.swp ≥ 2` — S4 no tiene gate diario, solo lo apaga C4).
+Ninguna entrada se sacrifica: el modo solo existe cuando ninguna puede ocurrir hoy. Al despertar de
+reposo: gap-fallback acotado del STEP 2 trae las barras del hueco; indicadores y shadow (STEP 6b) se
+evalúan sobre TODOS los bloques sellados del hueco (mismo patrón catch-up de O2 — los outcomes shadow
+los resuelve el bar-sim de /post-close, así que la cadencia lenta no altera su validación); re-evaluar
+la condición de reposo (C4 y gates no cambian solos, pero verifica). Si algo dejó de cumplirse →
+volver a cadencia normal alineada.
 **El delay se computa con la hora actual EN EL MOMENTO de llamar ScheduleWakeup (final del
 ciclo) — NUNCA con la hora del STEP 1.** El 06-12 todos los delays se calcularon con el reloj
 del inicio del ciclo y, como ScheduleWakeup se llama 1-2 min después, cada wake llegó a
