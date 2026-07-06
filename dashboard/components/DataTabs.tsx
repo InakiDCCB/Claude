@@ -171,7 +171,7 @@ function TradesTable({ trades, newTradeId }: { trades: Trade[]; newTradeId?: str
       <TableWrap>
         <thead>
           <tr>
-            {['Fecha (ET)', 'Side', 'Qty', 'Entry', 'Exit', 'Salida', 'P&L', 'Estrategia', 'Status'].map(h => (
+            {['Fecha (ET)', 'Side', 'Qty', 'Entry', 'Exit', 'Total', 'Salida', 'P&L', 'Estrategia', 'Status'].map(h => (
               <Th key={h}>{h}</Th>
             ))}
           </tr>
@@ -205,6 +205,7 @@ function TradesTable({ trades, newTradeId }: { trades: Trade[]; newTradeId?: str
                   <Td className="font-mono text-gray-300 text-xs">
                     {exitPrice != null ? `$${exitPrice.toFixed(2)}` : '—'}
                   </Td>
+                  <Td className="font-mono text-gray-400 text-xs whitespace-nowrap">${notional.toFixed(2)}</Td>
                   <Td>
                     {t.exit_type ? (
                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${EXIT_STYLE[t.exit_type] ?? 'bg-gray-700 text-gray-400'}`}>
@@ -246,7 +247,7 @@ function TradesTable({ trades, newTradeId }: { trades: Trade[]; newTradeId?: str
                 </tr>
                 {isOpen && (
                   <tr className="bg-gray-900/40">
-                    <td colSpan={9} className="px-4 py-3">
+                    <td colSpan={10} className="px-4 py-3">
                       <div className="grid grid-cols-1 sm:grid-cols-4 gap-x-6 gap-y-2 text-[11px]">
                         <div>
                           <p className="text-gray-600 uppercase text-[9px] tracking-wider mb-0.5">Orden</p>
