@@ -135,7 +135,7 @@ Skills live in `~/.claude/commands/` (local git-only repo, no remote). Invoke wi
 | `/load-memory` | Carga memoria: default = modo trading lean (7 reglas); `full` = research | No — contexto |
 | `/pre-market` | 9:30–9:55 ET: seeds incrementales + niveles ayer + vol30_baseline + gates conocibles → `session_state`; paso 4b (desde 07-03): señales Golden Ticket GTR2D/GT3D desde closes diarios | Yes — seeds state |
 | `/post-close` | ≥16:00 ET: niveles mañana (`volume_profiles`) + resolución shadows (7 claves canónicas, incl. GT o2c) + **aprendizaje** (condición + ranking) + **Market Intelligence + situacional v2 automático** (paso 4d) + snapshots backtest viernes (4e) + `session_memory` | Yes — gates de mañana + ranking |
-| `/situational` | D-1 → D multi-day bias analysis → writes `situational_analysis`. **INTEGRADO a /post-close desde 07-02** (snapshot automático + predicción D+1 evaluada por el engine); la invocación manual es ad-hoc y NO se evalúa | **No — informational only** |
+| ~~`/situational`~~ | **ELIMINADO 07-06** — integrado a /post-close 4d desde 07-02 (`situational_snapshot()` automático + predicción D+1 evaluada por el engine). El análisis ad-hoc se pide directo si hace falta | — |
 
 ## Ethical Constraints (permanent)
 
