@@ -1,5 +1,21 @@
 # Pulse — historial de versiones del cycle_prompt
 
+## v3.1.2 (2026-07-06) — keep-alive de caché + fase por deltas (blindaje anti-cierre prematuro)
+
+Respuesta al primer día de v3.1.1 con 4 LIVE: dos gaps por tokens (10:36→11:17 y 12:50→14:28,
+~2h20m total; S1 perdió 5-7 señales por abort de latencia post-outage) + alerta del usuario sobre
+cierres/pasivo a medio día.
+- **Keep-alive (EXPERIMENTO, OK usuario 07-06):** wake KA a mitad de intervalo (anclado al
+  boundary: `max(60, delay_aligned−150)` — un +150 fijo saltaría velas cuando el ciclo termina
+  tarde) → ambas relecturas de contexto quedan <300s → input a precio de caché (~10%). El turno KA
+  solo hace get_clock + ScheduleWakeup; PROHIBIDO decidir fase, tocar posiciones o escribir DB.
+  Revertir si en 1-2 sesiones se pierden wakes o la cadencia degrada vs baseline 5m05s.
+- **STEP 1 por DELTAS de get_clock:** fase desde `mins_to_close = next_close − timestamp` (mismo
+  response, mismo huso — inmune al bug UTC/ET del 06-12). PROHIBIDO PASSIVE/STEP 10 con
+  mins_to_close > 30; tras outage la duda se resuelve hacia ACTIVO. Cubre gratis los cierres
+  tempranos (13:00).
+
+
 > Movido fuera de `strategies/cycle_prompt.md` en v3.1.1 (2026-07-03): el changelog se releía en
 > cada ciclo del loop sin ser operativo (~2k tokens/relectura). Todas las reglas vigentes viven en
 > los STEPs del cycle_prompt; este archivo es solo historia. Specs completos archivados en
