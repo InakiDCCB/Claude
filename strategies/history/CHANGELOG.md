@@ -1,5 +1,24 @@
 # Pulse — historial de versiones del cycle_prompt
 
+## v3.1.3 (2026-07-10) — S5 GAPF descartada + fixes de la primera semana LIVE
+
+Revisión de resultados 07-06→07-09 (usuario: "analizar, corregir/ajustar; promover/descartar"):
+- **S5 GAPF DESCARTADA** (triple confirmación): backtest fresco 57 sesiones n=14 PF 0.63 −$10.79/sh
+  · shadow vivo n=3 33% −$2.25/sh · primo diario mr_gapdn muerto en FDR L1. Registry → archived;
+  gate gapf_on eliminado; clave `gapf` congelada con su histórico.
+- **Resolución shadow SECUENCIAL en /post-close** (hallazgo mayor): el shadow no-secuencial de SWPS
+  contaba clusters de señales solapadas (56.5%) mientras el backtest secuencial de la MISMA ventana
+  da 88.9% a 0.5R — medíamos otro sistema. Desde 07-10: señal que entra con trade simulado abierto
+  del mismo sistema → `skip_overlap`. Nueva lectura del edge de SWPS: vive en días ALCISTAS
+  (85.7% hit; en bajistas casi no genera señales — no hay nuevos highs).
+- **KA: ScheduleWakeup obligatorio y verificado antes de cerrar el turno** (07-07: loop muerto 5h
+  desde 10:50, causa más probable un turno que terminó sin programar wake).
+- **Abort S1 >150s INCONDICIONAL** (07-09: señal con lat 216s colocada igual — ganó, pero fuera de
+  spec) + **PRELOAD de tools alpaca en el primer ciclo** (la carga vía ToolSearch a mitad de ciclo
+  causó esa latencia).
+- **Coherencia de notes OCO** en STEP 7 (07-06: outage corrompió un notes con sl>entry).
+- fetch_data.py: `end` dinámico (estaba hardcodeado a 06-26 — la caché semanal envejecía en silencio).
+
 ## v3.1.2 (2026-07-06) — keep-alive de caché + fase por deltas (blindaje anti-cierre prematuro)
 
 Respuesta al primer día de v3.1.1 con 4 LIVE: dos gaps por tokens (10:36→11:17 y 12:50→14:28,

@@ -41,11 +41,12 @@ def main():
 
     # --- Bars: 1-min QQQ, full RTH window 06-01..06-10 (UTC 13:30-20:00) ---
     all_bars = []
+    import datetime as _dt
     params = {
         "symbols": "QQQ",
         "timeframe": "1Min",
         "start": "2026-04-20T13:30:00Z",
-        "end": "2026-06-26T20:00:00Z",
+        "end": (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(minutes=16)).strftime("%Y-%m-%dT%H:%M:%SZ"),  # dinámico −16min (SIP free bloquea los últimos 15min → 403)
         "limit": "10000",
         "feed": "sip",
         "adjustment": "raw",
