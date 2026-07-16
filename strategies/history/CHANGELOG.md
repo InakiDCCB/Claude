@@ -1,6 +1,22 @@
 # Pulse — historial de versiones del cycle_prompt
 
-## v3.1.3 (2026-07-10) — S5 GAPF descartada + fixes de la primera semana LIVE
+## v3.1.4 (2026-07-16) — fase computada en SQL + prohibido saltar sellos (auditoría de timing)
+
+Auditoría a demanda del usuario ("las confusiones de horario y el PASSIVE prematuro son
+inaceptables y continúan"): el 07-14 el agente entró en PASSIVE a las 11:30 AM **pese al blindaje
+de deltas de v3.1.2** (la prohibición en prosa no detiene el razonamiento de hora de pared del LLM),
+y con el loop VIVO se perdieron **52 velas en 5 sesiones (~10/día, ~16%)** por la regla
+"si el sello queda a <45s → salta al siguiente".
+- **`fase_sql`:** el STEP 0 ahora trae la fase COMPUTADA por Postgres (zona IANA, DST-proof):
+  PRE/ACTIVE/PASSIVE/CLOSE. El agente tiene PROHIBIDO derivar fase de cualquier otra fuente;
+  get_clock solo aporta is_open y el override de early-close (deltas, solo puede adelantar).
+  Actuar PASSIVE/CLOSE con fase_sql='ACTIVE' = bug_mecanico reportado por 4f; transición sin
+  evidencia impresa (`fase_sql=X et_now=HH:MM:SS`) es inválida.
+- **Sello inmediato SIEMPRE:** wakes (ciclo y KA) apuntan al próximo sello+10 aunque falten <60s
+  (mínimo 60 → llega ~sello+65, tarde pero la vela SE EVALÚA). La regla vieja regalaba la vela entera.
+- **4f nuevos checks fijos:** `premature_passive` · `abort_violation` (lat_s>150 colocada: 07-09
+  216s, 07-16 184s) · métrica diaria `velas_perdidas_vivo` (target ≤2; baseline ~10).
+ — S5 GAPF descartada + fixes de la primera semana LIVE
 
 Revisión de resultados 07-06→07-09 (usuario: "analizar, corregir/ajustar; promover/descartar"):
 - **S5 GAPF DESCARTADA** (triple confirmación): backtest fresco 57 sesiones n=14 PF 0.63 −$10.79/sh
