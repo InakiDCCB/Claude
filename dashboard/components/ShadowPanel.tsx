@@ -7,6 +7,7 @@ const ID_TO_SYS: Record<string, string> = {
   rsi2_v3: 'RSI2', swp_v3: 'SWP', gapf_v3: 'GAPF', swp_short_v3: 'SWPS', ob_v3: 'OB',
   gt_rsi2d_v1: 'GTR2D', gt_3down_v1: 'GT3D',
   gt_washout_v1: 'GTWSH', gt_closelow_v1: 'GTCL', ob_nobos_v1: 'OBNB',
+  ruut_td_v1: 'TD9S',
 }
 
 const STATUS_STYLE: Record<string, string> = {
