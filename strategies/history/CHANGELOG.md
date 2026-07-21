@@ -1,5 +1,16 @@
 # Pulse — historial de versiones del cycle_prompt
 
+## v3.1.5 (2026-07-20) — poda de contexto muerto (auditoría señal/ruido)
+
+Auditoría a demanda del usuario (calidad de contexto > cantidad): mapeo productor→consumidor de los
+8 indicadores por ciclo. **`ema9` y `ema21` se computaban e escribían a `session_state` cada ciclo
+(~64/día) con CERO consumidores vivos** — sus únicos usuarios (E9RC-reclaim y S5 GAPF) están muertos
+(GAPF descartada 07-10). Eliminados de STEP 4 (cómputo), STEP 8 (indicators JSONB) y del seed de
+/pre-market. Cero cambio de lógica de trading — misma poda de contexto-que-estorba que v3.0 hizo con
+ORB/VolAbs/filtro-EMA/régimen-TREND-RANGE/tick-fetches. `rsi14`/`atr1m` quedan marcados "SOLO S3
+VWAPPB" (soporte vital — mueren con VWAPPB si el ranking lo mata). Nota: `gapf_on` sigue en el seed
+de /pre-market como vestigio (gate muerto 07-10) — pendiente de poda menor.
+
 ## v3.1.4 (2026-07-16) — fase computada en SQL + prohibido saltar sellos (auditoría de timing)
 
 Auditoría a demanda del usuario ("las confusiones de horario y el PASSIVE prematuro son
