@@ -1,0 +1,258 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Pulse v3 Strategy — los 4 sistemas LIVE del laboratorio como estrategia ejecutable (2026-07-20)
+// Réplica del cycle_prompt v3.1.4: mismas señales, mismos gates, mismos SL/TP por calidad de setup,
+// C4 (2 pérdidas seguidas → sistema off hasta mañana), slots (≤1 posición por sistema, máx 4),
+// ventana activa 10:00-15:30 ET, cierre forzado 15:55, stop diario. Long-only (como el loop).
+// Gráfico recomendado: 1 MINUTO, horario regular. Multi-símbolo (buffers por ATR); edge validado en QQQ.
+// SWPS/GT (shadows) se muestran como etiquetas informativas — la estrategia NO los opera (fiel al loop).
+
+//@version=6
+strategy("Pulse v3 Strategy", overlay=true, initial_capital=100000,
+     default_qty_type=strategy.fixed, pyramiding=4, calc_on_order_fills=true,
+     commission_type=strategy.commission.cash_per_contract, commission_value=0.0,
+     max_labels_count=500, max_boxes_count=100)
+
+// ══════════════════ INPUTS ══════════════════
+useS2   = input.bool(true, "S2 FVG",           group="Sistemas (LIVE)")
+useS1   = input.bool(true, "S1 RSI2 5m",       group="Sistemas (LIVE)")
+useS3   = input.bool(true, "S3 VWAP Pullback", group="Sistemas (LIVE)")
+useS4   = input.bool(true, "S4 Sweep&Reclaim", group="Sistemas (LIVE)")
+pctS2   = input.float(8.0, "Sizing S2 (% equity)", group="Sizing por calidad", step=0.5)
+pctS1   = input.float(8.0, "Sizing S1 (% equity)", group="Sizing por calidad", step=0.5)
+pctS3   = input.float(8.0, "Sizing S3 (% equity)", group="Sizing por calidad", step=0.5)
+pctS4   = input.float(8.0, "Sizing S4 (% equity)", group="Sizing por calidad", step=0.5)
+rvolMin  = input.float(0.85, "Gate S2: rvol30 mínimo",          group="Gates (spec v3)", step=0.05)
+xvwapMin = input.int(6,      "Gate S3: cruces VWAP 1ª hora",    group="Gates (spec v3)")
+volMult  = input.float(1.5,  "S4: volumen ≥ × avg5",            group="Gates (spec v3)", step=0.1)
+dayStop  = input.float(500,  "Stop diario ($ realizados)",      group="Riesgo")
+useC4    = input.bool(true,  "C4: 2 pérdidas seguidas → sistema off", group="Riesgo")
+showInfo = input.bool(true,  "Franja de gates + niveles de ayer", group="Visual")
+showShdw = input.bool(true,  "Etiquetas shadow (SWPS/GT — sin órdenes)", group="Visual")
+
+// ══════════════════ SESIÓN ══════════════════
+inSession  = not na(time(timeframe.period, "0930-1600", "America/New_York"))
+activeWin  = not na(time(timeframe.period, "1000-1530", "America/New_York"))   // entries solo aquí
+closeWin   = not na(time(timeframe.period, "1555-1600", "America/New_York"))
+first30    = not na(time(timeframe.period, "0930-1000", "America/New_York"))
+firstHour  = not na(time(timeframe.period, "0930-1030", "America/New_York"))
+newSession = inSession and not inSession[1]
+
+// ══════════════════ BASE (nativo TradingView — tiempo real) ══════════════════
+vwap    = ta.vwap(hlc3)                                   // ancla por sesión, nativo
+atr1m   = ta.atr(14)
+rsi14   = ta.rsi(close, 14)
+volAvg5 = ta.sma(volume, 5)
+bufFvg  = 0.05 * atr1m
+bufSwp  = 0.12 * atr1m
+
+var float sessLow  = na
+var float sessHigh = na
+if newSession
+    sessLow  := low
+    sessHigh := high
+else if inSession
+    sessLow  := math.min(sessLow, low)
+    sessHigh := math.max(sessHigh, high)
+
+// Ayer, limpio vía daily (sin aproximaciones del agente)
+[yH, yL, yC] = request.security(syminfo.tickerid, "D", [high[1], low[1], close[1]], lookahead=barmerge.lookahead_off)
+var float yVwapFinal = na
+var float curVwap = na
+if inSession
+    curVwap := vwap
+if not inSession and inSession[1]
+    yVwapFinal := curVwap[1]
+yVAL = na(yVwapFinal) ? na : yVwapFinal - 0.34 * (yH - yL)
+yVAH = na(yVwapFinal) ? na : yVwapFinal + 0.34 * (yH - yL)
+
+// 5-min sellado (RSI2 + ATR14) — igual que el loop deriva sus bloques
+[rsi2_5m, atr_5m] = request.security(syminfo.tickerid, "5", [ta.rsi(close, 2), ta.atr(14)], lookahead=barmerge.lookahead_off)
+newBlock   = ta.change(time("5")) != 0
+rsi2Sealed = rsi2_5m[1]
+atrSealed  = atr_5m[1]
+
+// ══════════════════ GATES DIARIOS ══════════════════
+var float vol30Today = 0.0
+var float[] vol30Hist = array.new_float(0)
+var float rvol30 = na
+var int   xvwapCnt = 0
+var bool  fvgOn = false
+var bool  rsi2On = false
+var bool  vwappbOn = false
+if newSession
+    vol30Today := 0.0
+    xvwapCnt := 0
+    rvol30 := na
+    fvgOn := false
+    vwappbOn := false
+    rsi2On := not na(yVAL) and open >= yVAL
+if first30
+    vol30Today += volume
+if firstHour and inSession and not na(close[1])
+    if math.sign(close - vwap) != math.sign(close[1] - vwap[1])
+        xvwapCnt += 1
+if not first30 and first30[1]
+    if array.size(vol30Hist) >= 3
+        rvol30 := vol30Today / array.avg(vol30Hist)
+        fvgOn  := rvol30 >= rvolMin
+    array.push(vol30Hist, vol30Today)
+    if array.size(vol30Hist) > 5
+        array.shift(vol30Hist)
+if not firstHour and firstHour[1]
+    vwappbOn := xvwapCnt >= xvwapMin
+
+// ══════════════════ RIESGO: C4 + stop diario (réplica del loop) ══════════════════
+var int c4S1 = 0
+var int c4S2 = 0
+var int c4S3 = 0
+var int c4S4 = 0
+var float dayStartProfit = 0.0
+var int   seenClosed = 0
+if newSession
+    c4S1 := 0
+    c4S2 := 0
+    c4S3 := 0
+    c4S4 := 0
+    dayStartProfit := strategy.netprofit
+if strategy.closedtrades > seenClosed
+    for i = seenClosed to strategy.closedtrades - 1
+        id = strategy.closedtrades.entry_id(i)
+        isTime = str.contains(strategy.closedtrades.exit_comment(i), "TIME")   // time-stop NO suma C4 (spec)
+        lost = strategy.closedtrades.profit(i) < 0 and not isTime
+        if id == "S1"
+            c4S1 := lost ? c4S1 + 1 : isTime ? c4S1 : 0
+        if id == "S2"
+            c4S2 := lost ? c4S2 + 1 : isTime ? c4S2 : 0
+        if id == "S3"
+            c4S3 := lost ? c4S3 + 1 : isTime ? c4S3 : 0
+        if id == "S4"
+            c4S4 := lost ? c4S4 + 1 : isTime ? c4S4 : 0
+    seenClosed := strategy.closedtrades
+dayPnl   = strategy.netprofit - dayStartProfit
+dayHalt  = dayPnl <= -dayStop
+c4okS1 = not useC4 or c4S1 < 2
+c4okS2 = not useC4 or c4S2 < 2
+c4okS3 = not useC4 or c4S3 < 2
+c4okS4 = not useC4 or c4S4 < 2
+
+// slot libre = sin posición NI orden pendiente de ese sistema
+slotFree(string id) =>
+    free = true
+    for i = 0 to strategy.opentrades - 1
+        if strategy.opentrades.entry_id(i) == id
+            free := false
+    free
+qty(float pct) => math.max(1, math.floor(strategy.equity * pct / 100 / close))
+canEnter = activeWin and not dayHalt and strategy.opentrades < 4
+
+// expiración de limits (el loop: FVG 20 min, resto 3 min)
+var int placedS2 = na
+var int placedS1 = na
+var int placedS4 = na
+
+// ══════════════════ S1 RSI2 — limit al close del bloque; TP 0.5×ATR5m, SL 1×ATR5m, ts 15min ══════════════════
+if useS1 and canEnter and c4okS1 and rsi2On and newBlock and not na(rsi2Sealed) and rsi2Sealed < 15 and not na(atrSealed) and slotFree("S1")
+    e  = close[1]
+    strategy.entry("S1", strategy.long, qty=qty(pctS1), limit=e, comment="S1 RSI2")
+    strategy.exit("S1x", "S1", stop=e - 1.0 * atrSealed, limit=e + 0.5 * atrSealed)
+    placedS1 := bar_index
+    label.new(bar_index, low, "S1", style=label.style_label_up, color=color.new(color.teal, 20), textcolor=color.white, size=size.tiny)
+if not na(placedS1) and bar_index - placedS1 >= 3 and slotFree("S1") == false
+    placedS1 := na                                        // filleó
+else if not na(placedS1) and bar_index - placedS1 >= 3
+    strategy.cancel("S1")
+    placedS1 := na
+// time-stop 15 min (única gestión agent-side del loop)
+for i = 0 to strategy.opentrades - 1
+    if strategy.opentrades.entry_id(i) == "S1" and bar_index - strategy.opentrades.entry_bar_index(i) >= 15
+        strategy.close("S1", comment="TIME")
+
+// ══════════════════ S2 FVG — limit al midpoint; SL bajo el gap; TP 2R ══════════════════
+fvgFormed = useS2 and canEnter and c4okS2 and fvgOn and low > high[2] and barstate.isconfirmed and slotFree("S2")
+if fvgFormed
+    mid = (high[2] + low) / 2
+    sl2 = low[2] - bufFvg
+    if close > mid                                        // pre-submit: el limit debe ser pasivo (precio ARRIBA del mid)
+        strategy.entry("S2", strategy.long, qty=qty(pctS2), limit=mid, comment="S2 FVG")
+        strategy.exit("S2x", "S2", stop=sl2, limit=mid + 2 * (mid - sl2))
+        placedS2 := bar_index
+        box.new(bar_index - 2, low, bar_index + 20, high[2], border_color=color.new(color.aqua, 40), bgcolor=color.new(color.aqua, 88))
+if not na(placedS2) and bar_index - placedS2 >= 20 and slotFree("S2")
+    strategy.cancel("S2")
+    placedS2 := na
+if not na(placedS2) and not slotFree("S2")
+    placedS2 := na
+
+// ══════════════════ S3 VWAPPB — 5 condiciones; TP/SL ±2×ATR1m ══════════════════
+var int placedS3 = na
+s3Cond = close > vwap and low <= vwap * 1.001 and volume < volume[1] and volume[1] < volume[2] and close > open and rsi14 >= 45 and rsi14 <= 65 and low > sessLow
+if useS3 and canEnter and c4okS3 and vwappbOn and s3Cond and barstate.isconfirmed and slotFree("S3")
+    strategy.entry("S3", strategy.long, qty=qty(pctS3), limit=close, comment="S3 VWAPPB")
+    strategy.exit("S3x", "S3", stop=close - 2 * atr1m, limit=close + 2 * atr1m)
+    placedS3 := bar_index
+    label.new(bar_index, low, "S3", style=label.style_label_up, color=color.new(color.yellow, 20), textcolor=color.black, size=size.tiny)
+if not na(placedS3) and bar_index - placedS3 >= 3
+    if slotFree("S3")
+        strategy.cancel("S3")
+    placedS3 := na
+
+// ══════════════════ S4 SWP — sweep del low + reclaim; SL bajo sweep; TP 0.5R ══════════════════
+var float sweptLowLvl = na
+var int   sweptLowBar = na
+if inSession and low == sessLow and not na(sessLow[1]) and low < sessLow[1]
+    sweptLowLvl := sessLow[1]
+    sweptLowBar := bar_index
+s4Sig = useS4 and canEnter and c4okS4 and barstate.isconfirmed and not na(sweptLowLvl) and bar_index - sweptLowBar <= 3 and bar_index > sweptLowBar and close > sweptLowLvl and close > open and volume >= volMult * volAvg5 and slotFree("S4")
+if s4Sig
+    sl4 = sessLow - bufSwp
+    strategy.entry("S4", strategy.long, qty=qty(pctS4), limit=close, comment="S4 SWP")
+    strategy.exit("S4x", "S4", stop=sl4, limit=close + 0.5 * (close - sl4))
+    placedS4 := bar_index
+    label.new(bar_index, low, "S4", style=label.style_label_up, color=color.new(color.lime, 20), textcolor=color.black, size=size.tiny)
+    sweptLowLvl := na
+if not na(placedS4) and bar_index - placedS4 >= 3
+    if slotFree("S4")
+        strategy.cancel("S4")
+    placedS4 := na
+
+// ══════════════════ CIERRE FORZADO 15:55 + fin de ventana ══════════════════
+if closeWin or (not inSession and inSession[1])
+    strategy.close_all(comment="TIME 15:55")
+    strategy.cancel_all()
+
+// ══════════════════ SHADOWS (solo etiquetas — CERO órdenes, fiel al loop) ══════════════════
+var float sweptHighLvl = na
+var int   sweptHighBar = na
+if inSession and high == sessHigh and not na(sessHigh[1]) and high > sessHigh[1]
+    sweptHighLvl := sessHigh[1]
+    sweptHighBar := bar_index
+if showShdw and inSession and barstate.isconfirmed and not na(sweptHighLvl) and bar_index - sweptHighBar <= 3 and bar_index > sweptHighBar and close < sweptHighLvl and close < open and volume >= volMult * volAvg5
+    label.new(bar_index, high, "S6sh", style=label.style_label_down, color=color.new(color.red, 40), textcolor=color.white, size=size.tiny)
+    sweptHighLvl := na
+[dC1, dO1, dH1, dL1, dRsi2, dC2] = request.security(syminfo.tickerid, "D", [close[1], open[1], high[1], low[1], ta.rsi(close, 2)[1], close[2]], lookahead=barmerge.lookahead_off)
+var int consecDn = 0
+if ta.change(time("D")) != 0
+    consecDn := not na(dC1) and not na(dC2) and dC1 < dC2 ? consecDn + 1 : 0
+dRng  = dH1 - dL1
+dClr  = dRng > 0 ? (dC1 - dL1) / dRng : 0.5
+gtAny = showShdw and (dRsi2 < 5 or consecDn >= 3 or (dRsi2 < 10 and dClr < 0.3) or (dClr < 0.2 and dC1 < dO1))
+bgcolor(gtAny and inSession ? color.new(color.purple, 93) : na, title="GT día activo (shadow o2c)")
+
+// ══════════════════ VISUAL INTEGRADO ══════════════════
+plot(showInfo and inSession ? vwap : na, "VWAP",     color=color.new(color.white, 35),  linewidth=2)
+plot(showInfo and inSession ? yVAL : na, "VAL ayer", color=color.new(color.orange, 35), style=plot.style_linebr)
+plot(showInfo and inSession ? yVAH : na, "VAH ayer", color=color.new(color.orange, 60), style=plot.style_linebr)
+
+var table strip = table.new(position.top_center, 8, 1, bgcolor=color.new(color.rgb(12, 12, 32), 20), border_width=0)
+if showInfo and barstate.islast
+    okC  = color.rgb(0, 220, 120)
+    badC = color.rgb(235, 80, 80)
+    offC = color.gray
+    table.cell(strip, 0, 0, " PULSE v3 ", text_color=color.white, bgcolor=color.rgb(45, 45, 90), text_size=size.normal)
+    table.cell(strip, 1, 0, dayHalt ? " STOP DIARIO " : activeWin ? " ACTIVO " : inSession ? " PASIVO " : " CERRADO ", text_color=dayHalt ? badC : activeWin ? okC : offC, text_size=size.normal)
+    table.cell(strip, 2, 0, " S2 rvol " + (na(rvol30) ? "—" : str.tostring(math.round(rvol30, 2))) + (fvgOn and c4okS2 ? " ✓ " : " ✗ "), text_color=fvgOn and c4okS2 ? okC : badC, text_size=size.normal)
+    table.cell(strip, 3, 0, " S3 xvwap " + str.tostring(xvwapCnt) + (vwappbOn and c4okS3 ? " ✓ " : " ✗ "), text_color=vwappbOn and c4okS3 ? okC : badC, text_size=size.normal)
+    table.cell(strip, 4, 0, " S1 VAL" + (rsi2On and c4okS1 ? " ✓ " : " ✗ ") + "RSI2 " + (na(rsi2Sealed) ? "—" : str.tostring(math.round(rsi2Sealed, 1))) + " ", text_color=rsi2On and c4okS1 ? okC : badC, text_size=size.normal)
+    table.cell(strip, 5, 0, " S4" + (c4okS4 ? " ✓ " : " ✗ "), text_color=c4okS4 ? okC : badC, text_size=size.normal)
+    table.cell(strip, 6, 0, " Pos " + str.tostring(strategy.opentrades) + "/4 ", text_color=color.silver, text_size=size.normal)
+    table.cell(strip, 7, 0, gtAny ? " GT ✦ " : " GT — ", text_color=gtAny ? color.rgb(200, 120, 255) : offC, text_size=size.normal)
