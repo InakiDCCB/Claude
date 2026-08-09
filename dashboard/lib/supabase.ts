@@ -47,12 +47,6 @@ export type AgentStatus = {
   metadata: Record<string, unknown> | null
 }
 
-export type ChampionConfig = {
-  key: string
-  updated_at: string
-  config: Record<string, unknown>
-}
-
 export type AlpacaPosition = {
   symbol:       string
   qty:          number

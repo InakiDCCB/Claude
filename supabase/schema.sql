@@ -2,6 +2,9 @@
 -- Trading System Ledger
 -- Central record-keeping for paper trades and market analysis
 -- ============================================================
+-- (2026-08-09: `champion_strategy` retired — orphaned table, nothing wrote to it
+-- since Fase 3's `v_strategy_ranking` superseded it; the dashboard panel that read
+-- it was removed in the same pass.)
 
 -- TRADES
 -- Records every paper trade executed via Alpaca
@@ -49,14 +52,6 @@ create table if not exists analysis_log (
   thesis        text,                       -- trade thesis narrative
   outcome       text,                       -- filled in after the fact
   tags          text[]
-);
-
--- CHAMPION_STRATEGY
--- Active strategy config displayed in the dashboard
-create table if not exists champion_strategy (
-  key        text primary key default 'current',
-  config     jsonb not null,
-  updated_at timestamptz not null default now()
 );
 
 -- Indexes for common query patterns
@@ -233,7 +228,6 @@ end $$;
 alter table public.trades               enable row level security;
 alter table public.analysis_log         enable row level security;
 alter table public.agent_status         enable row level security;
-alter table public.champion_strategy    enable row level security;
 alter table public.session_memory       enable row level security;
 alter table public.session_state        enable row level security;
 alter table public.alpaca_state         enable row level security;
@@ -244,7 +238,6 @@ alter table public.situational_analysis enable row level security;
 create policy "anon_select" on public.trades               for select to anon using (true);
 create policy "anon_select" on public.analysis_log         for select to anon using (true);
 create policy "anon_select" on public.agent_status         for select to anon using (true);
-create policy "anon_select" on public.champion_strategy    for select to anon using (true);
 create policy "anon_select" on public.session_memory       for select to anon using (true);
 create policy "anon_select" on public.session_state        for select to anon using (true);
 create policy "anon_select" on public.alpaca_state         for select to anon using (true);
@@ -255,7 +248,6 @@ create policy "anon_select" on public.situational_analysis for select to anon us
 grant select on public.trades               to anon;
 grant select on public.analysis_log         to anon;
 grant select on public.agent_status         to anon;
-grant select on public.champion_strategy    to anon;
 grant select on public.session_memory       to anon;
 grant select on public.session_state        to anon;
 grant select on public.alpaca_state         to anon;
@@ -345,3 +337,81 @@ create policy "anon_select" on public.market_conditions    for select to anon us
 create policy "anon_select" on public.strategy_performance for select to anon using (true);
 grant select on public.market_conditions    to anon;
 grant select on public.strategy_performance to anon;
+
+-- ============================================================
+-- Fase 3.1 (2026-06-26): Market Intelligence — capa cualitativa
+-- migrations: fase31_market_intelligence_tables_views + ..._functions
+-- Igual que fase3c: la matemática (classify_market_context, refresh_market_patterns,
+-- refresh_market_hypotheses, situational_snapshot) y las vistas (v_strategy_ranking,
+-- v_shadow_accumulated, v_market_intelligence, v_market_context, v_market_patterns,
+-- v_market_hypotheses, v_emerging_context_labels, v_market_recommendations) viven
+-- como migraciones aplicadas directo en Supabase (lógica procedural) — no versionadas
+-- aquí. Este archivo solo documenta las tablas base. Añadido 2026-08-09 (auditoría:
+-- estaban en la DB desde 06-26 pero nunca se agregaron a este schema.sql).
+-- ============================================================
+create table if not exists market_context (
+  session_date    date not null,
+  symbol          text not null default 'QQQ' check (symbol = 'QQQ'),
+  context_label   text,                          -- etiqueta primaria determinista
+  context_tags    text[] not null default '{}',
+  signature       jsonb not null default '{}',   -- features usados para clasificar
+  agent_note      text,                          -- canal emergente (descriptor factual, no regla)
+  candidate_label text,                          -- etiqueta candidata (se reconoce tras repetirse)
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  primary key (session_date, symbol)
+);
+
+create table if not exists market_patterns (
+  id            bigserial primary key,
+  pattern_key   text not null unique,
+  kind          text not null check (kind in
+                  ('context_strategy','context_transition','context_outcome','precursor')),
+  context_bucket text,
+  subject       text,
+  description   text,
+  n_support     integer not null default 0,
+  n_contra      integer not null default 0,
+  effect        numeric,
+  baseline      numeric,
+  stability     numeric,
+  status        text not null default 'emerging'
+                  check (status in ('emerging','consolidated','dormant')),
+  first_seen    date,
+  last_seen     date,
+  as_of         date not null,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+create table if not exists market_hypotheses (
+  id                 bigserial primary key,
+  pattern_key        text not null,
+  hypothesis         text not null,               -- lenguaje natural
+  context_bucket     text,
+  subject            text,
+  status             text not null default 'observing'
+                       check (status in ('active','observing','discarded','consolidated')),
+  n_support          integer not null default 0,
+  n_contra           integer not null default 0,
+  stability          numeric,
+  since              date,
+  last_evidence_date date,
+  discarded_reason   text,                        -- se conserva, NUNCA se borra la fila
+  as_of              date not null,
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now()
+);
+
+alter table public.market_context    enable row level security;
+alter table public.market_patterns   enable row level security;
+alter table public.market_hypotheses enable row level security;
+drop policy if exists "anon_select" on public.market_context;
+drop policy if exists "anon_select" on public.market_patterns;
+drop policy if exists "anon_select" on public.market_hypotheses;
+create policy "anon_select" on public.market_context    for select to anon using (true);
+create policy "anon_select" on public.market_patterns   for select to anon using (true);
+create policy "anon_select" on public.market_hypotheses for select to anon using (true);
+grant select on public.market_context    to anon;
+grant select on public.market_patterns   to anon;
+grant select on public.market_hypotheses to anon;

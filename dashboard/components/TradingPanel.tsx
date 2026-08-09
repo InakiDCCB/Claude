@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { createSupabase } from '@/lib/supabase'
-import type { Trade, AnalysisEntry, AgentStatus, ChampionConfig, AlpacaState, SessionStateRow, ShadowSignal, ShadowAccum, PnlPoint, StrategyRanking, MarketCondition, StrategyRegistry, MarketContext, MarketPattern, MarketHypothesis, EmergingLabel, MarketIntel } from '@/lib/supabase'
+import type { Trade, AnalysisEntry, AgentStatus, AlpacaState, SessionStateRow, ShadowSignal, ShadowAccum, PnlPoint, StrategyRanking, MarketCondition, StrategyRegistry, MarketContext, MarketPattern, MarketHypothesis, EmergingLabel, MarketIntel } from '@/lib/supabase'
 import AccountSummary from './AccountSummary'
 import PerformanceCard from './PerformanceCard'
 import AgentGrid from './AgentGrid'
-import ChampionCard from './ChampionCard'
 import DataTabs from './DataTabs'
 import MarketCalendarCard from './MarketCalendarCard'
 import LiveSessionPanel from './LiveSessionPanel'
@@ -78,7 +77,6 @@ export default function TradingPanel({
   initialTrades,
   initialAnalysis,
   agents,
-  champion,
   alpacaState,
   sessionState,
   shadowSignals,
@@ -96,7 +94,6 @@ export default function TradingPanel({
   initialTrades:   Trade[]
   initialAnalysis: AnalysisEntry[]
   agents:          AgentStatus[]
-  champion:        ChampionConfig | null
   alpacaState:     AlpacaState | null
   sessionState:    SessionStateRow | null
   shadowSignals:   ShadowSignal[]
@@ -249,9 +246,8 @@ export default function TradingPanel({
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
           Infraestructura
         </h2>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <AgentGrid agents={liveAgents} />
-          <ChampionCard champion={champion} trades={trades} isBestPerformer={champion != null} />
           <MarketCalendarCard />
         </div>
       </section>

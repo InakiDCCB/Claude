@@ -5,9 +5,9 @@
 `Agent_Aconcagua` es el reemplazo de `C:\Users\inaki\Code\Trading\Claude` — el mismo sistema de paper-trading de QQQ (historial de git preservado vía rename, no un repo nuevo), reordenado bajo el framework WAT y las tres máximas de abajo. Estado de la migración:
 
 - ✅ Carpetas reorganizadas: `workflows/`, `tools/` (+ `tools/lab/`), `docs/` (aplanado), `.tmp/` ya existen y reflejan la estructura de abajo.
-- 🚧 **Pendiente**: fusionar `.claude/memory/` (21 archivos) y `.claude/commands/` que quedaron en una carpeta hermana temporal `Agent_Aconcagua_new/.claude/` — el clasificador de la sesión bloquea escrituras dentro de `.claude/`, así que ese merge puntual lo hace el usuario a mano.
-- 🚧 **Pendiente**: los skills globales (`~/.claude/commands/load-memory.md`, `post-close.md`) todavía apuntan a rutas de `Trading\Claude` (`strategies/research/*.py`, el path de memoria `C--Users-inaki-Code-Trading-Claude`) — hay que actualizarlos a `tools/*.py` y `C--Users-inaki-Code-Trading-Agent-Aconcagua` antes de confiar en `/pre-market` y `/post-close` para el loop en vivo.
-- 🚧 **Pendiente**: consolidación/densificación del contenido de memoria (la tercera máxima, auto-aprendizaje más barato de releer).
+- ✅ Skills globales (`~/.claude/commands/load-memory.md`, `pre-market.md`, `post-close.md`) actualizados a rutas `Agent_Aconcagua` (`tools/*.py`, path de memoria `C--Users-inaki-Code-Trading-Agent-Aconcagua`) — verificado 2026-07-27, cero referencias a `Trading\Claude` o `strategies/` restantes.
+- ✅ Memoria global consolidada 37→27 archivos (2026-07-27) — ver `MEMORY.md` en la carpeta de memoria del proyecto.
+- ✅ Permisos de `Agent_Aconcagua_new/.claude/settings.local.json` copiados a `Agent_Aconcagua/.claude/` y carpeta sobrante borrada (2026-07-28) — migración completa.
 
 ## What This Is
 
@@ -70,9 +70,9 @@ Agent_Aconcagua/
 | Close          | 15:55       | Cierre forzado total (`exit_type=TIME`)                       |
 | Post-close     | ≥16:00      | `/post-close`: niveles de mañana + resolución de shadows + aprendizaje |
 
-**Sistemas LIVE**: S2 FVG (limit al midpoint, gate rvol30), S3 VWAPPB (pullback VWAP, días choppy), S1 RSI2-dip (RSI2(5m)<15, tp/sl por ATR5m, time-stop 15m), S4 Sweep&Reclaim (sweep session-low + reclaim). Multi-posición: `state.positions[]`, máx 4, cap 70% suma, sizing 8%, prioridad por score. **C4 global**: 2 pérdidas consecutivas de un sistema → apagado hasta el día siguiente.
+**Sistemas LIVE**: S2 FVG (limit al midpoint, gate rvol30), S3 VWAPPB (pullback VWAP, días choppy), S1 RSI2-dip (RSI2(5m)<15, tp/sl por ATR5m, time-stop 15m), S4 Sweep&Reclaim (sweep session-low + reclaim), **S6 SWP-short (short, sweep session-high + rechazo — promovido, corriendo hasta n=100)**. Multi-posición: `state.positions[]`, máx 4, cap 70% suma, sizing 8%, prioridad por score, **exclusión de dirección long/short ACTIVA**. **C4 global**: 2 pérdidas consecutivas de un sistema → apagado hasta el día siguiente.
 
-**Sistemas SHADOW (cero órdenes)**: S5 GapFill, S6 SWP-short, OB/OBNB, Golden Ticket (4 señales diarias), TD Sequential (TD9S). Se resuelven en `/post-close` como validación antes de una eventual promoción a LIVE — la promoción siempre la decide el usuario.
+**Sistemas SHADOW (cero órdenes)**: OB/OBNB (rechazadas 07-16, sin acción), Golden Ticket (4 señales diarias), TD Sequential (TD9S). Se resuelven en `/post-close` como validación antes de una eventual promoción a LIVE — la promoción siempre la decide el usuario. (S5 GapFill descartada 07-10.)
 
 **Ejecución crítica**: única fuente de datos 1-min IEX (5-min derivadas por resampleo), indicadores incrementales en `session_state`, exits SIEMPRE broker-side vía OCO (4 params obligatorios; `order_class="bracket"` prohibido), safety-net de posición desprotegida como primera acción de cada ciclo. Modelo: **Sonnet para todo** (pre-market, loop, post-close, research — Haiku no sostiene la latencia <30s que exige el playbook).
 
@@ -82,7 +82,7 @@ Next.js 14 en Vercel, capa de solo-lectura sobre Supabase (sin lógica de tradin
 
 ## Supabase Schema
 
-Tablas clave: `trades`, `analysis_log`, `session_state`, `session_memory`, `volume_profiles`, `agent_status`, `champion_strategy`, `alpaca_state`, `strategy_registry`, `market_conditions`, `strategy_performance` (+ vista `v_strategy_ranking`). QQQ-only forzado por constraint en las tablas relevantes. Definición completa en `supabase/schema.sql`.
+Tablas clave: `trades`, `analysis_log`, `session_state`, `session_memory`, `volume_profiles`, `agent_status`, `alpaca_state`, `strategy_registry`, `market_conditions`, `strategy_performance`, `market_context`, `market_patterns`, `market_hypotheses` (+ vistas `v_strategy_ranking`, `v_shadow_accumulated`, `v_market_intelligence`). QQQ-only forzado por constraint en las tablas relevantes. Definición completa en `supabase/schema.sql`.
 
 ## User Skills (`/comandos` manuales)
 
@@ -97,7 +97,9 @@ Arranque diario (manual, sin cambios): `/load-memory` → `/pre-market` → lanz
 ## Hard Constraints (permanentes)
 
 - **Universo: QQQ únicamente** — sin excepciones.
-- Long-only en LIVE; shorts solo como shadow.
+- Long-only en LIVE salvo **S6 SWP-short** (único short live, promovido pese a evidencia shadow
+  negativa — decisión usuario, corriendo hasta n=100 antes de KILL/KEEP); el resto de shorts
+  (espejo naïve, otros sistemas) solo shadow.
 - Exclusión ética: defensa (BA, LMT, TXN, NOC, RTX, GD, HII), farma (MRNA, PFE).
 - Exits siempre broker-side vía OCO; cierre forzado 15:55 ET.
 - Cambios estructurales a la spec requieren ≥3 sesiones de evidencia (no improvisar setups).

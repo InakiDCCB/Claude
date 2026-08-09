@@ -1,5 +1,14 @@
 # Pulse — historial de versiones del cycle_prompt
 
+## v3.1.6 (2026-07-29) — hard-limit gap_recovery S4 SWP
+
+Bug detectado en sesión 07-29: el loop murió 3h16min (12:03–15:19 ET), al recuperar encontró un
+sweep+reclaim de las 12:15 ET y colocó la orden SWP con la señal 3h antigua. La reclaim hypothesis
+expira con el tiempo — el precio ya se movió y no hay predicción válida. Se añade en STEP 6 (S4 SWP):
+si `now_ET − t_reclaim > 60 min` → log `swp_stale_abort` y skip. FVG mantiene su propio stale check
+de 5 min (triplet formation). Decisión del usuario: hard-limit aprobado; FVG sigue LIVE (score=3.3
+en zona KILLED pero n=22 bajo — esperar 3-5 trades más para veredicto con muestra mayor).
+
 ## v3.1.5 (2026-07-20) — poda de contexto muerto (auditoría señal/ruido)
 
 Auditoría a demanda del usuario (calidad de contexto > cantidad): mapeo productor→consumidor de los
@@ -145,3 +154,26 @@ sin cambios.
 Sale del playbook validado en 32 sesiones (`strategies/research/playbook_2026_06_10.md`). Elimina:
 ORB, Volume Absorption, filtro EMA, filtro VP, régimen TREND/RANGE, VP developing intradía, tick
 fetches. Versión anterior: `strategies/history/cycle_prompt_v2.9.2_2026-06-10.md`.
+
+## Pre-v3.0 (Pulse v2.x, 2026-06-01 → 06-18) — primeras sesiones, journal condensado
+
+Retirado de memoria 2026-08-09 (archivo `project_history_recaps.md`, journal narrativo — casi todas
+las lecciones ya son reglas activas en `feedback_*.md`, referenciadas abajo). Capital: ~$100k inicial
+→ $100,213 (fin semana 1) → $100,287 (06-02) → $100,267 (06-08) → $100,078 (06-09, drawdown ~$245).
+
+- **Semana 1 (06-01→06-05):** −$59.05, 3/8 WR. Salieron: EMA filter dropped, OCO obligatorio, filter
+  sealed bars, slippage protection FVG, QQQ-only (tras SL combinado −$24.27 en TSLA/RIVN), FVG
+  limit-on-formation, no-time-gates.
+- **06-02:** −$5.41. Bugs: barras no selladas contaminando indicadores, sin OCO broker-side.
+- **06-08:** +$51.19, 9 trades FVG 67% WR. Validó FVG limit-on-formation + OCO re-arm. Gap de 87min
+  por tokens → semilla de la disciplina de ahorro de tokens.
+- **06-09 (catastrófica):** −$186.44, 0/5 WR. 3 FVGs stacked sin OCO armado + `order_class="bracket"`
+  con SL leg `held` sin activar → prohibido `bracket`, exigido `oco` desde entonces.
+- **06-11 (primera sesión v3.0):** +$14.50. Corriendo en Haiku: terminó turnos sin `ScheduleWakeup`
+  → decisión usuario: todo el trading en Sonnet desde entonces.
+- **06-12 (bug forense más caro):** emergency SL −$4.62. Bug UTC/ET: barras UTC leídas como hora ET
+  → loop muerto 72 min en pleno selloff (2 señales que habrían disparado C4 nunca evaluadas). Semilla
+  directa de la regla "fase solo desde get_clock".
+- **06-18:** FVG +$6.49, RSI2 shadow 67% hit, S6 shadow 80% hit. Gap recovery de 2h reconstruyó 21
+  bloques 5-min sin corromper la cadena RSI2 — validó que el gap-recovery funciona. Nació la
+  observación de "ciclos lentos".
