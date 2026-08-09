@@ -18,15 +18,18 @@ trading/logs/*.log
 logs/
 strategies/session_state.json
 
+# Cached/regenerable backtest data (re-fetched by tools/fetch_data.py)
+tools/data/
+
 # Dashboard build artifacts
 dashboard/node_modules/
 dashboard/.next/
 dashboard/.vercel/
 dashboard/.env.local
 
-# Claude Code local settings (ignore everything except curated memory/)
+# Claude Code local settings (memory consolidated into the global auto-memory
+# folder 2026-08-09 — repo-local .claude/memory/ retired, nothing to except anymore)
 .claude/*
-!.claude/memory/
 
 # OS
 .DS_Store

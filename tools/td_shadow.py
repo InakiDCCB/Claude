@@ -21,7 +21,7 @@ RSI_MIN = 60
 
 
 def fetch_days(date):
-    env = json.loads((Path(__file__).parents[2] / ".mcp.json").read_text())["mcpServers"]["alpaca"]["env"]
+    env = json.loads((Path(__file__).parents[1] / ".mcp.json").read_text())["mcpServers"]["alpaca"]["env"]
     hdr = {"APCA-API-KEY-ID": env["ALPACA_API_KEY"], "APCA-API-SECRET-KEY": env["ALPACA_SECRET_KEY"]}
     d0 = (dt.date.fromisoformat(date) - dt.timedelta(days=6)).isoformat()
     params = {"symbols": "QQQ", "timeframe": "1Min", "start": f"{d0}T13:30:00Z",

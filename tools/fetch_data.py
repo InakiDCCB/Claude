@@ -1,12 +1,12 @@
 """Fetch QQQ 1-min SIP bars for backtest window + safety check (positions/open orders).
-Saves bars to strategies/research/data/qqq_1min.json. Prints compact summary only.
+Saves bars to tools/data/qqq_1min.json. Prints compact summary only.
 """
 import json
 import urllib.request
 import urllib.parse
 from pathlib import Path
 
-_env = json.loads((Path(__file__).parents[2] / ".mcp.json").read_text())["mcpServers"]["alpaca"]["env"]
+_env = json.loads((Path(__file__).parents[1] / ".mcp.json").read_text())["mcpServers"]["alpaca"]["env"]
 HEADERS = {"APCA-API-KEY-ID": _env["ALPACA_API_KEY"], "APCA-API-SECRET-KEY": _env["ALPACA_SECRET_KEY"]}
 
 DATA_BASE = "https://data.alpaca.markets"
