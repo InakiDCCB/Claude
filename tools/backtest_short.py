@@ -22,7 +22,7 @@ import json
 from pathlib import Path
 
 from backtest import Day, stats, ENTRY_MIN, ENTRY_MAX, FORCED, run_fvg, run_market, \
-    rsi2_dip, vwap_pullback, sweep_reclaim, gap_fill
+    rsi2_dip, vwap_pullback, sweep_reclaim, gap_fill, wick_reversal
 
 DATA = Path(__file__).parent / "data" / "qqq_1min.json"
 
@@ -189,6 +189,24 @@ def sweep_rejection(tp, min_depth=0.01, within=3):
     return factory
 
 
+def wick_rejection_fade(tp, wick_thresh=0.6, buffer_sl=0.05, min_range=0.02, min_rvol=None):
+    """Mirror of wick_reversal: mecha superior >= wick_thresh*range -> fade bajista (short)."""
+    def factory():
+        def fn(day, i):
+            rng = day.h[i] - day.l[i]
+            if rng < min_range:
+                return None
+            if min_rvol is not None:
+                if day.avgv5[i] is None or day.v[i] < min_rvol * day.avgv5[i]:
+                    return None
+            upper_wick = day.h[i] - max(day.o[i], day.c[i])
+            if upper_wick / rng < wick_thresh:
+                return None
+            return {"sl_abs": round(day.h[i] + buffer_sl, 2), "tp": tp}
+        return fn
+    return factory
+
+
 def gap_fade(min_gap=0.003):
     """Mirror of gap_fill: gap UP >= 0.3%, lose EMA9 from above while still > pdc -> short to pdc."""
     def factory():
@@ -273,6 +291,8 @@ def main():
                 run_market_short(days, sweep_rejection(("r", 0.5))(), c4=False)),
         ("GAPF", run_market(days, gap_fill()(), c4=False),
                  run_market_short(days, gap_fade()(), c4=False)),
+        ("WICK", run_market(days, wick_reversal(("r", 1.0))(), c4=False),
+                 run_market_short(days, wick_rejection_fade(("r", 1.0))(), c4=False)),
     ]
     short_all = {}
     long_all = {}

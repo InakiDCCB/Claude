@@ -279,6 +279,25 @@ def sweep_reclaim(tp, min_depth=0.01, within=3):
     return factory
 
 
+def wick_reversal(tp, wick_thresh=0.6, buffer_sl=0.05, min_range=0.02, min_rvol=None):
+    """Rechazo intra-vela: mecha inferior >= wick_thresh*range -> fade alcista (long).
+    Anatomia O/H/L/C en vez de nivel de sesion (mirror short en backtest_short.wick_rejection_fade)."""
+    def factory():
+        def fn(day, i):
+            rng = day.h[i] - day.l[i]
+            if rng < min_range:
+                return None
+            if min_rvol is not None:
+                if day.avgv5[i] is None or day.v[i] < min_rvol * day.avgv5[i]:
+                    return None
+            lower_wick = min(day.o[i], day.c[i]) - day.l[i]
+            if lower_wick / rng < wick_thresh:
+                return None
+            return {"sl_abs": round(day.l[i] - buffer_sl, 2), "tp": tp}
+        return fn
+    return factory
+
+
 def rsi2_dip(tp_mode, thresh=10, sl_mult=2.0, time_stop=45, require_above_pdl=False):
     def factory():
         def fn(day, i):
