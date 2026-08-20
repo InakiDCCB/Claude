@@ -1,5 +1,37 @@
 # Pulse — historial de versiones del cycle_prompt
 
+## v3.1.11 (2026-08-19) — S2 FVG filtra el fill ordinal #2 del día
+
+Misma sesión que v3.1.10. Se probó primero un filtro combinado de entrada (slope_up & above_vwap &
+risk 0.30-0.50, las tres condiciones que por separado se veían mejor en el cross-tab de 10 años) —
+**empeoró el sistema** (PF pool 0.96 vs 1.02 sin filtro, inestable año a año: 2018/2019 con
+PF=0.51). Apilar condiciones que se ven bien por separado no se sostiene juntas.
+
+Lo que sí funcionó, mucho más simple: excluir específicamente el fill **ordinal #2** del día (sin
+tocar ninguna otra condición). `tools/lab/s2_fvg_combined_filter.py`, 10 años: el fill #2 es
+consistentemente el peor de los 5 ordinales (pnl agregado −46.46 vs +28/+17/+7/+30 del resto).
+Excluirlo da PF pool 1.07 (+81.16 vs +34.71 del sistema sin filtrar) y PF 1.12 en 2023-2026
+(+68.20 vs +53.48) — mejor en TODAS las ventanas, positivo en 9 de 11 años.
+
+**No se puede implementar en la formación de la señal** (no se sabe de antemano si un triplete va
+a fillear o expirar — el ordinal del backtest cuenta FILLS reales, no intentos formados).
+Implementado en STEP 7-fill (paso 1b, nuevo): si el fill que acaba de confirmar sería el #2 real
+del día (`fvg.fills_today == 1` y `NOT fvg.ordinal2_used`), se aplana INMEDIATO con market sell en
+vez de sostenerlo — spread mínimo, sin exposición real. No se arma OCO, no se hace append a
+`state.positions`, no se inserta en `trades` (no fue una operación real). `fvg.ordinal2_used` se
+marca `true` para no volver a saltar otro fill el mismo día; `fvg.fills_today` NO se incrementa, así
+que el próximo fill FVG real pasa a contar como "#2" (renumeración natural — el motor de backtest
+hace lo mismo al remover la posición 2 sin renumerar el resto).
+
+Adaptadas las skills globales (`pre-market.md`, `post-close.md`, `load-memory.md`, viven fuera del
+repo en `~/.claude/commands/`) para reflejar v3.1.10/v3.1.11: `pre-market.md` ya estaba desactualizado
+desde antes de hoy (rsi14/atr1m/xvwap_count/gates.gapf_on/computed_1030 seguían en el JSON de
+`session_state` pese a estar podados hace tiempo o nunca haber tenido consumidor vigente) — corregido
+de una vez, más el campo nuevo `fvg.ordinal2_used`. `post-close.md` todavía trataba a S6 SWP-short
+como LIVE y chequeaba el gate de VWAPPB — corregido, y su sección de FVG por ordinal ahora verifica
+que el filtro se aplicó (busca la línea `FVG ordinal#2 filtrado` en el output del día) en vez de
+solo trackear para una decisión futura.
+
 ## v3.1.10 (2026-08-19) — S3 VWAPPB y S6 SWP-short RETIRADOS de LIVE; long-only otra vez
 
 Decisión usuario tras backtestear los 5 sistemas LIVE contra los 10 años completos de 1-min QQQ
