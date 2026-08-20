@@ -1,5 +1,88 @@
 # Pulse — historial de versiones del cycle_prompt
 
+## v3.1.10 (2026-08-19) — S3 VWAPPB y S6 SWP-short RETIRADOS de LIVE; long-only otra vez
+
+Decisión usuario tras backtestear los 5 sistemas LIVE contra los 10 años completos de 1-min QQQ
+(2016-2026, `tools/data/qqq_1min/` — ver `project_macro_cycle_research.md` para cómo se armó ese
+dataset y `project_systems_history.md` para el detalle completo del backtest). Con C4 activo
+(igual que en producción):
+
+| Sistema | n (10y) | hit% | PF | pnl/share | Veredicto |
+|---|---|---|---|---|---|
+| S1 RSI2 | 13,499 | 65.6% | 1.05 | +101.55 | Sólido, positivo casi todos los años → sigue LIVE |
+| S2 FVG | 9,601 | 33.5% | 1.02 | +34.71 | Positivo (gracias a C4) → sigue LIVE |
+| S3 VWAPPB | 10,079 | 49.9% | 0.99 | -11.67 | Breakeven → **RETIRADO** |
+| S4 SWP | 2,336 | 64.9% | 0.93 | -29.98 | Negativo 10/11 años → sigue LIVE en revisión (ver abajo) |
+| S6 SWP-short | 2,829 | 65.4% | 0.99 | -5.33 | Breakeven → **RETIRADO** |
+
+**S3 y S6 salen de LIVE.** Con S6 fuera, el sistema vuelve a ser 100% long-only — se podó toda la
+mecánica de short: exclusión de dirección long/short (STEP 6 y multi-posición), invariante de
+reconciliación con signo (STEP 3, vuelve a `Σqty == net qty` simple), rama short del OCO en
+STEP 7-fill, `dir:"long"|"short"` en `state.positions`, y las columnas `swp_short_v3`/`vwappb_v3`
+del INSERT de `trades`. Huérfanos por la salida de S3: `rsi14` 1-min, `atr1m`, `xvwap_count`,
+`gates.vwappb_on` (STEP 5, gate de las 10:30) — podados de STEP 4/STEP 8, siguiendo el mismo
+criterio que la poda de `ema9`/`ema21` en v3.1.5 (cero consumidores vivos). El lookback de S1
+(`atr5m`/`rsi2` 5-min) sigue intacto y es ahora el único consumidor de la lección de seed-de-dos-
+fases-Wilder de v3.1.8 (generalizada en STEP 2-bis, ya no habla específicamente de RSI14/ATR1m).
+
+**S4 SWP se recalibró y NO se encontró arreglo por parámetros.** `tools/lab/s4_swp_recalibration.py`
+barrió TP∈{0.3R..1.5R} × min_depth∈{0.01,0.10,0.30} y por separado el buffer del SL∈{0.02..0.20}
+con TP∈{0.5R,0.75R,1.0R} — con la muestra grande y confiable (min_depth=0.01, n=1971-2481 según la
+celda), **PF se mantuvo por debajo de 1.0 en absolutamente todas las combinaciones probadas.** Las
+pocas celdas con PF>1.0 aparecen solo con min_depth=0.30, que recorta la muestra a ~200 trades en
+10 años (18-20/año) — año por año esas mismas celdas van de PF=0.06 a PF=1.49, ruido de muestra
+chica, no una señal real. Conclusión: el problema de S4 no es la calibración de TP/SL, es que el
+filtro de entrada (sweep de session low + reclaim + volumen ≥1.5×prom5) no tiene edge suficiente
+por sí mismo en 10 años de datos. Sigue LIVE (con C4, que amortigua pero no arregla el problema
+estructural) mientras se evalúa un rediseño del entry — no re-tocar TP/SL sin una idea nueva de
+filtro, ya se demostró que no alcanza.
+
+## v3.1.9 (2026-08-14) — STEP 4-shadow: update_indicators() en sombra (Fase 3 migración SQL)
+
+Misma sesión que v3.1.8. Al re-validar ATR1m post-fix (contra un cold-start simulado con barras
+reales del 08-13 alimentadas a `update_indicators()` desde `session_state` vacío), apareció un
+SEGUNDO bug, esta vez en la función SQL misma (no en la prosa): la rama "bar 0 del día" seedeaba
+`atr1m` con su propio rango H-L y lo contaba como elemento 1/14 del seed — un comentario en el
+código afirmaba falsamente que esto emulaba `tools/backtest.py:wilder_atr`, que en realidad
+DESCARTA ese primer TR del seed (usa `trs[1..14]`, no `trs[0..13]`). Confirmado empíricamente:
+SQL daba `atr1m=0.2977` vs `0.2804` de la referencia Python para el mismo slice de 15 barras.
+Corregido (migración `fix_update_indicators_atr1m_first_bar_seed`): el bar 0 ahora no aporta a
+NINGÚN acumulador, simétrico con RSI14 (que ya lo hacía bien). Re-validado exacto en 2 checkpoints
+(seed-boundary n=14 y steady-state 15 barras después) — Fase 2 de la migración cierra con confianza.
+
+Con Fase 2 cerrada, se parametrizó `update_indicators(p_date, p_new_bars, p_key default 'QQQ')`
+para poder escribir a un namespace aislado (`QQQ_shadow`) sin colisionar con `state.QQQ` (prosa,
+autoritativa), y se arrancó Fase 3 (shadow rollout): STEP 4-shadow corre la función en sombra cada
+ciclo sobre las mismas barras que STEP 4 ya procesó (sin fetch ni round-trip nuevo), envuelta en
+`DO $$ ... EXCEPTION WHEN OTHERS ...$$` para que un fallo del shadow nunca pueda tumbar el UPDATE
+crítico de session_state/cycle_log/wakeup del mismo batch. Cero impacto en trading: STEP 6/6b/7
+siguen leyendo EXCLUSIVAMENTE la prosa. Objetivo: 2-3 sesiones de `state.QQQ_shadow` vs `state.QQQ`
+antes de evaluar Fase 4 (cutover real) — detalle completo en `project_sql_indicators_migration.md`.
+
+## v3.1.8 (2026-08-14) — seed de dos fases para RSI14/ATR1m en cold-start
+
+Detectado validando `update_indicators()`, una función SQL nueva (proyecto de migrar STEP 4 de
+prosa a Postgres — ver `project_cycle_latency.md`): replayeando barras reales del 08-13 contra la
+fórmula Wilder de referencia (`tools/backtest.py:wilder_atr`), el `atr1m` correcto daba ~0.517
+mientras el loop en vivo había logueado 0.45 ese ciclo — un sesgo ~15% bajo. RSI14 y VWAP, en
+cambio, coincidían casi exacto. Causa: `session_state.QQQ.atr1m` se guarda como escalar simple (a
+diferencia de `rsi14`, que es `{ag,al}`), y STEP 2-bis (cold-start) solo decía "usa las fórmulas
+del STEP 4" — que documentan ÚNICAMENTE la recursión de estado estable (`atr=(atr×13+tr)/14`), no
+el seed de dos fases (promedio de los primeros 14 TRs, recién después recursión) que
+`pre-market.md` STEP 3 sí especifica bien. Si un cold-start aplicó la recursión desde `atr1m=0`
+en vez de sembrarla, el sesgo no se autocorrige (memoria larga de Wilder) — y `atr1m` fija el
+TP/SL real de S3 VWAPPB. Fix: STEP 2-bis ahora especifica el seed de dos fases explícitamente,
+igual que pre-market.md. No se pudo confirmar la causa raíz exacta del 08-13 (no hay historial
+minuto a minuto de `session_state`) — el fix cierra el vacío del spec hacia adelante.
+
+## v3.1.7 (2026-08-09) — S6 SWP-short LIVE persistido en el archivo
+
+La promoción real ya venía de antes (7 trades 08-03/08-04, decisión usuario 08-07 de continuar
+hasta n=100) pero había quedado solo en el contexto de una sesión del loop, nunca guardada en
+`cycle_prompt.md`. Una sesión nueva releyó el archivo en SHADOW y S6 dejó de ordenar sin que nadie
+lo decidiera — ver `project_short_enablement.md`. Corregido: S6 en STEP 6 (LIVE) de forma
+persistente, primer sistema SHORT con órdenes reales, exclusión de dirección long/short ACTIVA.
+
 ## v3.1.6 (2026-07-29) — hard-limit gap_recovery S4 SWP
 
 Bug detectado en sesión 07-29: el loop murió 3h16min (12:03–15:19 ET), al recuperar encontró un
