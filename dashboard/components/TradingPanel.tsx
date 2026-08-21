@@ -2,12 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { createSupabase } from '@/lib/supabase'
-import type { Trade, AnalysisEntry, AgentStatus, AlpacaState, SessionStateRow, ShadowSignal, ShadowAccum, PnlPoint, StrategyRanking, MarketCondition, StrategyRegistry, MarketContext, MarketPattern, MarketHypothesis, EmergingLabel, MarketIntel } from '@/lib/supabase'
+import type { Trade, AnalysisEntry, AgentStatus, AlpacaState, SessionStateRow, ShadowSignal, ShadowAccum, PnlPoint, StrategyRanking, StrategyRegistry } from '@/lib/supabase'
 import PerformanceSummary from './PerformanceSummary'
 import DataTabs from './DataTabs'
 import LiveSessionPanel from './LiveSessionPanel'
 import SystemsCard from './SystemsCard'
-import MarketContextCard from './MarketContextCard'
 import InfraFooter from './InfraFooter'
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
@@ -79,13 +78,7 @@ export default function TradingPanel({
   shadowAccum,
   pnlHistory,
   ranking,
-  conditions,
   registry,
-  miContexts,
-  miPatterns,
-  miHypotheses,
-  miEmerging,
-  miIntel,
 }: {
   initialTrades:   Trade[]
   initialAnalysis: AnalysisEntry[]
@@ -96,13 +89,7 @@ export default function TradingPanel({
   shadowAccum:     ShadowAccum[]
   pnlHistory:      PnlPoint[]
   ranking:         StrategyRanking[]
-  conditions:      MarketCondition[]
   registry:        StrategyRegistry[]
-  miContexts:      MarketContext[]
-  miPatterns:      MarketPattern[]
-  miHypotheses:    MarketHypothesis[]
-  miEmerging:      EmergingLabel[]
-  miIntel:         MarketIntel | null
 }) {
   const [trades,        setTrades]        = useState<Trade[]>(initialTrades)
   const [liveAgents,    setLiveAgents]    = useState<AgentStatus[]>(agents)
@@ -212,22 +199,7 @@ export default function TradingPanel({
         <SystemsCard ranking={ranking} registry={registry} accum={shadowAccum} signals={shadowSignals} />
       </section>
 
-      {/* 5 · Market Intelligence — contexto + condiciones (advisory, informa sin crear reglas) */}
-      <section>
-        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
-          Contexto de mercado
-        </h2>
-        <MarketContextCard
-          intel={miIntel}
-          contexts={miContexts}
-          patterns={miPatterns}
-          hypotheses={miHypotheses}
-          emerging={miEmerging}
-          conditions={conditions}
-        />
-      </section>
-
-      {/* 6 · Infra — de bajo cambio, footer discreto sin sección propia */}
+      {/* 5 · Infra — de bajo cambio, footer discreto sin sección propia */}
       <InfraFooter agents={liveAgents} />
     </>
   )

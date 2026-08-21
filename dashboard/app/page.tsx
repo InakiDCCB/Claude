@@ -1,5 +1,5 @@
 import { createSupabase } from '@/lib/supabase'
-import type { Trade, AnalysisEntry, AgentStatus, AlpacaState, SessionStateRow, ShadowSignal, ShadowAccum, PnlPoint, StrategyRanking, MarketCondition, StrategyRegistry, MarketContext, MarketPattern, MarketHypothesis, EmergingLabel, MarketIntel } from '@/lib/supabase'
+import type { Trade, AnalysisEntry, AgentStatus, AlpacaState, SessionStateRow, ShadowSignal, ShadowAccum, PnlPoint, StrategyRanking, StrategyRegistry } from '@/lib/supabase'
 import TradingPanel from '@/components/TradingPanel'
 import MarketStatus from '@/components/MarketStatus'
 
@@ -25,17 +25,11 @@ export default async function Page({
   let shadowAccum:  ShadowAccum[]       = []
   let pnlHistory:   PnlPoint[]          = []
   let ranking:      StrategyRanking[]   = []
-  let conditions:   MarketCondition[]   = []
   let registry:     StrategyRegistry[]  = []
-  let miContexts:   MarketContext[]     = []
-  let miPatterns:   MarketPattern[]     = []
-  let miHypotheses: MarketHypothesis[]  = []
-  let miEmerging:   EmergingLabel[]     = []
-  let miIntel:      MarketIntel | null  = null
 
   try {
     const sb = createSupabase()
-    const [tradesRes, analysisRes, agentsRes, alpacaStateRes, sessionStateRes, shadowRes, shadowAccumRes, pnlRes, rankingRes, conditionsRes, registryRes, miCtxRes, miPatRes, miHypRes, miEmgRes, miIntelRes] = await Promise.all([
+    const [tradesRes, analysisRes, agentsRes, alpacaStateRes, sessionStateRes, shadowRes, shadowAccumRes, pnlRes, rankingRes, registryRes] = await Promise.all([
       sb.from('trades').select('*')
         .gte('created_at', fromDate).lte('created_at', toDate)
         .order('created_at', { ascending: false }),
@@ -56,16 +50,9 @@ export default async function Page({
         .select('created_at,pnl')
         .not('pnl', 'is', null)
         .order('created_at', { ascending: true }).limit(5000),
-      // Fase 3 — ranking de estrategias (último snapshot) + condiciones recientes
+      // Fase 3 — ranking de estrategias (último snapshot)
       sb.from('v_strategy_ranking').select('*'),
-      sb.from('market_conditions').select('*').order('session_date', { ascending: false }).limit(12),
       sb.from('strategy_registry').select('*').order('strategy_id'),
-      // Fase 3.1 — Market Intelligence (capa cualitativa/contextual)
-      sb.from('v_market_context').select('*').limit(12),
-      sb.from('v_market_patterns').select('*').limit(40),
-      sb.from('v_market_hypotheses').select('*').limit(40),
-      sb.from('v_emerging_context_labels').select('*'),
-      sb.from('v_market_intelligence').select('*').maybeSingle(),
     ])
     trades        = (tradesRes.data       ?? []) as Trade[]
     analysis      = (analysisRes.data     ?? []) as AnalysisEntry[]
@@ -76,13 +63,7 @@ export default async function Page({
     shadowAccum   = (shadowAccumRes.data  ?? []) as ShadowAccum[]
     pnlHistory    = (pnlRes.data          ?? []) as PnlPoint[]
     ranking       = (rankingRes.data      ?? []) as StrategyRanking[]
-    conditions    = (conditionsRes.data   ?? []) as MarketCondition[]
     registry      = (registryRes.data     ?? []) as StrategyRegistry[]
-    miContexts    = (miCtxRes.data        ?? []) as MarketContext[]
-    miPatterns    = (miPatRes.data        ?? []) as MarketPattern[]
-    miHypotheses  = (miHypRes.data        ?? []) as MarketHypothesis[]
-    miEmerging    = (miEmgRes.data        ?? []) as EmergingLabel[]
-    miIntel       = (miIntelRes.data      ?? null) as MarketIntel | null
   } catch {
     // Supabase unavailable (missing env vars or network) — render empty state
   }
@@ -111,13 +92,7 @@ export default async function Page({
           shadowAccum={shadowAccum}
           pnlHistory={pnlHistory}
           ranking={ranking}
-          conditions={conditions}
           registry={registry}
-          miContexts={miContexts}
-          miPatterns={miPatterns}
-          miHypotheses={miHypotheses}
-          miEmerging={miEmerging}
-          miIntel={miIntel}
         />
       </div>
     </main>

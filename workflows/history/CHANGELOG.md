@@ -1,5 +1,21 @@
 # Pulse — historial de versiones del cycle_prompt
 
+## v3.1.13 (2026-08-20) — S4 SWP RE-PROMOVIDO a LIVE, LWR RE-PROMOVIDO a SHADOW (override de usuario)
+
+Decisión usuario, misma sesión que v3.1.12: volver a correr S4 SWP en vivo y LWR como shadow.
+**Esto NO es un nuevo hallazgo de research** — el diagnóstico de v3.1.12 sigue vigente y no fue
+refutado (backtest de 10 años PF=0.93 para S4, 0/11 años positivos en el barrido SL 0.5R-1.0R con
+slippage realista modelado, mismo patrón para LWR — ver `project_s4_lwr_path_analysis.md`). El
+usuario decidió explícitamente correrlos de todos modos, con el mismo freno C4 (2 pérdidas
+consecutivas → apagado hasta el día siguiente) que ya tenían antes del retiro.
+
+Revertido en `cycle_prompt.md`: STEP 6 (bloque de señal S4 SWP restaurado sin cambios de
+parámetros respecto a v3.1.0-v3.1.11), tabla de sistemas, prioridad multi-posición (S2>S1 →
+S2>S1>S4), C4/MODO REPOSO (`c4.swp` de vuelta), STEP 7-fill (OCO + INSERT de `trades` con
+`swp_v3` de vuelta), RESTRICCIONES PERMANENTES. `strategy_registry`: `swp_v3` → `live`, `lwr_v1` →
+`shadow` (vuelve a correr batch en `/post-close` vía `tools/liquidity_shadow.py`). Skills
+(`pre-market.md`, `post-close.md`) actualizadas igual.
+
 ## v3.1.12 (2026-08-20) — S4 SWP RETIRADO de LIVE; long-only con solo S2 FVG + S1 RSI2
 
 Decisión usuario tras research exhaustivo de la sesión sobre por qué S4 SWP (y el shadow LWR)

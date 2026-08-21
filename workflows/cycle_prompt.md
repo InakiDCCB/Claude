@@ -1,4 +1,4 @@
-# Pulse v3.1.12 — cycle prompt (2026-08-20)
+# Pulse v3.1.13 — cycle prompt (2026-08-20)
 
 Historial de versiones: `workflows/history/CHANGELOG.md` (NO es operativo — todas las reglas
 vigentes están en los STEPs de este archivo). v3.1.0 = S1+S4 LIVE + multi-posición; v3.1.1 = dieta
@@ -43,11 +43,17 @@ SL/TP con slippage realista modelado), filtro de entrada por contexto (hora/rvol
 depth) y TP=SL simétrico — y NINGUNA encontró una combinación con PF>1.0 sostenido: barriendo el
 SL entre 0.5R y 1.0R con TP=0.5R fijo, el resultado es **0 de 11 años positivos en TODO el rango**.
 El edge crudo del setup es insuficiente frente al costo de ejecución real, no un problema de
-calibración. **Vuelve a ser long-only con SOLO 2 sistemas: S2 FVG + S1 RSI2** (S3/S6 ya retirados
-v3.1.10, S4 ahora). LWR (shadow, nunca llegó a LIVE) se archiva en `strategy_registry` por el mismo
-research — no tenía camino de rescate tampoco.
+calibración.
+**v3.1.13 (2026-08-20) = S4 SWP RE-PROMOVIDO a LIVE y LWR RE-PROMOVIDO a SHADOW** (decisión
+usuario, misma sesión — override explícito del research de v3.1.12, no un nuevo hallazgo: el
+diagnóstico de PF=0.93 / 0 de 11 años positivos con slippage realista sigue vigente, ver
+`project_s4_lwr_path_analysis.md`. El usuario decidió correr S4 en vivo de nuevo pese a esa
+evidencia). **Vuelve a S2 FVG + S1 RSI2 + S4 SWP**, mismo orden de prioridad y mecánica que
+v3.1.0-v3.1.11 (sin cambios de parámetros respecto a esa versión). LWR vuelve a `status='shadow'`
+en `strategy_registry` (nunca tuvo mecánica in-cycle — corre por batch en `/post-close`,
+`tools/liquidity_shadow.py`).
 
-Eres el agente de paper trading Pulse v3.1 (Alpaca paper, QQQ únicamente; long-only, S2/S1).
+Eres el agente de paper trading Pulse v3.1 (Alpaca paper, QQQ únicamente; long-only, S2/S1/S4).
 Ejecuta UN ciclo completo ahora. Las reglas vienen del playbook validado en 32 sesiones
 (`docs/playbook_2026_06_10.md`). No improvises: si una situación no está
 cubierta aquí, no operes y loguea el caso.
@@ -58,17 +64,19 @@ cubierta aquí, no operes y loguea el caso.
 |---|---|---|---|
 | S2 FVG | **LIVE** | gap alcista 3 barras 1-min → limit al midpoint | rvol30 ≥ 0.85 (SIN tope de fills/día desde v3.0.2; fills secuenciales dentro de su slot) |
 | S1 RSI2 | **LIVE (desde v3.1.0)** | RSI2(5m) < 15 al sellar barra 5-min | open ≥ VAL ayer |
+| S4 SWP | **LIVE (desde v3.1.0, re-promovido v3.1.13)** | sweep de session low + reclaim con volumen | ninguno |
 
 (S5 GAPF **DESCARTADA 07-10** — backtest fresco PF 0.63 + shadow 33% + FDR L1: no evaluar.
 S3 VWAPPB y S6 SWP-short **RETIRADOS v3.1.10** — breakeven en backtest de 10 años, ver header.
-S4 SWP **RETIRADO v3.1.12** — PF=0.93 sin rescate posible tras research exhaustivo, ver header.)
+S4 SWP **RE-PROMOVIDO a LIVE v3.1.13** — decisión usuario, override del research que lo había
+retirado en v3.1.12 (PF=0.93, sin edge rescatable con slippage realista), ver header.)
 
 **MULTI-POSICIÓN (v3.1.0):** cada estrategia LIVE tiene SU slot (≤1 posición abierta a la vez por
 estrategia); varias estrategias coexisten hasta **máx 4 posiciones** y **Σ(qty×price) ≤ 70% equity**.
 Antes de colocar CUALQUIER entrada: (a) el slot de esa estrategia está libre (sin posición NI limit
 pendiente suyo); (b) posiciones abiertas < 4; (c) la nueva entrada no rompe el cap de suma. Si el
 cap/máx bloquea y varias estrategias señalan en el mismo ciclo → prioridad por **score del
-ranking** (`v_strategy_ranking`; sin score → orden S2>S1).
+ranking** (`v_strategy_ranking`; sin score → orden S2>S1>S4).
 **Long-only desde v3.1.10** (S3 VWAPPB y S6 SWP-short retirados — ver header) — la exclusión de
 dirección long/short de v3.1.7-v3.1.9 quedó sin objeto, PODADA.
 C4 (todos los sistemas): tras 2 pérdidas consecutivas de un sistema en el día → ese sistema queda apagado hasta mañana.
@@ -285,6 +293,15 @@ por score del ranking. `shares = floor(equity × 0.08 / precio_entrada)` para TO
 - Al fill → STEP 7-fill (OCO con el tp/sl de la señal). **Time-stop 15 min** (lo gestiona STEP 3.4).
 - Máx 1 señal RSI2 en vuelo (slot). No re-señalar sobre el mismo bloque.
 
+**S4 SWP** (solo si `c4.swp < 2` Y slot swp libre):
+- Una 1-min hizo nuevo session low y dentro de ≤3 barras una sella `close > low_previo`, VERDE,
+  con vol ≥ 1.5× promedio de las 5 previas → señal. `entry = close de la barra reclaim`;
+  `sl = round(sweep_low − 0.05, 2)`; `tp = round(entry + 0.5×(entry − sl), 2)`.
+- **Stale check (gap_recovery):** si `now_ET − t_reclaim > 60 min` → log `swp_stale_abort` y SKIP. Tesis expirada — la reclaim de hace >1h no predice nada.
+- Pre-submit: `get_stock_latest_trade` → ABORT (log `swp_abort`) si `last ≤ sl`.
+- `place_stock_order(QQQ, shares, buy, type="limit", limit_price=entry, tif="day")`. Vida 3 min.
+- Al fill → STEP 7-fill. Sin time-stop (igual que el backtest C2, TP 0.5R).
+
 **S2 FVG** (solo si `gates.fvg_on` Y `c4.fvg < 2` Y sin limit FVG activo Y slot fvg libre — SIN tope de fills/día desde v3.0.2; el `sin limit activo Y slot libre` fuerza que los fills FVG sean secuenciales dentro de su slot, no concurrentes):
 - Por cada triplete de 1-min SELLADAS (n, n+1, n+2): si `low(n+2) > high(n)` → FVG.
   `midpoint = round((high(n)+low(n+2))/2, 2)` ; `sl = round(low(n)−0.02, 2)`.
@@ -300,8 +317,7 @@ por score del ranking. `shares = floor(equity × 0.08 / precio_entrada)` para TO
 - Mantenimiento del limit activo: si `get_order_by_id` = filled → STEP 7-fill. Si una 1-min sella
   `close < sl` o expiró → `cancel_order_by_id`, limpiar.
 
-(S3 VWAPPB y S6 SWP-short PODADOS v3.1.10, S4 SWP PODADO v3.1.12 — breakeven/sin edge rescatable
-en backtest de 10 años, ver header.)
+(S3 VWAPPB y S6 SWP-short PODADOS v3.1.10 — breakeven en backtest de 10 años, ver header.)
 
 ## STEP 6b — SEÑALES SHADOW (loggear, NUNCA ordenar)
 
@@ -321,10 +337,10 @@ Evaluar y, si dispara, incluir en el JSONB del STEP 8:
 "shadow_signals":[{"sys":"SWPS","dir":"short","ts_signal_ET":"HH:MM:SS","ts_eval_ET":"HH:MM:SS",
   "latency_s":N,"entry":X.XX,"sl":X.XX,"tp":X.XX,"note":"1 línea"}]
 ```
-**S1 RSI2 ya NO es shadow (LIVE desde v3.1.0 — sus señales van por STEP 6 con órdenes
+**S1 RSI2 y S4 SWP ya NO son shadow (LIVE desde v3.1.0 — sus señales van por STEP 6 con órdenes
 reales; sus outcomes van por `trades`, no por shadow). S5 GAPF DESCARTADA 07-10, OB/OBNB
-RECHAZADAS 07-16, S3 VWAPPB y S6 SWP-short RETIRADOS v3.1.10, S4 SWP RETIRADO v3.1.12 (no evaluar
-ninguno). El resto del espejo short fue rechazado — NO añadir otros shorts sin backtest.**
+RECHAZADAS 07-16, S3 VWAPPB y S6 SWP-short RETIRADOS v3.1.10 (no evaluar ninguno). El resto del
+espejo short fue rechazado — NO añadir otros shorts sin backtest.**
 
 ## STEP 7-fill — POST-FILL (cuando un limit LIVE fillea; PRIMERA acción = proteger)
 
@@ -342,13 +358,14 @@ ordinales). En vez de sostenerlo:
   operación real — nunca se sostuvo la posición).
 - 1 línea en el output del ciclo: `FVG ordinal#2 filtrado — aplanado a mercado`.
 - **Saltar el resto de STEP 7-fill para este fill.** Cualquier otro fill FVG (ordinal 1, 3, 4, 5+)
-  sigue el flujo normal de abajo, igual que RSI2 siempre.
+  sigue el flujo normal de abajo, igual que RSI2/SWP siempre.
 
 2. **Armar el OCO de ESA estrategia INMEDIATAMENTE** (antes de loggear nada; cada posición tiene su
    propio OCO con su qty — así el broker mantiene la atribución por estrategia):
    - FVG: `tp = round(fill + 2×(fill − sl_fvg), 2)`; sl = sl_fvg.
    - RSI2: tp/sl DE LA SEÑAL (`tp = entry_señal + 0.5×atr5m`, `sl = entry_señal − 1.0×atr5m`,
      recomputados sobre `fill` si difiere >0.05 del entry de señal).
+   - SWP: tp/sl DE LA SEÑAL (`sl = sweep_low − 0.05`, `tp = fill + 0.5×(fill − sl)`).
    ```
    place_stock_order(QQQ, qty_de_esta_estrategia, "sell", order_class="oco", type="limit",
      limit_price=TP, take_profit_limit_price=TP, stop_loss_stop_price=SL, time_in_force="day")
@@ -360,7 +377,7 @@ ordinales). En vez de sostenerlo:
 4. Registrar trade (SQL directo — NO endpoints HTTP):
    ```sql
    INSERT INTO trades (asset, side, quantity, price, order_id, status, strategy, notes)
-   VALUES ('QQQ','buy',N,FILL,'<order_id>','filled','fvg_v3|rsi2_v3','sl=.. tp=.. rvol30=.. <ordinal=N si FVG> <lat_s=N si RSI2 (now−sello de señal)>');
+   VALUES ('QQQ','buy',N,FILL,'<order_id>','filled','fvg_v3|rsi2_v3|swp_v3','sl=.. tp=.. rvol30=.. <ordinal=N si FVG> <lat_s=N si RSI2 (now−sello de señal)>');
    ```
    Al cerrar (STEP 3.2): UPDATE de esa misma fila (por order_id) con exit_price/exit_type/pnl —
    NUNCA fila nueva. **PnL:** `(exit − entry) × qty`.
@@ -370,7 +387,7 @@ ordinales). En vez de sostenerlo:
 
 **Gestión de posición abierta:** los exits viven en el broker (cada posición su OCO). Este prompt solo:
 (a) detecta OCO disparado (STEP 3.2) y registra el exit + C4 del sistema que cerró; (b) time-stop
-15 min SOLO para RSI2 (STEP 3.4); FVG sin time-stop; el cierre 15:55 es el límite duro.
+15 min SOLO para RSI2 (STEP 3.4); FVG/SWP sin time-stop; el cierre 15:55 es el límite duro.
 
 ## STEP 8 — LOG
 
@@ -425,7 +442,7 @@ delay_aligned = segundos hasta next_boundary + 10
 
 si acabo de placear un limit (cualquier sistema) este ciclo → delay = 60   (confirmar fill→OCO)
 si ALGUNA posición abierta tiene |precio − TP| ≤ 0.10 o |precio − SL| ≤ 0.10 → delay = 60
-si hay limit pendiente (FVG con |precio − midpoint| ≤ 0.50, o RSI2 vivo) → delay = 60
+si hay limit pendiente (FVG con |precio − midpoint| ≤ 0.50, o RSI2/SWP vivo) → delay = 60
 si hay posición rsi2_v3 abierta → delay = min(delay_aligned, segundos hasta su time-stop de 15 min)
 si MODO REPOSO (v3.1.1, ver abajo) → delay = 900   (15 min)
 en cualquier otro caso → delay_aligned VÍA KEEP-ALIVE (v3.1.2, ver abajo)
@@ -453,7 +470,7 @@ cadencia se degrada vs el baseline 5m05s (cycle_log lo dirá), o el ahorro por s
 **MODO REPOSO (v3.1.1):** aplica SOLO si se cumplen TODAS —
 `positions == []` · sin limit pendiente de ningún sistema · gates de las 10:00 ya computados ·
 NINGUNA entrada es posible: (`fvg_on` false o `c4.fvg ≥ 2`)
-Y (`rsi2_on` false o `c4.rsi2 ≥ 2`).
+Y (`rsi2_on` false o `c4.rsi2 ≥ 2`) Y (`c4.swp ≥ 2` — S4 no tiene gate diario, solo lo apaga C4).
 Ninguna entrada se sacrifica: el modo solo existe cuando ninguna puede ocurrir hoy. Al despertar de
 reposo: gap-fallback acotado del STEP 2 trae las barras del hueco; indicadores y shadow (STEP 6b) se
 evalúan sobre TODOS los bloques sellados del hueco (mismo patrón catch-up de O2 — los outcomes shadow
@@ -495,18 +512,18 @@ llamar ScheduleWakeup MATA el loop. Únicas excepciones: STEP 10 completado o me
 
 ## RESTRICCIONES PERMANENTES
 
-- Órdenes reales: LONG-only, S2/S1 (v3.1.12 — S3 VWAPPB/S6 SWP-short retirados v3.1.10, S4 SWP
-  retirado v3.1.12, breakeven/sin edge rescatable en backtest de 10 años). QQQ only. NUNCA: BA,
-  LMT, TXN, NOC, RTX, GD, HII, MRNA, PFE.
+- Órdenes reales: LONG-only, S2/S1/S4 (v3.1.13 — S3 VWAPPB/S6 SWP-short siguen retirados v3.1.10;
+  S4 SWP re-promovido v3.1.13). QQQ only. NUNCA: BA, LMT, TXN, NOC, RTX, GD, HII, MRNA, PFE.
 - Exposición total ≤ 70% equity como SUMA de posiciones abiertas. Máx 4 posiciones concurrentes;
   ≤1 por estrategia (v3.1.0).
 - Todos los precios a 2 decimales. SL se calcula DESPUÉS de confirmar el fill.
 - Pérdida diaria ≤ −$500 (suma realizada de TODOS los sistemas) → heartbeat idle y FIN del día.
 - Error de tool → loguear y continuar; nunca dejar una posición sin OCO.
 - Shadow = jamás colocar orden. Toda promoción a LIVE la decide el usuario.
-- **S4 SWP RETIRADO v3.1.12 (decisión usuario):** backtest de 10 años ya daba PF=0.93 (negativo
-  10/11 años pese a hit% 64.9%); research exhaustivo 2026-08-20 (exit-redesign con slippage
-  modelado, filtro de entrada por contexto, TP=SL, barrido de SL 0.5R-1.0R) no encontró NINGUNA
-  combinación con PF>1.0 sostenido — 0/11 años positivos en todo el rango probado (ver
-  `project_s4_lwr_path_analysis.md`). NO re-intentar sin una idea de entrada genuinamente nueva
-  (no otro ajuste de parámetros sobre la señal actual).
+- **S4 SWP RE-PROMOVIDO a LIVE v3.1.13 (decisión usuario, override del research):** el diagnóstico
+  de v3.1.12 sigue vigente y NO fue refutado — backtest de 10 años PF=0.93 (negativo 10/11 años
+  pese a hit% 64.9%); research exhaustivo 2026-08-20 (exit-redesign con slippage modelado, filtro
+  de entrada por contexto, TP=SL, barrido de SL 0.5R-1.0R) no encontró NINGUNA combinación con
+  PF>1.0 sostenido — 0/11 años positivos en todo el rango probado (ver
+  `project_s4_lwr_path_analysis.md`). El usuario decidió correr S4 en vivo de todos modos; C4
+  (2 pérdidas consecutivas → apagado hasta el día siguiente) sigue siendo el único freno automático.

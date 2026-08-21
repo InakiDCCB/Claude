@@ -4,7 +4,7 @@ import type { StrategyRanking, StrategyRegistry, ShadowAccum, ShadowSignal } fro
 
 // strategy_id canónico -> código `sys` que usa shadow_signals / v_shadow_accumulated
 const ID_TO_SYS: Record<string, string> = {
-  rsi2_v3: 'RSI2', fvg_v3: 'FVG',
+  rsi2_v3: 'RSI2', fvg_v3: 'FVG', swp_v3: 'SWP', lwr_v1: 'LWR',
   gt_closelow_v2: 'GTCLV2',
 }
 
