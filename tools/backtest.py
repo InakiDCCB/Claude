@@ -120,6 +120,45 @@ class Day:
             self.slope30[i] = self.vwap[i] - self.vwap[i - 30]
 
 
+SESSION_START_MIN_UTC = 13 * 60 + 30   # 13:30 UTC == 9:30 ET == bar index 0
+
+
+def attach_orderflow(day, trades):
+    """Adjunta features de order-flow (regla de tick, client-side -- Alpaca no expone lado del
+    trade) a un Day ya construido. `trades`: dicts {"t","p","s",...} de ESTE dia, cualquier orden.
+    Agrega day.buy_vol/sell_vol/buy_n/sell_n/delta/cvd, arrays alineados a los mismos indices de
+    barra 1-min que el resto de features (day.rsi14, day.vwap, ...)."""
+    n = day.n
+    buy_vol = [0.0] * n
+    sell_vol = [0.0] * n
+    buy_n = [0] * n
+    sell_n = [0] * n
+    prev_p, prev_side = None, 1
+    for tr in sorted(trades, key=lambda x: x["t"]):
+        bar_i = int(tr["t"][11:13]) * 60 + int(tr["t"][14:16]) - SESSION_START_MIN_UTC
+        if bar_i < 0 or bar_i >= n:
+            continue
+        p = tr["p"]
+        if prev_p is None or p == prev_p:
+            side = prev_side
+        else:
+            side = 1 if p > prev_p else -1
+        prev_p, prev_side = p, side
+        if side > 0:
+            buy_vol[bar_i] += tr["s"]
+            buy_n[bar_i] += 1
+        else:
+            sell_vol[bar_i] += tr["s"]
+            sell_n[bar_i] += 1
+    delta = [buy_vol[i] - sell_vol[i] for i in range(n)]
+    cvd, running = [0.0] * n, 0.0
+    for i in range(n):
+        running += delta[i]
+        cvd[i] = running
+    day.buy_vol, day.sell_vol, day.buy_n, day.sell_n = buy_vol, sell_vol, buy_n, sell_n
+    day.delta, day.cvd = delta, cvd
+
+
 def simulate(day, entry_i, entry_px, sl, tp_spec, be_at_r=None, time_stop=None):
     risk = entry_px - sl
     tp_abs = None

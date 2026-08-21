@@ -1,5 +1,43 @@
 # Pulse — historial de versiones del cycle_prompt
 
+## v3.1.12 (2026-08-20) — S4 SWP RETIRADO de LIVE; long-only con solo S2 FVG + S1 RSI2
+
+Decisión usuario tras research exhaustivo de la sesión sobre por qué S4 SWP (y el shadow LWR)
+pierden plata pese a hit rate ~65% (ver `project_s4_lwr_path_analysis.md`). El backtest de 10 años
+(v3.1.10) ya daba PF=0.93 (negativo 10/11 años). Hoy se probaron TRES vías de rescate distintas,
+todas negativas:
+
+1. **Diagnóstico MFE/MAE:** el TP actual (0.5R) corta ganadoras muy corto (mediana de excursión
+   real ~0.65-0.71R) mientras el SL (1.0R) deja correr perdedoras demasiado (99.9% ya rompió -0.5R
+   antes de -1R). Un grid de SL/TP alternativo re-escaneado sobre los trades reales encontró un
+   "óptimo" (SL=0.15R/TP=1.2R, PF=1.29 positivo en 11/11 años) — **pero sin modelar slippage.**
+2. **Con slippage realista ($0.01-0.02, spread típico de QQQ) el óptimo se derrumba** (PF 1.29→0.83)
+   porque un SL más ajustado implica un R más chico, y el mismo costo fijo en dólares se come una
+   porción mayor de cada trade. Con $0.02 de slippage, LOS TRES combos probados (actual, conservador,
+   óptimo) quedan bajo PF=1.0, negativos en 9-10 de 11 años.
+3. **Filtro de entrada por contexto** (hora del día, rvol, pendiente VWAP, RSI14, ganancia del día,
+   profundidad del sweep): ningún tercil de ningún feature cruza PF=1.0 en ambas eras — el problema
+   no es un subconjunto malo diluyendo un núcleo bueno, la señal es mediocre de forma uniforme.
+4. **TP=SL (R:R 1:1):** el hit rate del 65% es específico del TP ajustado a 0.5R, no una propiedad
+   del setup — al subir el TP a igualar el SL, el hit rate colapsa a ~49-51% (peor que azar) y
+   cancela la mejora de R:R. Mejor caso de toda la prueba (sin slippage): PF=1.04, y se derrumba a
+   0.77 con fricción real.
+5. **Barrido de SL entre 0.5R y 1.0R** (TP=0.5R fijo, el actual): el hit ratio máximo YA está en la
+   config actual (SL=1.0R, hit 64.7-65.3%) — pero **0 de 11 años positivos en TODO el rango**, sin
+   importar dónde se ponga el SL. El PF con slippage se mantiene plano (~0.74-0.76 S4, ~0.49-0.56
+   LWR) en todo el barrido.
+
+**Conclusión: el edge crudo de S4 SWP (y de LWR) es insuficiente frente al costo de ejecución real
+de QQQ en 1-min — no es un problema de calibración de parámetros.** Sacado de STEP 6 (bloque de
+señal completo), de la tabla de sistemas, de la prioridad multi-posición (S2>S1>S4 → S2>S1), del
+INSERT de `trades` (quitado `swp_v3` de la lista de strategy), de MODO REPOSO (quitado `c4.swp`),
+y de RESTRICCIONES PERMANENTES. **Vuelve a long-only con solo 2 sistemas: S2 FVG + S1 RSI2.**
+LWR (shadow, nunca llegó a LIVE) se archiva en `strategy_registry` por el mismo research — no tenía
+camino de rescate tampoco (ver `project_liquidity_wick_reversal.md`).
+
+Adaptadas las skills globales igual que en v3.1.11 (`pre-market.md`, `post-close.md`,
+`load-memory.md`).
+
 ## v3.1.11 (2026-08-19) — S2 FVG filtra el fill ordinal #2 del día
 
 Misma sesión que v3.1.10. Se probó primero un filtro combinado de entrada (slope_up & above_vwap &
