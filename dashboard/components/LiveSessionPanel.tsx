@@ -251,17 +251,12 @@ export default function LiveSessionPanel({ sessionState, alpacaState, trades }: 
   const curPrice  = alpacaPos?.price ?? st.QQQ?.last_close ?? null
   const c4        = st.c4 ?? {}
   const fills     = st.fvg?.fills_today ?? 0
-  const gt        = st.gt ?? null
   const c4Entries = Object.entries(c4).filter(([, v]) => typeof v === 'number')
 
   const liveGates: { label: string; on: boolean | null; detail?: string }[] = [
-    { label: 'S2 FVG',    on: g?.computed_10 ? (g.fvg_on ?? false) : null,
+    { label: 'S2 FVG',  on: g?.computed_10 ? (g.fvg_on ?? false) : null,
       detail: g?.rvol30 != null ? `rvol ${fmt(g.rvol30)}` : undefined },
-    { label: 'S3 VWAPPB', on: g?.computed_1030 ? (g.vwappb_on ?? false) : null,
-      detail: g?.xvwap60 != null ? `xvwap ${g.xvwap60}` : undefined },
     { label: 'S1 RSI2', on: g?.computed_10 ? (g.rsi2_on ?? false) : null, detail: g?.open_loc ?? undefined },
-    { label: 'S5 GAPF sh', on: g?.computed_10 ? (g.gapf_on ?? false) : null,
-      detail: g?.gap_pct != null ? `gap ${fmt(g.gap_pct)}%` : undefined },
   ]
 
   return (
@@ -304,22 +299,12 @@ export default function LiveSessionPanel({ sessionState, alpacaState, trades }: 
           <TodayTrades trades={trades} sessionDate={sessionState!.date} />
         </div>
 
-        {/* Col 2: gates + GT + C4 */}
+        {/* Col 2: gates + C4 */}
         <div>
           <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Gates del día</p>
           <div className="flex flex-wrap gap-1.5 mb-3">
             {liveGates.map(t => <GateTag key={t.label} label={t.label} on={t.on} detail={t.detail} />)}
           </div>
-
-          <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5 mt-4">Golden Ticket (diario)</p>
-          {gt ? (
-            <div className="flex flex-wrap gap-1.5">
-              <GateTag label="GTR2D" on={gt.rsi2d_on ?? false} detail={gt.rsi2_d != null ? `rsi2 ${fmt(gt.rsi2_d, 1)}` : undefined} />
-              <GateTag label="GT3D" on={gt.d3_on ?? false} detail={gt.consec_down != null ? `${gt.consec_down} abajo` : undefined} />
-            </div>
-          ) : (
-            <p className="text-[11px] text-gray-600">Se computa en /pre-market (activo desde 07-03).</p>
-          )}
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-500 border-t border-gray-800/60 pt-2.5 mt-4">
             <span>FVG fills: <span className="font-mono text-gray-300">{fills}</span></span>

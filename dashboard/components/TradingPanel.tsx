@@ -3,16 +3,12 @@
 import { useEffect, useState } from 'react'
 import { createSupabase } from '@/lib/supabase'
 import type { Trade, AnalysisEntry, AgentStatus, AlpacaState, SessionStateRow, ShadowSignal, ShadowAccum, PnlPoint, StrategyRanking, MarketCondition, StrategyRegistry, MarketContext, MarketPattern, MarketHypothesis, EmergingLabel, MarketIntel } from '@/lib/supabase'
-import AccountSummary from './AccountSummary'
-import PerformanceCard from './PerformanceCard'
-import AgentGrid from './AgentGrid'
+import PerformanceSummary from './PerformanceSummary'
 import DataTabs from './DataTabs'
-import MarketCalendarCard from './MarketCalendarCard'
 import LiveSessionPanel from './LiveSessionPanel'
-import ShadowPanel from './ShadowPanel'
-import StrategyRankingCard from './StrategyRankingCard'
-import MarketConditionsCard from './MarketConditionsCard'
-import MarketIntelligencePanel from './MarketIntelligencePanel'
+import SystemsCard from './SystemsCard'
+import MarketContextCard from './MarketContextCard'
+import InfraFooter from './InfraFooter'
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
@@ -184,21 +180,18 @@ export default function TradingPanel({
     <>
       {toast && <TradeToast trade={toast} onClose={() => setToast(null)} />}
 
-      {/* 1 · Qué pasa AHORA: posición (ladder), gates, GT, pulso del loop */}
+      {/* 1 · Qué pasa AHORA: posición (ladder), gates live, pulso del loop */}
       <LiveSessionPanel sessionState={sessionState} alpacaState={alpacaState} trades={trades} />
 
-      {/* 2 · Cuenta: portfolio · hit ratio · P&L por sistema · posiciones live */}
-      <AccountSummary trades={trades} alpacaState={alpacaState} />
-
-      {/* 3 · Performance histórica (equity por sesión, KPIs) */}
+      {/* 2 · Cuenta + performance: única fuente de P&L del dashboard (nada más lo repite) */}
       <section>
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
-          Performance
+          Cuenta & Performance
         </h2>
-        <PerformanceCard pnlHistory={pnlHistory} />
+        <PerformanceSummary trades={trades} alpacaState={alpacaState} pnlHistory={pnlHistory} />
       </section>
 
-      {/* 4 · LOS TRADES: tabla expandible · P&L · horario · analysis log */}
+      {/* 3 · LOS TRADES: tabla expandible (con filtro por estrategia) · analysis log */}
       <section>
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
           Trades
@@ -211,46 +204,31 @@ export default function TradingPanel({
         />
       </section>
 
-      {/* 5 · Validación y aprendizaje: shadows con outcomes reales · ranking · condiciones */}
+      {/* 4 · Sistemas: ranking + validación shadow en una sola tabla (live/shadow arriba, archivadas colapsadas) */}
       <section>
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
-          Validación & aprendizaje
+          Sistemas
         </h2>
-        <div className="space-y-4">
-          <ShadowPanel signals={shadowSignals} accum={shadowAccum} registry={registry} />
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2">
-              <StrategyRankingCard ranking={ranking} />
-            </div>
-            <MarketConditionsCard conditions={conditions} />
-          </div>
-        </div>
+        <SystemsCard ranking={ranking} registry={registry} accum={shadowAccum} signals={shadowSignals} />
       </section>
 
-      {/* 6 · Market Intelligence — contexto, patrones, hipótesis (advisory) */}
+      {/* 5 · Market Intelligence — contexto + condiciones (advisory, informa sin crear reglas) */}
       <section>
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
-          Market Intelligence
+          Contexto de mercado
         </h2>
-        <MarketIntelligencePanel
+        <MarketContextCard
           intel={miIntel}
           contexts={miContexts}
           patterns={miPatterns}
           hypotheses={miHypotheses}
           emerging={miEmerging}
+          conditions={conditions}
         />
       </section>
 
-      {/* 7 · Infraestructura: agente · estrategia activa · calendario */}
-      <section>
-        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
-          Infraestructura
-        </h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <AgentGrid agents={liveAgents} />
-          <MarketCalendarCard />
-        </div>
-      </section>
+      {/* 6 · Infra — de bajo cambio, footer discreto sin sección propia */}
+      <InfraFooter agents={liveAgents} />
     </>
   )
 }

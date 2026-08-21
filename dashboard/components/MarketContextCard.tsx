@@ -1,6 +1,6 @@
 'use client'
 
-import type { MarketContext, MarketPattern, MarketHypothesis, EmergingLabel, MarketIntel } from '@/lib/supabase'
+import type { MarketContext, MarketPattern, MarketHypothesis, EmergingLabel, MarketIntel, MarketCondition } from '@/lib/supabase'
 
 // Color por etiqueta de contexto (taxonomía determinista; magnitude-only en gris).
 const CTX_STYLE: Record<string, string> = {
@@ -17,19 +17,20 @@ const CTX_STYLE: Record<string, string> = {
 // nº de sesiones objetivo para que el motor "despierte" (gate de consolidación)
 const WAKE_TARGET = 15
 
-function CtxBadge({ label }: { label: string | null }) {
+function CtxBadge({ label, title }: { label: string | null; title?: string }) {
   const l = label ?? 'unclassified'
-  return <span className={`px-1.5 py-px rounded text-[9px] uppercase font-semibold ${CTX_STYLE[l] ?? CTX_STYLE.unclassified}`}>{l}</span>
+  return <span title={title} className={`px-1.5 py-px rounded text-[9px] uppercase font-semibold ${CTX_STYLE[l] ?? CTX_STYLE.unclassified}`}>{l}</span>
 }
 
-export default function MarketIntelligencePanel({
-  intel, contexts, patterns, hypotheses, emerging,
+export default function MarketContextCard({
+  intel, contexts, patterns, hypotheses, emerging, conditions,
 }: {
   intel:      MarketIntel | null
   contexts:   MarketContext[]
   patterns:   MarketPattern[]
   hypotheses: MarketHypothesis[]
   emerging:   EmergingLabel[]
+  conditions: MarketCondition[]
 }) {
   const sessions   = intel?.sessions_classified ?? contexts.length
   const dormant    = (intel?.patterns_consolidated ?? 0) === 0 && (intel?.hypotheses_active ?? 0) === 0
@@ -37,6 +38,7 @@ export default function MarketIntelligencePanel({
   const transitions = patterns.filter(p => p.kind === 'context_transition')
   const activeHyp  = hypotheses.filter(h => h.status === 'active' || h.status === 'observing' || h.status === 'consolidated')
   const discarded  = hypotheses.filter(h => h.status === 'discarded')
+  const condByDate = new Map(conditions.map(c => [c.session_date, c]))
   // evolución reciente (cronológica ascendente para leer izquierda→derecha)
   const strip = [...contexts].sort((a, b) => a.session_date.localeCompare(b.session_date)).slice(-10)
 
@@ -44,14 +46,14 @@ export default function MarketIntelligencePanel({
     <div className="rounded-xl border border-gray-800 bg-gray-900/60 p-5">
       <div className="flex items-center justify-between mb-3">
         <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">
-          Market Intelligence · QQQ
+          Contexto de mercado · QQQ
         </p>
         <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-800/60 text-gray-400 border border-gray-700/50 font-mono">
           {sessions}/{WAKE_TARGET} sesiones
         </span>
       </div>
 
-      {/* Contexto actual + evolución reciente */}
+      {/* Contexto actual + evolución reciente (hover = rvol/liquidez/volatilidad de esa sesión) */}
       <div className="flex items-center gap-2 mb-2">
         <span className="text-[11px] text-gray-500">Contexto:</span>
         <CtxBadge label={intel?.latest_context ?? null} />
@@ -60,11 +62,13 @@ export default function MarketIntelligencePanel({
         )}
       </div>
       <div className="flex items-center gap-1 flex-wrap mb-3">
-        {strip.map(c => (
-          <span key={c.session_date} title={`${c.session_date} · ${c.context_label}`}>
-            <CtxBadge label={c.context_label} />
-          </span>
-        ))}
+        {strip.map(c => {
+          const cond = condByDate.get(c.session_date)
+          const title = cond
+            ? `${c.session_date} · ${c.context_label} · liq ${cond.liquidity ?? '—'} · vol ${cond.volatility ?? '—'} · rvol ${cond.rvol30 != null ? cond.rvol30.toFixed(2) : '—'}`
+            : `${c.session_date} · ${c.context_label}`
+          return <span key={c.session_date}><CtxBadge label={c.context_label} title={title} /></span>
+        })}
       </div>
 
       {/* Hipótesis activas */}
@@ -116,7 +120,7 @@ export default function MarketIntelligencePanel({
 
       <p className="text-[10px] text-gray-600 border-t border-gray-800/60 pt-2 mt-3 leading-relaxed">
         {dormant
-          ? <>Motor en <span className="text-gray-400">acumulación</span> — etiquetas de contexto deterministas desde métricas observables; patrones e hipótesis se activan al juntar ~{WAKE_TARGET} sesiones (gate min-N). </>
+          ? <>Motor en <span className="text-gray-400">acumulación</span> — etiquetas de contexto deterministas desde métricas observables (rvol/liquidez/volatilidad, visibles al pasar el mouse por la tira); patrones e hipótesis se activan al juntar ~{WAKE_TARGET} sesiones (gate min-N). </>
           : <>Patrones consolidados con evidencia repetible. </>}
         <span className="text-gray-500">Solo informa — nunca crea reglas ni toca el loop. Memoria acumulativa: nada se borra.</span>
       </p>

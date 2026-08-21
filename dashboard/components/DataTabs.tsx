@@ -1,10 +1,6 @@
 'use client'
 
 import { Fragment, useState, useMemo } from 'react'
-import {
-  LineChart, ComposedChart, Bar, Cell, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, ReferenceLine,
-} from 'recharts'
 import type { Trade, AnalysisEntry } from '@/lib/supabase'
 
 // ─── CSV helpers ─────────────────────────────────────────────────────────────
@@ -280,155 +276,6 @@ function TradesTable({ trades, newTradeId }: { trades: Trade[]; newTradeId?: str
   )
 }
 
-// ─── Horario (P&L por franja de 30 min ET) ───────────────────────────────────
-
-function HourlyPnL({ trades }: { trades: Trade[] }) {
-  const closed = trades.filter(t => t.pnl != null)
-  if (!closed.length) return <Empty text="No closed trades in this period." />
-
-  // buckets de 30 min de 9:30 a 16:00 ET (hora de ENTRADA del trade)
-  const buckets = new Map<number, { pnl: number; n: number; w: number }>()
-  for (let b = 0; b < 13; b++) buckets.set(b, { pnl: 0, n: 0, w: 0 })
-  for (const t of closed) {
-    const et = new Date(t.filled_at ?? t.created_at)
-      .toLocaleTimeString('en-GB', { timeZone: 'America/New_York', hour12: false })
-    const [h, m] = et.split(':').map(Number)
-    const mins = h * 60 + m - (9 * 60 + 30)
-    const b = Math.min(Math.max(Math.floor(mins / 30), 0), 12)
-    const g = buckets.get(b)!
-    g.pnl += t.pnl!
-    g.n   += 1
-    if (t.pnl! > 0) g.w += 1
-  }
-
-  const label = (b: number) => {
-    const mins = 9 * 60 + 30 + b * 30
-    return `${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}`
-  }
-  const data = [...buckets.entries()].map(([b, g]) => ({
-    hora: label(b), pnl: Number(g.pnl.toFixed(2)), n: g.n,
-    wr: g.n > 0 ? Math.round((g.w / g.n) * 100) : null,
-  }))
-
-  const active = data.filter(d => d.n > 0)
-  const best   = active.length ? active.reduce((a, b) => (b.pnl > a.pnl ? b : a)) : null
-  const worst  = active.length ? active.reduce((a, b) => (b.pnl < a.pnl ? b : a)) : null
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4">
-          <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">Mejor franja</p>
-          <p className="text-xl font-mono font-semibold text-emerald-400">{best ? best.hora : '—'}</p>
-          {best && <p className="text-[11px] text-gray-600 mt-0.5">+${best.pnl.toFixed(2)} · {best.n} trades · WR {best.wr}%</p>}
-        </div>
-        <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4">
-          <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">Peor franja</p>
-          <p className="text-xl font-mono font-semibold text-red-400">{worst ? worst.hora : '—'}</p>
-          {worst && <p className="text-[11px] text-gray-600 mt-0.5">{worst.pnl >= 0 ? '+' : ''}${worst.pnl.toFixed(2)} · {worst.n} trades · WR {worst.wr}%</p>}
-        </div>
-        <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4 col-span-2 sm:col-span-1">
-          <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">Trades analizados</p>
-          <p className="text-xl font-mono font-semibold text-white">{closed.length}</p>
-          <p className="text-[11px] text-gray-600 mt-0.5">por hora de entrada (ET)</p>
-        </div>
-      </div>
-
-      <div className="bg-gray-900/30 border border-gray-800/60 rounded-xl p-4" style={{ height: 280 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-            <ReferenceLine y={0} stroke="#374151" strokeDasharray="4 4" />
-            <XAxis dataKey="hora" tick={{ fill: '#4b5563', fontSize: 11 }} tickLine={false} />
-            <YAxis tick={{ fill: '#4b5563', fontSize: 11 }} tickFormatter={v => `$${v}`} tickLine={false} axisLine={false} />
-            <Tooltip
-              contentStyle={{ backgroundColor: '#111827', border: '1px solid #374151', borderRadius: '8px', fontSize: 13 }}
-              labelStyle={{ color: '#9ca3af', marginBottom: 4 }}
-              formatter={(v: number, name: string) => name === 'pnl'
-                ? [`${v >= 0 ? '+' : ''}$${v.toFixed(2)}`, 'P&L neto'] : [v, 'trades']}
-            />
-            <Bar dataKey="pnl" barSize={22} radius={[3, 3, 0, 0]}>
-              {data.map((d, i) => (
-                <Cell key={i} fill={d.n === 0 ? '#1f2937' : d.pnl >= 0 ? '#10b981' : '#ef4444'} fillOpacity={0.85} />
-              ))}
-            </Bar>
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
-      <p className="text-[10px] text-gray-600">
-        P&L neto agrupado por la media hora ET en la que ENTRÓ el trade. El edge intradía se concentra
-        históricamente en la apertura (E.1) — esta vista lo verifica con tus trades reales.
-      </p>
-    </div>
-  )
-}
-
-// ─── P&L Chart ────────────────────────────────────────────────────────────────
-
-function PnLChart({ trades }: { trades: Trade[] }) {
-  const filled = trades
-    .filter(t => t.pnl != null)
-    .sort((a, b) => a.created_at.localeCompare(b.created_at))
-
-  if (!filled.length) return <Empty text="No trades with P&L in this period." />
-
-  let cum = 0
-  const data = filled.map(t => {
-    cum += t.pnl!
-    return { date: t.created_at.split('T')[0], pnl: parseFloat(cum.toFixed(2)) }
-  })
-
-  const totalPnL   = data.at(-1)?.pnl ?? 0
-  const isPositive = totalPnL >= 0
-  const wins       = filled.filter(t => (t.pnl ?? 0) > 0).length
-  const losses     = filled.filter(t => (t.pnl ?? 0) < 0).length
-  const hr         = filled.length ? Math.round(wins / filled.length * 100) : 0
-  const color      = isPositive ? '#34d399' : '#f87171'
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: 'P&L Total',     value: `${isPositive ? '+' : ''}$${totalPnL.toFixed(2)}`, color: isPositive ? 'text-emerald-400' : 'text-red-400' },
-          { label: 'Trades',        value: String(filled.length), color: 'text-white' },
-          { label: 'Win Rate',      value: `${hr}%`, color: hr >= 50 ? 'text-emerald-400' : 'text-red-400' },
-          { label: 'Wins / Losses', value: `${wins} / ${losses}`, color: 'text-white' },
-        ].map(s => (
-          <div key={s.label} className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4">
-            <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">{s.label}</p>
-            <p className={`text-xl font-mono font-semibold ${s.color}`}>{s.value}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="bg-gray-900/30 border border-gray-800/60 rounded-xl p-4" style={{ height: 280 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-            <ReferenceLine y={0} stroke="#374151" strokeDasharray="4 4" />
-            <XAxis dataKey="date" tick={{ fill: '#4b5563', fontSize: 11 }} tickLine={false} />
-            <YAxis
-              tick={{ fill: '#4b5563', fontSize: 11 }}
-              tickFormatter={v => `$${v}`}
-              tickLine={false}
-              axisLine={false}
-            />
-            <Tooltip
-              contentStyle={{ backgroundColor: '#111827', border: '1px solid #374151', borderRadius: '8px', fontSize: 13 }}
-              labelStyle={{ color: '#9ca3af', marginBottom: 4 }}
-              formatter={(v: number) => [`$${v.toFixed(2)}`, 'Cum. P&L']}
-            />
-            <Line
-              type="monotone" dataKey="pnl" stroke={color} strokeWidth={2.5}
-              dot={{ fill: color, r: 4, strokeWidth: 0 }} activeDot={{ r: 5 }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  )
-}
-
 // ─── Analysis Log ─────────────────────────────────────────────────────────────
 
 const SIGNAL_COLORS: Record<string, string> = {
@@ -535,7 +382,7 @@ function StrategySummary({ trades, selected, onSelect }: {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-type TabId = 'trades' | 'pnl' | 'hourly' | 'analysis'
+type TabId = 'trades' | 'analysis'
 
 export default function DataTabs({ trades, analysis, newTradeId, isLive }: {
   trades:      Trade[]
@@ -582,8 +429,6 @@ export default function DataTabs({ trades, analysis, newTradeId, isLive }: {
 
   const tabs: { id: TabId; label: string; count: number }[] = [
     { id: 'trades',   label: 'Trades',       count: filteredTrades.length },
-    { id: 'pnl',      label: 'P&L',          count: filteredTrades.filter(t => t.pnl != null).length },
-    { id: 'hourly',   label: 'Horario',      count: filteredTrades.filter(t => t.pnl != null).length },
     { id: 'analysis', label: 'Analysis Log', count: filteredAnalysis.length },
   ]
 
@@ -634,8 +479,6 @@ export default function DataTabs({ trades, analysis, newTradeId, isLive }: {
           <TradesTable trades={filteredTrades} newTradeId={newTradeId} />
         </>
       )}
-      {tab === 'pnl'      && <PnLChart trades={filteredTrades} />}
-      {tab === 'hourly'   && <HourlyPnL trades={filteredTrades} />}
       {tab === 'analysis' && <AnalysisLog entries={filteredAnalysis} />}
     </div>
   )
