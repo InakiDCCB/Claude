@@ -2,60 +2,51 @@
 
 import { useEffect, useState } from 'react'
 import { createSupabase } from '@/lib/supabase'
-import type { Trade, AnalysisEntry, AgentStatus, AlpacaState, SessionStateRow, ShadowSignal, ShadowAccum, PnlPoint, StrategyRanking, StrategyRegistry } from '@/lib/supabase'
+import type { Trade, AlpacaState, SessionStateRow, ShadowAccum, PnlPoint, StrategyRanking, StrategyRegistry } from '@/lib/supabase'
 import PerformanceSummary from './PerformanceSummary'
+import HealthGrid from './HealthGrid'
 import DataTabs from './DataTabs'
-import LiveSessionPanel from './LiveSessionPanel'
 import SystemsCard from './SystemsCard'
-import InfraFooter from './InfraFooter'
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
 function TradeToast({ trade, onClose }: { trade: Trade; onClose: () => void }) {
-  const isExit  = trade.exit_price != null
-  const pnl     = trade.pnl
+  const isExit   = trade.exit_price != null
+  const pnl      = trade.pnl
   const exitType = trade.exit_type
 
   return (
     <div className="fixed bottom-5 right-5 z-50 animate-slide-in">
-      <div className="bg-gray-800 border border-emerald-500/40 rounded-xl p-4 shadow-2xl w-72">
+      <div className="bg-[var(--surface-1)] border border-[var(--border)] rounded-lg p-4 shadow-2xl w-72">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
-              <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-widest">
+              <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: 'var(--green-dim)' }} />
+              <span className="font-mono text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--green-dim)' }}>
                 {isExit ? 'Trade closed' : 'Trade opened'}
               </span>
             </div>
-            <p className="text-sm font-semibold text-white truncate">
+            <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-0)' }}>
               {trade.asset}&nbsp;&middot;&nbsp;
-              <span className={trade.side === 'buy' ? 'text-emerald-400' : 'text-red-400'}>
-                {trade.side.toUpperCase()}
-              </span>
+              <span style={{ color: trade.side === 'buy' ? 'var(--green-dim)' : 'var(--red)' }}>{trade.side.toUpperCase()}</span>
               &nbsp;{trade.quantity} @ ${trade.price.toFixed(2)}
             </p>
             {isExit && (
-              <p className="text-xs font-mono mt-0.5">
-                <span className="text-gray-500">exit:&nbsp;</span>
-                <span className="text-white">${trade.exit_price!.toFixed(2)}</span>
+              <p className="font-mono text-xs mt-0.5">
+                <span style={{ color: 'var(--text-4)' }}>exit:&nbsp;</span>
+                <span style={{ color: 'var(--text-0)' }}>${trade.exit_price!.toFixed(2)}</span>
                 {exitType && (
-                  <span className="ml-2 px-1 py-px rounded text-[9px] bg-gray-700 text-gray-400 uppercase">
-                    {exitType}
-                  </span>
+                  <span className="ml-2 px-1 py-px rounded text-[9px]" style={{ background: 'var(--surface-2)', color: 'var(--text-3)' }}>{exitType}</span>
                 )}
               </p>
             )}
             {pnl != null && (
-              <p className={`text-xs font-mono font-semibold mt-0.5 ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                P&L: {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
+              <p className="font-mono text-xs font-semibold mt-0.5" style={{ color: pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                P&amp;L: {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
               </p>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className="flex-shrink-0 text-gray-600 hover:text-gray-300 transition-colors mt-0.5"
-            aria-label="Close"
-          >
+          <button onClick={onClose} className="flex-shrink-0 mt-0.5 transition-colors" style={{ color: 'var(--text-5)' }} aria-label="Close">
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
               <path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
@@ -70,95 +61,47 @@ function TradeToast({ trade, onClose }: { trade: Trade; onClose: () => void }) {
 
 export default function TradingPanel({
   initialTrades,
-  initialAnalysis,
-  agents,
   alpacaState,
   sessionState,
-  shadowSignals,
   shadowAccum,
   pnlHistory,
   ranking,
   registry,
 }: {
-  initialTrades:   Trade[]
-  initialAnalysis: AnalysisEntry[]
-  agents:          AgentStatus[]
-  alpacaState:     AlpacaState | null
-  sessionState:    SessionStateRow | null
-  shadowSignals:   ShadowSignal[]
-  shadowAccum:     ShadowAccum[]
-  pnlHistory:      PnlPoint[]
-  ranking:         StrategyRanking[]
-  registry:        StrategyRegistry[]
+  initialTrades: Trade[]
+  alpacaState:   AlpacaState | null
+  sessionState:  SessionStateRow | null
+  shadowAccum:   ShadowAccum[]
+  pnlHistory:    PnlPoint[]
+  ranking:       StrategyRanking[]
+  registry:      StrategyRegistry[]
 }) {
-  const [trades,        setTrades]        = useState<Trade[]>(initialTrades)
-  const [liveAgents,    setLiveAgents]    = useState<AgentStatus[]>(agents)
-  const [newTradeId,    setNewTradeId]    = useState<string | null>(null)
-  const [toast,         setToast]         = useState<Trade | null>(null)
-  const [isLive,        setIsLive]        = useState(false)
+  const [trades,     setTrades]     = useState<Trade[]>(initialTrades)
+  const [newTradeId, setNewTradeId] = useState<string | null>(null)
+  const [toast,      setToast]      = useState<Trade | null>(null)
 
-  // Auto-dismiss toast
   useEffect(() => {
     if (!toast) return
     const t = setTimeout(() => setToast(null), 5000)
     return () => clearTimeout(t)
   }, [toast])
 
-  // Supabase Realtime subscription
   useEffect(() => {
     const sb = createSupabase()
-
     const channel = sb
       .channel('trades-live')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'trades' },
-        (payload) => {
-          const t = payload.new as Trade
-          setTrades(prev => [t, ...prev])
-          setNewTradeId(t.id)
-          setToast(t)
-          setTimeout(() => setNewTradeId(null), 3000)
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'trades' },
-        (payload) => {
-          const updated = payload.new as Trade
-          setTrades(prev => prev.map(t => t.id === updated.id ? updated : t))
-          setToast(updated)
-        }
-      )
-      .subscribe((status) => {
-        setIsLive(status === 'SUBSCRIBED')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
+        const t = payload.new as Trade
+        setTrades(prev => [t, ...prev])
+        setNewTradeId(t.id)
+        setToast(t)
+        setTimeout(() => setNewTradeId(null), 3000)
       })
-
-    return () => { sb.removeChannel(channel) }
-  }, [])
-
-  // Realtime: agent_status
-  useEffect(() => {
-    const sb = createSupabase()
-    const channel = sb
-      .channel('agents-live')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'agent_status' },
-        (payload) => {
-          const a = payload.new as AgentStatus
-          setLiveAgents(prev => [...prev.filter(x => x.id !== a.id), a]
-            .sort((a, b) => a.name.localeCompare(b.name)))
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'agent_status' },
-        (payload) => {
-          const a = payload.new as AgentStatus
-          setLiveAgents(prev => prev.map(x => x.id === a.id ? a : x))
-        }
-      )
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'trades' }, (payload) => {
+        const updated = payload.new as Trade
+        setTrades(prev => prev.map(t => t.id === updated.id ? updated : t))
+        setToast(updated)
+      })
       .subscribe()
     return () => { sb.removeChannel(channel) }
   }, [])
@@ -167,40 +110,10 @@ export default function TradingPanel({
     <>
       {toast && <TradeToast trade={toast} onClose={() => setToast(null)} />}
 
-      {/* 1 · Qué pasa AHORA: posición (ladder), gates live, pulso del loop */}
-      <LiveSessionPanel sessionState={sessionState} alpacaState={alpacaState} trades={trades} />
-
-      {/* 2 · Cuenta + performance: única fuente de P&L del dashboard (nada más lo repite) */}
-      <section>
-        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
-          Cuenta & Performance
-        </h2>
-        <PerformanceSummary trades={trades} alpacaState={alpacaState} pnlHistory={pnlHistory} />
-      </section>
-
-      {/* 3 · LOS TRADES: tabla expandible (con filtro por estrategia) · analysis log */}
-      <section>
-        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
-          Trades
-        </h2>
-        <DataTabs
-          trades={trades}
-          analysis={initialAnalysis}
-          newTradeId={newTradeId}
-          isLive={isLive}
-        />
-      </section>
-
-      {/* 4 · Sistemas: ranking + validación shadow en una sola tabla (live/shadow arriba, archivadas colapsadas) */}
-      <section>
-        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
-          Sistemas
-        </h2>
-        <SystemsCard ranking={ranking} registry={registry} accum={shadowAccum} signals={shadowSignals} />
-      </section>
-
-      {/* 5 · Infra — de bajo cambio, footer discreto sin sección propia */}
-      <InfraFooter agents={liveAgents} />
+      <PerformanceSummary trades={trades} alpacaState={alpacaState} pnlHistory={pnlHistory} />
+      <HealthGrid sessionState={sessionState} alpacaState={alpacaState} trades={trades} />
+      <DataTabs trades={trades} newTradeId={newTradeId} />
+      <SystemsCard ranking={ranking} registry={registry} accum={shadowAccum} trades={trades} />
     </>
   )
 }

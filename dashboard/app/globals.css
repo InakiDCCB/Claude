@@ -2,6 +2,46 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --surface-0:     oklch(0.19  0.008 250);
+  --surface-0-alt: oklch(0.165 0.008 250);
+  --surface-1:     oklch(0.215 0.009 250);
+  --surface-1-alt: oklch(0.195 0.009 250);
+  --surface-2:     oklch(0.20  0.009 250);
+  --surface-3:     oklch(0.185 0.009 250);
+  --surface-hover: oklch(0.245 0.010 250);
+  --surface-chip:  oklch(0.24  0.010 250);
+  --surface-chip-active: oklch(0.30 0.05 180);
+
+  --border:      oklch(0.28  0.010 250);
+  --border-soft: oklch(0.27  0.010 250);
+  --border-faint: oklch(0.235 0.009 250);
+
+  --text-0: oklch(0.96 0.006 250);
+  --text-1: oklch(0.90 0.006 250);
+  --text-2: oklch(0.82 0.006 250);
+  --text-3: oklch(0.62 0.010 250);
+  --text-4: oklch(0.55 0.010 250);
+  --text-5: oklch(0.50 0.010 250);
+
+  --green:     oklch(0.80 0.15 165);
+  --green-dim: oklch(0.72 0.15 165);
+  --green-bg:  oklch(0.28 0.04 165);
+  --red:       oklch(0.68 0.17 22);
+  --red-dim:   oklch(0.58 0.16 22);
+  --red-bg:    oklch(0.28 0.04 22);
+  --amber:     oklch(0.80 0.13 85);
+  --amber-bg:  oklch(0.28 0.04 85);
+  --cyan:      oklch(0.85 0.14 180);
+  --cyan-dim:  oklch(0.78 0.14 180);
+  --purple:    oklch(0.74 0.11 285);
+}
+
+body { font-variant-numeric: tabular-nums; }
+
+@keyframes pulseDot { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+.animate-pulse-dot { animation: pulseDot 2.4s ease-in-out infinite; }
+
 @keyframes slide-in {
   from { transform: translateY(1rem); opacity: 0; }
   to   { transform: translateY(0);    opacity: 1; }

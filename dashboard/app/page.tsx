@@ -1,27 +1,14 @@
 import { createSupabase } from '@/lib/supabase'
-import type { Trade, AnalysisEntry, AgentStatus, AlpacaState, SessionStateRow, ShadowSignal, ShadowAccum, PnlPoint, StrategyRanking, StrategyRegistry } from '@/lib/supabase'
+import type { Trade, AlpacaState, SessionStateRow, ShadowAccum, PnlPoint, StrategyRanking, StrategyRegistry } from '@/lib/supabase'
 import TradingPanel from '@/components/TradingPanel'
-import MarketStatus from '@/components/MarketStatus'
+import DashboardHeader from '@/components/DashboardHeader'
 
 export const revalidate = 0
 
-export default async function Page({
-  searchParams,
-}: {
-  searchParams: Promise<{ from?: string; to?: string }>
-}) {
-  const { from, to } = await searchParams
-
-  // Default: last 30 days
-  const fromDate = from ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-  const toDate   = to   ?? new Date().toISOString()
-
+export default async function Page() {
   let trades:       Trade[]             = []
-  let analysis:     AnalysisEntry[]     = []
-  let agents:       AgentStatus[]       = []
   let alpacaState:  AlpacaState | null  = null
   let sessionState: SessionStateRow | null = null
-  let shadowSignals: ShadowSignal[]     = []
   let shadowAccum:  ShadowAccum[]       = []
   let pnlHistory:   PnlPoint[]          = []
   let ranking:      StrategyRanking[]   = []
@@ -29,23 +16,13 @@ export default async function Page({
 
   try {
     const sb = createSupabase()
-    const [tradesRes, analysisRes, agentsRes, alpacaStateRes, sessionStateRes, shadowRes, shadowAccumRes, pnlRes, rankingRes, registryRes] = await Promise.all([
-      sb.from('trades').select('*')
-        .gte('created_at', fromDate).lte('created_at', toDate)
-        .order('created_at', { ascending: false }),
-      sb.from('analysis_log').select('*')
-        .gte('created_at', fromDate).lte('created_at', toDate)
-        .order('created_at', { ascending: false }),
-      sb.from('agent_status').select('*').order('name'),
+    const [tradesRes, alpacaStateRes, sessionStateRes, shadowAccumRes, pnlRes, rankingRes, registryRes] = await Promise.all([
+      sb.from('trades').select('*').order('created_at', { ascending: false }).limit(2000),
       sb.from('alpaca_state').select('*').eq('key', 'current').single(),
       sb.from('session_state').select('*').order('date', { ascending: false }).limit(1).maybeSingle(),
-      sb.from('shadow_signals').select('*')
-        .gte('created_at', fromDate).lte('created_at', toDate)
-        .order('created_at', { ascending: false }).limit(500),
-      // C.4 — outcomes shadow acumulados (misma fuente que MI y memoria)
+      // C.4 — outcomes shadow acumulados (misma fuente que memoria)
       sb.from('v_shadow_accumulated').select('*'),
-      // Performance view: P&L realizado de TODA la vida de la cuenta (no filtrado por from/to);
-      // fuente = trades (reconciliada con broker), no session_memory
+      // Performance: P&L realizado de TODA la vida de la cuenta, fuente = trades (broker-reconciled)
       sb.from('trades')
         .select('created_at,pnl')
         .not('pnl', 'is', null)
@@ -54,41 +31,26 @@ export default async function Page({
       sb.from('v_strategy_ranking').select('*'),
       sb.from('strategy_registry').select('*').order('strategy_id'),
     ])
-    trades        = (tradesRes.data       ?? []) as Trade[]
-    analysis      = (analysisRes.data     ?? []) as AnalysisEntry[]
-    agents        = (agentsRes.data       ?? []) as AgentStatus[]
-    alpacaState   = (alpacaStateRes.data  ?? null) as AlpacaState | null
-    sessionState  = (sessionStateRes.data ?? null) as SessionStateRow | null
-    shadowSignals = (shadowRes.data       ?? []) as ShadowSignal[]
-    shadowAccum   = (shadowAccumRes.data  ?? []) as ShadowAccum[]
-    pnlHistory    = (pnlRes.data          ?? []) as PnlPoint[]
-    ranking       = (rankingRes.data      ?? []) as StrategyRanking[]
-    registry      = (registryRes.data     ?? []) as StrategyRegistry[]
+    trades       = (tradesRes.data       ?? []) as Trade[]
+    alpacaState  = (alpacaStateRes.data  ?? null) as AlpacaState | null
+    sessionState = (sessionStateRes.data ?? null) as SessionStateRow | null
+    shadowAccum  = (shadowAccumRes.data  ?? []) as ShadowAccum[]
+    pnlHistory   = (pnlRes.data          ?? []) as PnlPoint[]
+    ranking      = (rankingRes.data      ?? []) as StrategyRanking[]
+    registry     = (registryRes.data     ?? []) as StrategyRegistry[]
   } catch {
     // Supabase unavailable (missing env vars or network) — render empty state
   }
 
   return (
-    <main className="min-h-screen bg-gray-950">
-      {/* Header */}
-      <div className="sticky top-0 z-10 border-b border-gray-800 bg-gray-950/90 backdrop-blur">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center gap-4">
-          <div className="mr-auto">
-            <h1 className="text-lg font-semibold tracking-tight text-white">Trading Dashboard</h1>
-            <p className="text-xs text-gray-500 mt-0.5">Paper trading · Alpaca · Supabase</p>
-          </div>
-          <MarketStatus />
-        </div>
-      </div>
+    <main className="min-h-screen bg-[var(--surface-0)] pb-16">
+      <DashboardHeader sessionState={sessionState} alpacaState={alpacaState} />
 
-      <div className="max-w-7xl mx-auto px-6 py-6 space-y-8">
+      <div className="max-w-[1680px] mx-auto px-8 pt-6 flex flex-col gap-6">
         <TradingPanel
           initialTrades={trades}
-          initialAnalysis={analysis}
-          agents={agents}
           alpacaState={alpacaState}
           sessionState={sessionState}
-          shadowSignals={shadowSignals}
           shadowAccum={shadowAccum}
           pnlHistory={pnlHistory}
           ranking={ranking}
