@@ -1,5 +1,51 @@
 # Pulse — historial de versiones del cycle_prompt
 
+## v3.1.14 (2026-08-24) — gt_closelow_v2 PROMOVIDO a LIVE (swing, override de protocolo); lwr_v1 se queda en shadow
+
+Usuario pidió promover "los shadows" a LIVE. En ese momento los dos shadows activos eran
+`gt_closelow_v2` (clr(ayer)<0.1 → hold 3 días hábiles, arrancado 08-20) y `lwr_v1` (mecha+volumen
+intradía, re-promovido a shadow v3.1.13). Antes de tocar nada se consultó `v_shadow_accumulated`:
+`lwr_v1` tenía n=19 (bajo el propio criterio de muerte PF<1.2@n≥25) y pnl/sh **negativo** (−$2.14);
+`gt_closelow_v2` tenía **n=0** (su hold de 3 días no había tenido tiempo de resolver ni un
+episodio desde el 08-20). El propio protocolo documentado en `project_gt_closelow_v2.md` y
+`project_liquidity_wick_reversal.md` exige Score≥65 con n≥30 antes de promover — ninguno lo
+cumplía. Se preguntó al usuario con ambos números sobre la mesa:
+
+- **lwr_v1 → se queda en shadow** (decisión usuario: esperar más datos, no promover con pnl/sh
+  negativo). Sin cambios de mecánica ni de `strategy_registry`.
+- **gt_closelow_v2 → PROMOVIDO a LIVE** (decisión usuario, override explícito del protocolo n≥30 —
+  el research/backtest no cambió: PF=2.36 pool 10 años, positivo 10/11 años, hit=66.5%, pero CERO
+  confirmación en vivo). `strategy_registry.gt_closelow_v2` → `status='live'`.
+
+**Arquitectura nueva — primer sistema SWING del agente** (hold multi-día, todo lo demás es
+intradía con cierre forzado a las 15:55):
+- **Señal:** se mueve de `/post-close` (STATELESS, batch retrospectivo) a `/pre-market` — clr del
+  daily bar de AYER ya se conoce antes de la apertura. `pre-market.md` STEP 4b calcula
+  `gates.gt2_on`/`gates.gt2_clr` desde `volume_profiles` (agregadas columnas `day_high`/`day_low`
+  al SELECT existente — cero fetches nuevos).
+- **Entrada:** `cycle_prompt.md` STEP 6c (nuevo) — el backtest define entry=open literal (9:30 ET)
+  pero el loop no corre ciclos entre 9:30-9:55 (fase PRE); se entra con MARKET order en el primer
+  ciclo ACTIVE (~10:00 ET), aproximación documentada y aceptada. Sin OCO — fiel al backtest, que es
+  una señal pura sin SL/TP, solo hold fijo.
+- **Tracking de posición:** vía `trades` (`strategy='gt_closelow_v2'`, `exit_price IS NULL` =
+  abierta), NO vía `state.positions[]` — `session_state` es una fila por fecha y se resetea cada
+  día, así que una posición que debe sobrevivir 3 días no puede vivir ahí. STEP 3.0 (nuevo) la
+  deriva de `trades` una vez por día. Invariante de reconciliación extendido: `Σ qty
+  state.positions[] + gt2.qty (si abierta) == net qty Alpaca`.
+- **Salida:** STEP 10 (reescrito) — ya NO usa `close_all_positions`/`close_position` (cerrarían
+  también las shares swing en custodia). Cierra explícitamente `qty_cerrar = Σ intradía + gt2.qty
+  SOLO si hoy es su día de salida` (entry + 2 sesiones hábiles, contadas vía `count(*) FROM
+  session_state WHERE date > entry_date AND date <= CURRENT_DATE`).
+- **Bucket propio:** sizing 8% equity, fuera del cap de 4 posiciones/70% intradía; sin C4 estándar
+  (no encaja con "apagado hasta mañana" en un ciclo de 3 días) — 2 pérdidas consecutivas pausan
+  nuevas entradas hasta revisión manual del usuario, no auto-reactivación.
+
+`post-close.md`: paso 4c (batch `gt_closelow_v2_shadow.py`) RETIRADO — sus outcomes ahora van por
+`trades` como cualquier LIVE, verificados en el paso 3. Clave `gtclv2` pasa a CONGELADA. Paso 1
+(cierre de emergencia) ganó una excepción explícita para no cerrar shares swing no vencidas.
+`strategy_registry.gt_closelow_v2` → `live`. Ver `project_gt_closelow_v2.md` para el research
+original y la decisión de promoción.
+
 ## v3.1.13 (2026-08-20) — S4 SWP RE-PROMOVIDO a LIVE, LWR RE-PROMOVIDO a SHADOW (override de usuario)
 
 Decisión usuario, misma sesión que v3.1.12: volver a correr S4 SWP en vivo y LWR como shadow.
