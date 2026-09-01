@@ -18,9 +18,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))   # tools/ -- backtest.py vive ahi post-WAT
 from backtest import Day, simulate, stats, ENTRY_MIN, ENTRY_MAX
 
-DATA = Path(__file__).parent / "data" / "qqq_1min.json"
+DATA = Path(__file__).parent.parent / "data" / "qqq_1min.json"   # tools/data/ post-WAT
 
 
 def build_days(since="2026-05-01"):

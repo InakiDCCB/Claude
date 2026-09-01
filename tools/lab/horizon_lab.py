@@ -24,15 +24,17 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))   # permite `from backtest import ...`
+sys.path.insert(0, str(Path(__file__).parent))          # permite `from horizon_parser import ...`
+sys.path.insert(0, str(Path(__file__).parent.parent))   # tools/ -- backtest*.py viven ahi post-WAT
 
 from backtest import (Day, stats, run_market, run_fvg, rsi2_dip, vwap_pullback,
                       sweep_reclaim, gap_fill, ema9_reclaim, vwap_band, red_run)
 from backtest_short import (run_market_short, run_fvg_short, rsi2_pop, vwap_rejection,
                             sweep_rejection, gap_fade)
 from horizon_parser import parse, StrategyIR
+from _score_common import horizon_score, seasonality_breakdown, print_seasonality
 
-DATA = Path(__file__).parent / "data" / "qqq_1min.json"
+DATA = Path(__file__).parent.parent / "data" / "qqq_1min.json"   # tools/data/ post-WAT
 
 
 def build_days(since: str = "2026-05-01"):
@@ -105,32 +107,9 @@ def _fvg_filter(p, long):
     return filt
 
 
-# ----------------------- Horizon Score (calibrado al playbook) -----------------------
-
-def _clip(x, lo, hi):
-    return max(lo, min(hi, x))
-
-
-def horizon_score(s) -> dict:
-    """0-100 = Performance(0-50) + RiskMgmt(0-50), sobre las metricas del repo.
-    Referencias del playbook: portfolio 69% hit PF 1.90 = DEPLOY; PF~1.0 (E9RC/VPOC) = KILLED.
-    NO garantiza rentabilidad: filtra rapido lo que claramente no tiene edge."""
-    if s is None or s["n"] == 0:
-        return {"performance": 0.0, "risk_mgmt": 0.0, "total": 0.0, "verdict": "KILLED"}
-    pf = 3.0 if s["pf"] == float("inf") else s["pf"]
-    perf = _clip((pf - 1.0) / 1.5, 0, 1) * 35 + _clip((s["hit"] - 50) / 30, 0, 1) * 15
-    risk = _clip(s["n"] / 30, 0, 1) * 25 + _clip((6 - s["mll"]) / 6, 0, 1) * 25
-    total = perf + risk
-    if s["n"] < 20:                      # muestra chica -> penaliza (anti-overfit)
-        total *= _clip(s["n"] / 20, 0.3, 1.0)
-    if s["pnl"] <= 0:                     # expectancy negativa nunca pasa
-        total = min(total, 35)
-    verdict = "DEPLOY" if total >= 65 else ("PAPER" if total >= 45 else "KILLED")
-    return {"performance": round(perf, 1), "risk_mgmt": round(risk, 1),
-            "total": round(total, 1), "verdict": verdict}
-
-
 # ----------------------- pipeline / CLI -----------------------
+# Horizon Score y seasonality_breakdown() viven en _score_common.py (compartidos con
+# backtest_all_intraday.py / backtest_all_daily_gt.py) -- ver feedback_hit_ratio_not_a_filter_research.md.
 
 def _row(label, s, sc):
     if s is None:
@@ -161,18 +140,24 @@ def run_pipeline(sentence: str, since: str = "2026-05-01", use_llm: bool = True)
 
     # El veredicto se toma sobre la mejor de las dos variantes
     best_sc, best_lbl = (sc_c4, "+C4") if sc_c4["total"] >= sc_base["total"] else (sc_base, "base")
+    best_trades = t_c4 if best_lbl == "+C4" else t_base
     print(f"\n[05 Validate]  Horizon Score = {best_sc['total']}/100 ({best_lbl})  ->  {best_sc['verdict']}")
     print("[06-07]        " + {
         "DEPLOY": "candidato fuerte -> promover a SHADOW del loop (5 sesiones) antes de LIVE.",
         "PAPER":  "edge marginal -> shadow-logging y vigilar sobreajuste / n.",
         "KILLED": "sin edge suficiente en esta ventana -> descartar o re-especificar.",
     }[best_sc["verdict"]])
+
+    seas = seasonality_breakdown(best_trades, days, stats)
+    print(f"[08 Seasonality]  variante={best_lbl}  (informativo -- hit% no decide, P&L/PF manda)")
+    print_seasonality(seas)
     print("=" * 72)
 
     return {"ir": ir.to_dict(), "since": since, "sessions": len(days),
             "base": {"stats": s_base, "score": sc_base},
             "c4": {"stats": s_c4, "score": sc_c4},
-            "verdict": best_sc["verdict"], "score": best_sc["total"]}
+            "verdict": best_sc["verdict"], "score": best_sc["total"],
+            "seasonality": seas}
 
 
 def main() -> int:
