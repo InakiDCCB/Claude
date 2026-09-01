@@ -1,5 +1,77 @@
 # Pulse — historial de versiones del cycle_prompt
 
+## v3.1.16 (2026-08-31) — Ahorro de créditos: STEP 0 sin `cycle_log` + reposo 15→30min
+
+**Problema real (aclarado por el usuario tras la investigación de huecos de v3.1.15):** no es un
+bug de ejecución — los créditos de la cuenta de Claude Code se agotan antes de renovar, generando
+~2h/día donde el loop no puede correr NADA. Confirmado con datos: huecos de 1h07m-2h32m en
+`cycle_log`/`analysis_log` los días 08-25, 08-28 y 08-31, todos dentro de la ventana activa
+(10:00-15:30 ET), el de hoy tageado `gap_recovery` al volver. El usuario descartó las otras dos
+palancas (no corre otras sesiones en paralelo; subir de plan no es opción ahora) — la única
+palanca que queda es reducir el consumo del loop mismo.
+
+**Intentado y descartado:** instrumentar `tokens_in_est`/`tokens_out_est` en `analysis_log` — la
+memoria (`feedback_token_saving_practices.md`) afirmaba que ya estaba en spec, pero NO existe en
+`cycle_prompt.md` (dato de memoria desactualizado). Se descartó implementarlo porque un LLM no
+puede contar sus propios tokens con precisión — solo estimar, lo que **cuesta tokens de más** sin
+dar una métrica confiable. `cycle_s`/`cycle_type` (ya loggeados, gratis, server-side) ya bastan como
+proxy y fueron los que permitieron diagnosticar el patrón real de huecos.
+
+**Dos cambios aplicados, ambos con riesgo de P/L = CERO (no tocan gates, señales, entradas, ni
+cadencia en ventana activa normal):**
+
+1. **STEP 0 — `SELECT state - 'cycle_log' ...` en vez de `SELECT state ...`.** `cycle_log` es un
+   array write-only (bookkeeping de cadencia — se lee vía SQL directo en auditorías, JAMÁS por el
+   agente para decidir nada) que crece sin límite durante la sesión (~60-90 timestamps hacia media
+   tarde). Se releía completo en CADA ciclo del día — el único campo de `session_state.state`
+   identificado con crecimiento monótono intra-día. Excluirlo del READ no rompe el WRITE: el
+   `coalesce(state->'cycle_log', ...) || ...` de STEP 9 lee la fila actual de la tabla
+   server-side, no el valor que este SELECT le devolvió al agente.
+2. **MODO REPOSO — cadencia 15min → 30min**, con cap explícito para nunca cruzar el forced-close
+   de las 15:55 ET (`delay = min(1800, segundos hasta 15:55 ET)`, o segundos-hasta-15:55+10 si eso
+   cae antes). Sin costo de P/L: la precondición de reposo (ver STEP 9) YA exige que ninguna
+   entrada sea posible en ninguna estrategia — espaciar el wake no sacrifica ninguna señal.
+   Además, reposo ya releía a precio lleno a los 900s (>300s TTL de caché) — a 1800s paga el mismo
+   precio por lectura, solo con la mitad de lecturas por sesión.
+
+**No implementado — pendiente de evidencia:** revalidar el experimento KEEP-ALIVE DE CACHÉ (v3.1.2)
+con datos reales; su propia spec dice "REVERTIR si el ahorro no es material" y nunca se verificó
+con números reales, solo se estimó el 07-07. Tampoco se tocó la cadencia de la ventana ACTIVA
+normal (5 min) ni ningún gate/filtro de entrada — eso sí tendría costo de P/L y viola
+`feedback_no_time_gates.md` sin backtest que lo respalde.
+
+**Medir el impacto:** comparar la frecuencia/duración de huecos ~1-2h en `cycle_log` en las
+próximas sesiones vs. la línea base 08-25/08-28/08-31 documentada arriba.
+
+## v3.1.15 (2026-08-31) — FIX: filtro FVG ordinal #2 no aplanaba, solo marcaba el flag
+
+**Bug encontrado auditando por qué S2 FVG (`fvg_v3`) mostraba score=-5.0/tier=provisional pese al
+backtest de 10 años que sostuvo su promoción.** Cross-tab por ordinal de los 37 trades reales en
+`trades` mostró algo llamativo: en vivo el ordinal #2 es el MEJOR performer (+56.19 pnl, n=12,
+41.7% hit) y el ordinal #1 el peor (-38.66, n=16) — el reverso del hallazgo del backtest (-46.46
+para el #2) que justificó el filtro v3.1.11. Al perseguir esa discrepancia se encontró la causa
+real: el filtro no se estaba aplicando.
+
+`session_state` de la sesión 08-31 tenía `fvg.fills_today=2, ordinal2_used=true` — pero el trade
+correspondiente al fill ordinal #2 (`notes: "... ordinal=2 ..."`) tenía un OCO armado
+(`oco=64bc72d7`) y cerró por SL real (-$5.61), exactamente el flujo que v3.1.11 dice que NO debía
+correr para ese fill (debía aplanarse a mercado, sin OCO, sin INSERT en `trades`). El agente que
+corrió ese ciclo marcó `ordinal2_used=true` (parte de la rama de aplanado) pero también ejecutó la
+rama normal completa (OCO + append + insert) — las dos ramas no eran mutuamente excluyentes en la
+redacción original (numeración `1, 1b, 2, 3, 4` invitaba a leerse como checklist en vez de
+if/else con corte).
+
+**Fix aplicado (`cycle_prompt.md` STEP 7-fill):** reestructurado como dos ramas explícitas
+(RAMA A = aplanar, única acción + "FIN de STEP 7-fill para este fill"; RAMA B = flujo normal,
+pasos 3-5), con nota explícita de que marcar `ordinal2_used=true` no sustituye aplanar — las dos
+acciones van juntas o ninguna. Sin cambio de parámetros/lógica de negocio, solo de estructura.
+
+**No corregido retroactivamente:** el trade del 08-31 ya cerró (SL, -$5.61) — no se revierte en
+`trades`/Supabase, queda como evidencia del bug. La discrepancia de ordinal (#2 mejor que #1 en
+vivo) sigue abierta con n muy chico (12-16 por celda) — monitorear en `/post-close` con el filtro
+ya corregido antes de decidir si el filtro se mantiene, se invierte, o se descarta. Ver
+`project_fvg_multi_fill_experiment.md`.
+
 ## v3.1.14 (2026-08-24) — gt_closelow_v2 PROMOVIDO a LIVE (swing, override de protocolo); lwr_v1 se queda en shadow
 
 Usuario pidió promover "los shadows" a LIVE. En ese momento los dos shadows activos eran
