@@ -1,4 +1,4 @@
-# Pulse v3.1.17 — cycle prompt (2026-09-02)
+# Pulse v3.1.18 — cycle prompt (2026-09-04)
 
 Historial de versiones: `workflows/history/CHANGELOG.md` (NO es operativo — todas las reglas
 vigentes están en los STEPs de este archivo). v3.1.0 = S1+S4 LIVE + multi-posición; v3.1.1 = dieta
@@ -78,6 +78,7 @@ excluyentes (RAMA A aplanar / RAMA B flujo normal) con "FIN de STEP 7-fill para 
 cierre de la rama A — antes la numeración (1, 1b, 2, 3, 4) podía leerse como checklist secuencial
 en vez de branch exclusivo. Sin cambio de parámetros ni de la lógica de negocio, solo de
 estructura/inequívocidad de la instrucción. Ver `project_fvg_multi_fill_experiment.md`.
+**v3.1.18 (2026-09-04) = BTC/USD shadow batch (IBS_btc_v1 + SWPs_btc_v1)** — dos sistemas BTC en shadow, sin órdenes reales: `ibs_btc_v1` (IBS(5m)<0.15, long, sl=1.5×ATR5m, tp=0.5×ATR5m, ts=45min; backtest 2021-2026 PF=1.34, hit=75%) y `swps_btc_v1` (sweep session-high + rechazo de volumen, short, tp=FPC, min_depth=0.30×ATR; PF=1.24, hit=73%). Portfolio combinado: PF=1.33, correlación r=−0.016 (independientes), 5/6 años positivos. Corren por batch en `/post-close` (paso 4c-3, `tools/btc_shadow.py`) — **CERO órdenes** en Alpaca, solo logging en `analysis_log` (asset='BTCUSD'). Claves canónicas: `ibs_btc` / `swps_btc`. Criterio de muerte: PF<1.0 @ n≥50; umbral de promoción: Score≥65 @ n≥30 (decisión del usuario).
 **v3.1.17 (2026-09-02) = S2 FVG RETIRADO de LIVE** (decisión usuario — score=−5.5 < umbral KILLED<45
 con n=40 en tier provisional, PF=1.125 borderline, exp_lb negativo: ver `v_strategy_ranking` post-close
 2026-09-02). Se poda toda la mecánica FVG del ciclo: `gates.fvg_on`, bloque de señal en STEP 6, gate
@@ -117,6 +118,15 @@ gt_closelow_v2 **PROMOVIDO a LIVE v3.1.14** — decisión usuario, override del 
 promoción (n=0 en shadow real, solo respaldado por backtest de 10 años), ver header. Es SWING
 (hold 3 días hábiles), NO participa del cap intradía de 4 posiciones/70% ni del cierre forzado
 diario — ver STEP 6c y STEP 10.)
+
+**BTC/USD SHADOW (batch via `/post-close` paso 4c-3 — CERO órdenes en Alpaca, no hay que hacer nada en el ciclo):**
+
+| Sistema | Modo | Señal | Gate |
+|---|---|---|---|
+| IBS_btc_v1 | **SHADOW BTC** | IBS(5m) < 0.15 → long, NY session (13:30-20:00 UTC) | ninguno |
+| SWPs_btc_v1 | **SHADOW BTC** | sweep session-high + rechazo con vol ≥1.5×avgv5 → short | ninguno |
+
+(PF portfolio=1.33, r=−0.016 — desde v3.1.18. `tools/btc_shadow.py` corre post-close, no in-cycle.)
 
 **MULTI-POSICIÓN (v3.1.0):** cada estrategia LIVE tiene SU slot (≤1 posición abierta a la vez por
 estrategia); varias estrategias coexisten hasta **máx 4 posiciones** y **Σ(qty×price) ≤ 70% equity**.

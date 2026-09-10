@@ -1,0 +1,332 @@
+//@version=6
+// =============================================================================
+//  BBWP SQUEEZE STUDY  ·  indicador de estudio (no operativo)
+// -----------------------------------------------------------------------------
+//  QUE ES
+//    La version "laboratorio" de la estrategia BBWP-SQZ-L. No manda ordenes
+//    reales: simula UNA operacion a la vez sobre el propio grafico y dibuja
+//    flechas donde se habria comprado y donde se habria tocado el SL, el TP o
+//    el time-stop. Sirve para pasear por dias y semanas concretas y ver el
+//    patron con los propios ojos antes de pasar a la estrategia con costes.
+//
+//  LAS TRES PATAS DE LA SENAL
+//    1. Volatilidad extremadamente baja -> BBWP <= umbral, sostenido N barras.
+//    2. Tendencia bajista               -> precio < EMA con EMA cayendo y nuevo
+//                                          minimo de N barras.
+//    3. La bajada NO esta apoyada       -> ni el RSI ni el momentum hacen nuevo
+//                                          minimo (venta sin conviccion).
+//
+//  PARA QUE SIRVE EL DESGLOSE (cinta de 3 filas al pie del panel)
+//    Si casi nunca hay senal, ahi se ve cual pata falta: normalmente el
+//    squeeze (el parametro mas restrictivo) o el "nuevo minimo".
+//
+//  QUE CAMBIO RESPECTO DE LA VERSION ANTERIOR
+//    Se quito la tabla de estadistica agregada (n / % acierto / media por
+//    horizonte). En su lugar, cada operacion simulada se dibuja completa sobre
+//    el precio -- entrada, y la marca de que la cerro (SL, TP o tiempo) -- para
+//    estudiar caso por caso en vez de mirar un promedio. Ver "SALIDAS" en los
+//    inputs para como se calculan el stop y el objetivo.
+//
+//  El motor BBWP (percentile rank sobre buffer ordenado con binary search) y el
+//  degradado de color estan adaptados del indicador "Bollinger Band Width
+//  Percentile" de The_Caretaker, MPL 2.0.
+// =============================================================================
+
+indicator (
+     title            = 'BBWP Squeeze Study',
+     shorttitle       = 'BBWP-STUDY',
+     overlay          = false,
+     format           = format.percent,
+     precision        = 2,
+     max_bars_back    = 1000,
+     max_labels_count = 500,
+     max_lines_count  = 500 )
+
+
+// ═══════════ 1 · VOLATILIDAD (BBWP) ═══════════
+var string G_BBWP = '1 · VOLATILIDAD (BBWP)'
+i_src        = input.source ( close, 'Fuente',                                              group = G_BBWP )
+i_basisType  = input.string ( 'SMA', 'Tipo MA base', ['SMA','EMA','WMA','RMA','HMA','VWMA'], group = G_BBWP )
+i_basisLen   = input.int    ( 7,     'Longitud MA base (barras)',   minval = 2,              group = G_BBWP )
+i_lookback   = input.int    ( 100,   'Lookback percentil (barras)', minval = 10,             group = G_BBWP,
+     tooltip = 'Contra cuantas barras se percentila el ancho de banda actual. Al cambiar de temporalidad cambia de significado: 100 barras son 100 minutos en 1m y casi 5 meses en diario.' )
+i_sqzMax     = input.float  ( 10.0,  'BBWP maximo (squeeze)', minval = 0, maxval = 100, step = 1, group = G_BBWP,
+     tooltip = 'Volatilidad extremadamente baja. 10 = el ancho de banda actual esta en el decil mas bajo de su historia reciente. Es el parametro mas restrictivo del sistema: subilo para ver mas senales.' )
+i_sqzBars    = input.int    ( 3,     'Barras de compresion sostenida', minval = 1,           group = G_BBWP,
+     tooltip = 'El BBWP debe haber estado bajo el umbral durante estas N barras seguidas. 1 = solo la barra actual.' )
+i_reqFullLb  = input.bool   ( true,  'Exigir lookback completo antes de contar senales',     group = G_BBWP,
+     tooltip = 'Sin esto, al principio del historico el percentil se calcula con pocas muestras y "BBWP <= 10" se cumple trivialmente.' )
+i_maLen      = input.int    ( 5,     'MA del BBWP (solo visual)', minval = 1,                group = G_BBWP )
+
+// ═══════════ 2 · TENDENCIA BAJISTA ═══════════
+var string G_TRND = '2 · TENDENCIA BAJISTA'
+i_useEma     = input.bool   ( true,  'Exigir precio < EMA y EMA cayendo',                    group = G_TRND )
+i_trendLen   = input.int    ( 50,    'Longitud EMA de tendencia (barras)', minval = 2,       group = G_TRND )
+i_slopeLook  = input.int    ( 5,     'Barras para medir pendiente EMA', minval = 1,          group = G_TRND )
+i_useRoc     = input.bool   ( true,  'Exigir retorno neto negativo',                         group = G_TRND )
+i_rocLook    = input.int    ( 10,    'Ventana del retorno neto (barras)', minval = 1,        group = G_TRND )
+
+// ═══════════ 3 · NO-CONFIRMACION (RSI + MOMENTUM) ═══════════
+var string G_DIVG = '3 · NO-CONFIRMACION'
+i_divLook    = input.int    ( 20,    'Ventana de divergencia (barras)', minval = 3,          group = G_DIVG,
+     tooltip = 'El precio debe hacer un nuevo minimo respecto de estas N barras previas; el RSI y el momentum NO.' )
+i_reqNewLow  = input.bool   ( true,  'Exigir nuevo minimo de precio',                        group = G_DIVG )
+i_rsiLen     = input.int    ( 14,    'Longitud RSI (barras)', minval = 2,                    group = G_DIVG )
+i_rsiMargin  = input.float  ( 2.0,   'Margen RSI sobre su minimo', minval = 0, step = 0.5,   group = G_DIVG )
+i_rsiZoneMax = input.float  ( 50.0,  'RSI maximo en la senal', minval = 0, maxval = 100, step = 1, group = G_DIVG,
+     tooltip = '100 = desactivado.' )
+i_useMom     = input.bool   ( true,  'Exigir no-confirmacion de momentum',                   group = G_DIVG )
+i_momType    = input.string ( 'MACD Hist', 'Momentum', ['MACD Hist','Momentum','ROC'],       group = G_DIVG )
+i_momLen     = input.int    ( 10,    'Longitud momentum (Momentum/ROC)', minval = 1,         group = G_DIVG )
+i_macdFast   = input.int    ( 12,    'MACD rapida', minval = 1,                              group = G_DIVG )
+i_macdSlow   = input.int    ( 26,    'MACD lenta',  minval = 2,                              group = G_DIVG )
+i_macdSig    = input.int    ( 9,     'MACD senal',  minval = 1,                              group = G_DIVG )
+
+// ═══════════ 4 · SALIDAS (SL/TP simulados) ═══════════
+var string G_EXIT = '4 · SALIDAS (SL/TP simulados)'
+i_atrLen     = input.int    ( 14,    'Longitud ATR (barras)', minval = 1,                    group = G_EXIT )
+i_slAtr      = input.float  ( 1.5,   'Stop loss (× ATR)', minval = 0.1, step = 0.1,          group = G_EXIT,
+     tooltip = 'Define 1R: la distancia en precio entre la entrada y el stop, congelada con el ATR del momento de entrar (no se recalcula despues).' )
+i_rrTarget   = input.float  ( 2.0,   'R:R objetivo (TP = R:R × riesgo)', minval = 0.1, step = 0.1, group = G_EXIT,
+     tooltip = 'El TP se expresa como multiplo del riesgo (R), no como un ATR independiente: ver la explicacion completa en la respuesta.' )
+i_useTime    = input.bool   ( true,  'Time stop',                                            group = G_EXIT )
+i_maxBars    = input.int    ( 10,    'Max. barras en el trade', minval = 1,                  group = G_EXIT,
+     tooltip = 'Si ni el SL ni el TP se tocaron en N barras, se cierra al precio de cierre de esa barra. En barras, no en minutos: se reinterpreta al cambiar de temporalidad.' )
+
+// ═══════════ 5 · FILTROS ═══════════
+var string G_FILT = '5 · FILTROS'
+i_tz         = input.string ( 'America/New_York', 'Zona horaria',                            group = G_FILT )
+i_monOn      = input.bool   ( true, 'Lunes',     group = G_FILT, inline = 'dow1' )
+i_tueOn      = input.bool   ( true, 'Martes',    group = G_FILT, inline = 'dow1' )
+i_wedOn      = input.bool   ( true, 'Miercoles', group = G_FILT, inline = 'dow1' )
+i_thuOn      = input.bool   ( true, 'Jueves',    group = G_FILT, inline = 'dow2' )
+i_friOn      = input.bool   ( true, 'Viernes',   group = G_FILT, inline = 'dow2' )
+i_satOn      = input.bool   ( true, 'Sabado',    group = G_FILT, inline = 'dow3' )
+i_sunOn      = input.bool   ( true, 'Domingo',   group = G_FILT, inline = 'dow3' )
+i_useSess    = input.bool   ( false, 'Limitar a una ventana horaria',                        group = G_FILT,
+     tooltip = 'Solo intradia. En diario o semanal dejalo apagado.' )
+i_sess       = input.session( '0930-1600', 'Ventana',                                        group = G_FILT )
+i_dateFilter = input.bool   ( false, 'Filtrar por rango de fechas',                          group = G_FILT,
+     tooltip = 'Para separar in-sample de out-of-sample: mira una mitad del historico y despues la otra.' )
+i_start      = input.time   ( timestamp('01 Jan 2000 00:00 +0000'), 'Desde',                 group = G_FILT )
+i_end        = input.time   ( timestamp('01 Jan 2100 00:00 +0000'), 'Hasta',                 group = G_FILT )
+
+// ═══════════ 6 · VISUAL ═══════════
+var string G_VIS = '6 · VISUAL'
+i_showRibbon = input.bool  ( true,  'Cinta de condiciones (3 filas al pie)',                 group = G_VIS,
+     tooltip = 'Fila 1 = squeeze, fila 2 = tendencia bajista, fila 3 = no-confirmacion. Muestra cual pata falta cuando no hay senal.' )
+i_showMarks  = input.bool  ( true,  'Marcar senales detectadas (punto)',                     group = G_VIS,
+     tooltip = 'Punto celeste en CADA barra donde se cumplen las tres patas, incluso si ya habia una operacion abierta y por eso no se ejecuto.' )
+i_showTrades = input.bool  ( true,  'Marcar operaciones simuladas (flechas de entrada/salida)', group = G_VIS )
+i_showLevels = input.bool  ( true,  'Dibujar lineas de stop y take profit por operacion',    group = G_VIS )
+i_showLbl    = input.bool  ( true,  'Etiquetar el retorno al cerrar cada operacion',         group = G_VIS )
+i_c_sp_hi    = input.color ( #FF0000, 'Espectro: alto',  group = G_VIS, inline = 'sp' )
+i_c_sp_mhi   = input.color ( #FFFF00, 'medio-alto',      group = G_VIS, inline = 'sp' )
+i_c_sp_mid   = input.color ( #00FF00, 'medio',           group = G_VIS, inline = 'sp' )
+i_c_sp_mlo   = input.color ( #00FFFF, 'medio-bajo',      group = G_VIS, inline = 'sp' )
+i_c_sp_lo    = input.color ( #0000FF, 'bajo',            group = G_VIS, inline = 'sp' )
+i_c_ma       = input.color ( #FFFFFF, 'MA del BBWP',     group = G_VIS )
+
+
+// =============================================================================
+//  FUNCIONES
+// =============================================================================
+
+//@function MA de la base de las Bollinger. Lee i_basisType directo del input: asi se
+//          ejecuta solo la rama elegida sin disparar runtime warning.
+f_basisMa ( float _v, int _len ) =>
+    i_basisType  == 'SMA'  ?  ta.sma  ( _v, _len ) :
+     i_basisType == 'EMA'  ?  ta.ema  ( _v, _len ) :
+     i_basisType == 'HMA'  ?  ta.hma  ( _v, _len ) :
+     i_basisType == 'RMA'  ?  ta.rma  ( _v, _len ) :
+     i_basisType == 'WMA'  ?  ta.wma  ( _v, _len ) :
+     i_basisType == 'VWMA' ?  ta.vwma ( _v, _len ) :
+     na
+
+//@function Percentile rank del ancho de banda sobre ventana movil, con buffer ordenado +
+//          binary search. Adaptado de The_Caretaker (MPL 2.0).
+f_bbwp ( float _price, int _bbwLen, int _bbwpLen ) =>
+    var array<float> a_raw    = array.new_float()
+    var array<float> a_sorted = array.new_float()
+
+    float _basis = f_basisMa ( _price, _bbwLen )
+    // ta.stdev fuera del ternario: toda ta.* debe evaluarse en TODAS las barras.
+    float _sd    = ta.stdev ( _price, _bbwLen )
+    // math.abs: hay futuros que cotizan cerca de cero o en negativo (spreads, energia 2020).
+    float _bbw   = math.abs(_basis) > 0 ? 2 * _sd / math.abs(_basis) : na
+
+    float _out = na
+    if bar_index >= _bbwLen and not na(_bbw)
+        int cnt = array.binary_search_rightmost ( a_sorted, _bbw )
+        _out := array.size(a_sorted) > 0 ? cnt * 100.0 / array.size(a_sorted) : na
+        array.push   ( a_raw, _bbw )
+        array.insert ( a_sorted, array.binary_search_rightmost ( a_sorted, _bbw ), _bbw )
+        if array.size ( a_raw ) > _bbwpLen
+            float old = array.shift ( a_raw )
+            array.remove ( a_sorted, array.binary_search_rightmost ( a_sorted, old ) )
+    _out
+
+//@function Degradado de 5 puntos para el color del BBWP.
+f_5Col ( float _v, color _lo, color _mlo, color _mid, color _mhi, color _hi ) =>
+    _v  <= 25 ? color.from_gradient ( _v, 0,  25,  _lo,  _mlo ) :
+     _v <= 50 ? color.from_gradient ( _v, 25, 50,  _mlo, _mid ) :
+     _v <= 75 ? color.from_gradient ( _v, 50, 75,  _mid, _mhi ) :
+     color.from_gradient ( _v, 75, 100, _mhi, _hi )
+
+//@function Formatea un porcentaje con signo, o guion si es na.
+f_pct ( float _v ) => na(_v) ? '—' : (_v >= 0 ? '+' : '') + str.tostring ( _v, '#.00' ) + '%'
+
+
+// =============================================================================
+//  INDICADORES
+// =============================================================================
+
+float bbwp   = f_bbwp ( i_src, i_basisLen, i_lookback )
+float bbwpMa = ta.sma ( bbwp, i_maLen )
+float rsi    = ta.rsi ( close, i_rsiLen )
+float ema    = ta.ema ( close, i_trendLen )
+float atr    = ta.atr ( i_atrLen )
+
+// Las tres variantes de momentum se calculan siempre y se elige despues: una ta.* dentro de
+// un ternario solo se evaluaria en algunas barras y su estado interno se corrompe.
+[_macd, _sig, _hist] = ta.macd ( close, i_macdFast, i_macdSlow, i_macdSig )
+float _momRaw = ta.mom ( close, i_momLen )
+float _rocRaw = ta.roc ( close, i_momLen )
+float mom = i_momType == 'MACD Hist' ? _hist : i_momType == 'Momentum' ? _momRaw : _rocRaw
+
+// --- Pata 1 · volatilidad extremadamente baja
+float bbwpMaxN = ta.highest ( bbwp, i_sqzBars )
+bool bbwpReady = not na(bbwp) and (not i_reqFullLb or bar_index >= i_lookback + i_basisLen)
+bool sqzOk     = bbwpReady and not na(bbwpMaxN) and bbwpMaxN <= i_sqzMax
+
+// --- Pata 2 · tendencia bajista
+bool emaBear   = not i_useEma or (close < ema and ema < ema[i_slopeLook])
+bool rocBear   = not i_useRoc or (close < close[i_rocLook])
+bool bearTrend = emaBear and rocBear
+
+// --- Pata 3 · la bajada no esta apoyada
+float priorLowPx  = ta.lowest ( low, i_divLook )[1]
+float priorLowRsi = ta.lowest ( rsi, i_divLook )[1]
+float priorLowMom = ta.lowest ( mom, i_divLook )[1]
+
+bool newLow       = not i_reqNewLow or low <= priorLowPx
+bool rsiNoConfirm = rsi > priorLowRsi + i_rsiMargin
+bool momNoConfirm = not i_useMom or mom > priorLowMom
+bool rsiZoneOk    = rsi <= i_rsiZoneMax
+bool nonConfirm   = newLow and rsiNoConfirm and momNoConfirm and rsiZoneOk
+
+// --- Filtros
+int  dow      = dayofweek ( time, i_tz )
+bool dowOk    = dow == dayofweek.monday    ? i_monOn :
+                 dow == dayofweek.tuesday  ? i_tueOn :
+                 dow == dayofweek.wednesday ? i_wedOn :
+                 dow == dayofweek.thursday ? i_thuOn :
+                 dow == dayofweek.friday   ? i_friOn :
+                 dow == dayofweek.saturday ? i_satOn : i_sunOn
+bool inSess   = not i_useSess or not na ( time ( timeframe.period, i_sess, i_tz ) )
+bool inWindow = not i_dateFilter or (time >= i_start and time <= i_end)
+bool filtOk   = dowOk and inSess and inWindow
+
+// --- Confluencia
+bool signal = sqzOk and bearTrend and nonConfirm and filtOk
+
+
+// =============================================================================
+//  SIMULACION DE UNA OPERACION A LA VEZ
+// -----------------------------------------------------------------------------
+//  Entrada: al CIERRE de la barra de senal, a precio = close. Es una simplificacion
+//  (en real la orden se llenaria en la apertura de la barra siguiente), pero
+//  suficiente para estudiar donde caen las operaciones sobre el grafico.
+//
+//  Salida: se revisa desde la barra SIGUIENTE a la entrada, comparando el rango
+//  (high/low) de cada barra contra el SL y el TP. Si una misma barra alcanza a
+//  los dos (gap o barra muy ancha), se asume que el SL se toco primero -- es el
+//  escenario mas conservador y el que hay que asumir sin ver el orden real de
+//  los precios dentro de la barra.
+//
+//  Solo una operacion abierta a la vez: una senal nueva mientras hay una en
+//  curso se descarta (se ve igual como punto celeste si "marcar senales
+//  detectadas" esta activo, pero no abre una segunda operacion).
+// =============================================================================
+
+var bool  inTrade    = false
+var float entryPrice = na
+var float atrEntry   = na
+var float slPrice    = na
+var float tpPrice    = na
+var int   entryBar   = na
+var line  slLine     = na
+var line  tpLine     = na
+
+if signal and not inTrade
+    inTrade    := true
+    entryPrice := close
+    atrEntry   := atr
+    float risk  = i_slAtr * atrEntry
+    slPrice    := entryPrice - risk
+    tpPrice    := entryPrice + i_rrTarget * risk
+    entryBar   := bar_index
+    if i_showLevels
+        slLine := line.new ( bar_index, slPrice, bar_index, slPrice, color = color.new(color.red,  35), width = 1, style = line.style_dashed, force_overlay = true )
+        tpLine := line.new ( bar_index, tpPrice, bar_index, tpPrice, color = color.new(color.lime, 35), width = 1, style = line.style_dashed, force_overlay = true )
+    if i_showTrades
+        label.new ( bar_index, low, 'COMPRA\n' + str.tostring(entryPrice, format.mintick), style = label.style_label_up,
+             color = color.new(color.blue, 15), textcolor = color.white, size = size.small, force_overlay = true )
+
+if inTrade and bar_index > entryBar
+    if i_showLevels
+        line.set_x2 ( slLine, bar_index )
+        line.set_x2 ( tpLine, bar_index )
+
+    bool hitSL   = low  <= slPrice
+    bool hitTP   = high >= tpPrice
+    bool hitTime = i_useTime and (bar_index - entryBar) >= i_maxBars
+
+    if hitSL or hitTP or hitTime
+        float  exitPx = hitSL ? slPrice : hitTP ? tpPrice : close
+        string tag    = hitSL ? 'SL' : hitTP ? 'TP' : 'TIME'
+        color  tagC   = hitSL ? color.red : hitTP ? color.lime : color.gray
+        if i_showTrades
+            string txt = tag + (i_showLbl ? '\n' + f_pct ( (exitPx - entryPrice) / entryPrice * 100.0 ) : '')
+            label.new ( bar_index, high, txt, style = label.style_label_down,
+                 color = color.new(tagC, 15), textcolor = color.white, size = size.small, force_overlay = true )
+        inTrade := false
+
+
+// =============================================================================
+//  PLOTS
+// =============================================================================
+
+hline ( 100, 'Escala alta',  color.new(color.red, 60),  hline.style_solid )
+hline ( 50,  'Media',        color.new(color.gray, 50), hline.style_dashed )
+hline ( 0,   'Escala baja',  color.new(color.blue, 60), hline.style_solid )
+
+plot ( i_sqzMax, 'Umbral squeeze', color.new(color.aqua, 20), 1, plot.style_line )
+plot ( bbwp,     'BBWP',  na(bbwp) ? na : f_5Col ( bbwp, i_c_sp_lo, i_c_sp_mlo, i_c_sp_mid, i_c_sp_mhi, i_c_sp_hi ), 2 )
+plot ( bbwpMa,   'MA BBWP', i_c_ma, 1 )
+
+// Cinta de condiciones: tres filas bajo el cero. Se ve de un vistazo cual pata falta.
+plotshape ( i_showRibbon and sqzOk     and filtOk ? -7  : na, 'Squeeze',        shape.square, location.absolute, color.new(color.aqua,   0), size = size.tiny )
+plotshape ( i_showRibbon and bearTrend and filtOk ? -14 : na, 'Tendencia baja', shape.square, location.absolute, color.new(color.orange, 0), size = size.tiny )
+plotshape ( i_showRibbon and nonConfirm and filtOk ? -21 : na, 'No-confirmado', shape.square, location.absolute, color.new(color.lime,   0), size = size.tiny )
+
+bgcolor ( signal ? color.new(color.lime, 80) : na, title = 'Senal (confluencia)' )
+
+// Punto de senal detectada (incluso si no abrio operacion por haber una en curso). Dibujado
+// sobre el precio con force_overlay porque el panel de este indicador es el del BBWP (0-100).
+plotshape ( i_showMarks and signal, 'Senal detectada', shape.circle, location.belowbar,
+     color.new(color.aqua, 40), size = size.tiny, force_overlay = true )
+
+// Series crudas para el Data Window
+plot ( rsi, 'RSI',      display = display.data_window )
+plot ( mom, 'Momentum', display = display.data_window )
+
+
+// =============================================================================
+//  ALERTAS
+// =============================================================================
+
+alertcondition ( signal, 'BBWP Study: confluencia',
+     'Squeeze + tendencia bajista sin confirmacion de RSI/momentum' )
+alertcondition ( sqzOk and not sqzOk[1], 'BBWP Study: entra en squeeze',
+     'El BBWP acaba de entrar en zona de compresion' )

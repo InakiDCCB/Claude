@@ -1,0 +1,504 @@
+//@version=6
+// =============================================================================
+//  BBWP SQUEEZE + BEARISH NON-CONFIRMATION  ·  LONG ONLY
+// -----------------------------------------------------------------------------
+//  TESIS
+//    Comprar solo cuando coinciden tres cosas:
+//      1. Volatilidad extremadamente baja -> BBWP <= umbral, sostenido N barras.
+//      2. Tendencia bajista               -> precio < EMA con EMA cayendo y nuevo
+//                                            minimo de N barras.
+//      3. La bajada NO esta apoyada       -> ni el RSI ni el momentum hacen nuevo
+//                                            minimo (venta sin conviccion).
+//    Salida: stop por ATR, objetivo expresado en R, break-even opcional,
+//    time-stop en barras y salidas opcionales por RSI o por expansion de vol.
+//
+//  AGNOSTICO DE TEMPORALIDAD Y DE ACTIVO
+//    - Todo corre en la temporalidad del chart. No hay request.security ni
+//      constantes en minutos: los parametros van en BARRAS. Vale 1m, 1h, D, W.
+//    - Todo lo que compara precios es adimensional (percentiles, RSI, multiplos
+//      de ATR): acciones, ETFs, futuros, forex, cripto o indices.
+//    - Stops y targets redondeados al mintick (obligatorio en futuros).
+//    - El sizing entiende pointvalue y cantidades fraccionarias.
+//
+//  COSTES (leccion prestada de RAVEN JCVS v2)
+//    Los costes viven DENTRO de strategy(), no en cero, para que no se puedan
+//    olvidar. Los defaults son de FUTUROS ($0.75/contrato + 2 ticks), que es el
+//    caso mas estricto. En acciones/ETFs/cripto hay que cambiar el tipo a
+//    porcentual desde la pestana Properties: el tipo de comision debe ser una
+//    constante en Pine, no se puede exponer como input.
+//    El panel muestra las comisiones acumuladas y avisa en rojo si detecta que
+//    estas backtesteando con coste cero.
+//
+//  ESTRUCTURA DEL R:R
+//    El coste es fijo por contrato y el tamano sale solo del stop, asi que un
+//    objetivo mas lejano no cuesta mas: solo cobra mas. Por eso el TP se expresa
+//    como multiplo del riesgo (R) y no como un ATR independiente.
+//
+//  El motor BBWP (percentile rank sobre buffer ordenado con binary search) esta
+//  adaptado del indicador "Bollinger Band Width Percentile" de The_Caretaker,
+//  MPL 2.0. Los controles de riesgo/prop/sesion siguen el patron de RAVEN JCVS.
+// =============================================================================
+
+strategy(
+     title                   = 'BBWP Squeeze + Bearish Non-Confirmation [Long]',
+     shorttitle              = 'BBWP-SQZ-L',
+     overlay                 = true,
+     initial_capital         = 100000,
+     currency                = currency.NONE,
+     pyramiding              = 0,
+     default_qty_type        = strategy.percent_of_equity,
+     default_qty_value       = 10,
+     commission_type         = strategy.commission.cash_per_contract,
+     commission_value        = 0.75,
+     slippage                = 2,
+     calc_on_every_tick      = false,
+     process_orders_on_close = true,
+     use_bar_magnifier       = true,
+     max_bars_back           = 1000 )
+
+
+// ═══════════ 1 · VOLATILIDAD (BBWP) ═══════════
+var string G_BBWP = '1 · VOLATILIDAD (BBWP)'
+i_src        = input.source ( close, 'Fuente',                                              group = G_BBWP, display = display.none )
+i_basisType  = input.string ( 'SMA', 'Tipo MA base', ['SMA','EMA','WMA','RMA','HMA','VWMA'], group = G_BBWP, display = display.none )
+i_basisLen   = input.int    ( 7,     'Longitud MA base (barras)',   minval = 2,              group = G_BBWP, display = display.none )
+i_lookback   = input.int    ( 100,   'Lookback percentil (barras)', minval = 10,             group = G_BBWP, display = display.none,
+     tooltip = 'Contra cuantas barras se percentila el ancho de banda actual. Al cambiar de temporalidad esto cambia de significado: 100 barras son 100 minutos en 1m y casi 5 meses en diario.' )
+i_sqzMax     = input.float  ( 10.0,  'BBWP maximo (squeeze)', minval = 0, maxval = 100, step = 1, group = G_BBWP, display = display.none,
+     tooltip = 'Volatilidad extremadamente baja. 10 = el ancho de banda actual esta en el decil mas bajo de su historia reciente. Es el parametro mas sensible de todo el sistema.' )
+i_sqzBars    = input.int    ( 3,     'Barras de compresion sostenida', minval = 1,           group = G_BBWP, display = display.none,
+     tooltip = 'El BBWP debe haber estado bajo el umbral durante estas N barras seguidas. 1 = solo la barra actual (acepta pinchazos de una vela).' )
+i_reqFullLb  = input.bool   ( true,  'Exigir lookback completo antes de operar',             group = G_BBWP, display = display.none,
+     tooltip = 'Sin esto, al principio del historico el percentil se calcula con pocas muestras y "BBWP <= 10" se cumple trivialmente. Importante al saltar de temporalidad o en simbolos con poca historia.' )
+
+// ═══════════ 2 · TENDENCIA BAJISTA ═══════════
+var string G_TRND = '2 · TENDENCIA BAJISTA'
+i_useEma     = input.bool   ( true,  'Exigir precio < EMA y EMA cayendo',                    group = G_TRND, display = display.none )
+i_trendLen   = input.int    ( 50,    'Longitud EMA de tendencia (barras)', minval = 2,       group = G_TRND, display = display.none )
+i_slopeLook  = input.int    ( 5,     'Barras para medir pendiente EMA', minval = 1,          group = G_TRND, display = display.none )
+i_useRoc     = input.bool   ( true,  'Exigir retorno neto negativo',                         group = G_TRND, display = display.none )
+i_rocLook    = input.int    ( 10,    'Ventana del retorno neto (barras)', minval = 1,        group = G_TRND, display = display.none )
+
+// ═══════════ 3 · NO-CONFIRMACION (RSI + MOMENTUM) ═══════════
+var string G_DIVG = '3 · NO-CONFIRMACION'
+i_divLook    = input.int    ( 20,    'Ventana de divergencia (barras)', minval = 3,          group = G_DIVG, display = display.none,
+     tooltip = 'El precio debe hacer un nuevo minimo respecto de estas N barras previas; el RSI y el momentum NO. Ahi esta la senal: la caida ya no tiene vendedores detras.' )
+i_reqNewLow  = input.bool   ( true,  'Exigir nuevo minimo de precio',                        group = G_DIVG, display = display.none )
+i_rsiLen     = input.int    ( 14,    'Longitud RSI (barras)', minval = 2,                    group = G_DIVG, display = display.none )
+i_rsiMargin  = input.float  ( 2.0,   'Margen RSI sobre su minimo', minval = 0, step = 0.5,   group = G_DIVG, display = display.none,
+     tooltip = 'Cuantos puntos debe estar el RSI por encima de su minimo de la ventana para contarlo como divergencia y no como ruido. 0 = cualquier diferencia sirve.' )
+i_rsiZoneMax = input.float  ( 50.0,  'RSI maximo en la entrada', minval = 0, maxval = 100, step = 1, group = G_DIVG, display = display.none,
+     tooltip = 'Asegura que seguimos comprando una caida y no un techo. 100 = desactivado.' )
+i_useMom     = input.bool   ( true,  'Exigir no-confirmacion de momentum',                   group = G_DIVG, display = display.none )
+i_momType    = input.string ( 'MACD Hist', 'Momentum', ['MACD Hist','Momentum','ROC'],       group = G_DIVG, display = display.none )
+i_momLen     = input.int    ( 10,    'Longitud momentum (Momentum/ROC)', minval = 1,         group = G_DIVG, display = display.none )
+i_macdFast   = input.int    ( 12,    'MACD rapida', minval = 1,                              group = G_DIVG, display = display.none )
+i_macdSlow   = input.int    ( 26,    'MACD lenta',  minval = 2,                              group = G_DIVG, display = display.none )
+i_macdSig    = input.int    ( 9,     'MACD senal',  minval = 1,                              group = G_DIVG, display = display.none )
+
+// ═══════════ 4 · SALIDAS ═══════════
+var string G_EXIT = '4 · SALIDAS'
+i_atrLen     = input.int    ( 14,    'Longitud ATR (barras)', minval = 1,                    group = G_EXIT, display = display.none )
+i_slAtr      = input.float  ( 1.5,   'Stop loss (× ATR)', minval = 0.1, step = 0.1,          group = G_EXIT, display = display.none,
+     tooltip = 'Define el riesgo (1R) y, con el, el tamano de la posicion.' )
+i_rrTarget   = input.float  ( 2.0,   'R:R objetivo', minval = 0.1, step = 0.1,               group = G_EXIT, display = display.none,
+     tooltip = 'Take profit como multiplo del riesgo. El coste es FIJO por contrato y el tamano sale solo del stop: un objetivo mas lejano no cuesta mas, solo cobra mas. Bajarlo para subir el win rate suele empeorar la economia neta.' )
+i_useBE      = input.bool   ( false, 'Break-even tras alcanzar N×R',                         group = G_EXIT, display = display.none )
+i_beR        = input.float  ( 1.0,   'R para mover a break-even', minval = 0.1, step = 0.1,  group = G_EXIT, display = display.none )
+i_useTime    = input.bool   ( true,  'Time stop',                                            group = G_EXIT, display = display.none )
+i_maxBars    = input.int    ( 10,    'Max. barras en posicion', minval = 1,                  group = G_EXIT, display = display.none,
+     tooltip = 'En barras, no en minutos: se reinterpreta solo al cambiar de temporalidad.' )
+i_useRsiExit = input.bool   ( false, 'Salir por RSI sobrecomprado',                          group = G_EXIT, display = display.none )
+i_rsiExitLvl = input.float  ( 70.0,  'Nivel RSI de salida', minval = 50, maxval = 100,       group = G_EXIT, display = display.none )
+i_useVolExit = input.bool   ( false, 'Salir cuando la volatilidad ya se expandio',           group = G_EXIT, display = display.none )
+i_volExitLvl = input.float  ( 85.0,  'BBWP de salida', minval = 50, maxval = 100,            group = G_EXIT, display = display.none )
+
+// ═══════════ 5 · RIESGO Y SIZING ═══════════
+var string G_RISK = '5 · RIESGO Y SIZING'
+i_sizeMode   = input.string ( 'Riesgo fijo ($)', 'Modo de sizing',
+     ['Preferencias del chart','Riesgo fijo ($)','Riesgo % del equity','Cantidad fija'],     group = G_RISK, display = display.none,
+     tooltip = 'Riesgo fijo/% dimensionan la posicion para que el stop cueste exactamente eso, usando el point value del simbolo (correcto en futuros). "Preferencias del chart" delega en la pestana Properties.' )
+i_riskUSD    = input.float  ( 250,   'Riesgo por trade ($)', minval = 1, step = 10,          group = G_RISK, display = display.none )
+i_riskPct    = input.float  ( 1.0,   'Riesgo por trade (% del equity)', minval = 0.01, maxval = 100, step = 0.1, group = G_RISK, display = display.none )
+i_fixedQty   = input.float  ( 1.0,   'Cantidad fija (contratos/acciones/unidades)', minval = 0, step = 0.1, group = G_RISK, display = display.none )
+i_maxQty     = input.float  ( 20,    'Cantidad maxima (0 = sin limite)', minval = 0, step = 1, group = G_RISK, display = display.none,
+     tooltip = 'Tope duro de tamano. Acota el dano de la cola: un gap que se salta el stop con muchos contratos es la unica perdida que no se puede arreglar por codigo.' )
+i_minOne     = input.bool   ( false, 'Forzar minimo 1 unidad',                               group = G_RISK, display = display.none,
+     tooltip = 'Si el riesgo calculado no alcanza ni para 1 contrato: activado, opera 1 igual (rompe el presupuesto de riesgo); desactivado, saltea el trade.' )
+i_fracQty    = input.string ( 'Auto', 'Cantidades fraccionarias', ['Auto','Si','No'],        group = G_RISK, display = display.none,
+     tooltip = 'Auto = fraccionarias en cripto/forex, enteras en acciones/ETFs/futuros.' )
+i_maxTrades  = input.int    ( 0,     'Max. trades por dia (0 = sin limite)', minval = 0,     group = G_RISK, display = display.none )
+
+// ═══════════ 6 · CONTROLES DE PROP FIRM ═══════════
+var string G_PROP = '6 · PROP FIRM'
+i_useDay     = input.bool   ( false, 'Limite de perdida diaria',                             group = G_PROP, display = display.none,
+     tooltip = 'Solo aplica en temporalidades intradia; en diario o superior se ignora.' )
+i_maxDayPct  = input.float  ( 2.0,   'Perdida diaria maxima (% del capital)', minval = 0.1, step = 0.1, group = G_PROP, display = display.none )
+i_useDD      = input.bool   ( false, 'Detener si el drawdown supera el limite',              group = G_PROP, display = display.none,
+     tooltip = 'Replica el trailing drawdown de la cuenta: si se toca, deja de operar, que es lo que pasaria en real.' )
+i_maxDDPct   = input.float  ( 4.0,   'Limite de drawdown (% del pico de equity)', minval = 0.5, step = 0.5, group = G_PROP, display = display.none )
+i_useStreak  = input.bool   ( false, 'Pausar tras N perdidas seguidas',                      group = G_PROP, display = display.none )
+i_maxStreak  = input.int    ( 4,     'Perdidas seguidas para pausar', minval = 2,            group = G_PROP, display = display.none )
+
+// ═══════════ 7 · SESION ═══════════
+var string G_SESS = '7 · SESION'
+i_tz         = input.string ( 'America/New_York', 'Zona horaria',                            group = G_SESS, display = display.none )
+i_useSess    = input.bool   ( false, 'Limitar a una ventana de trading',                     group = G_SESS, display = display.none,
+     tooltip = 'Desactivado por defecto: en diario/semanal o en cripto 24/7 no tiene sentido. Activalo solo en intradia.' )
+i_tradeSess  = input.session( '0930-1600', 'Ventana de trading',                             group = G_SESS, display = display.none )
+i_flatEOS    = input.bool   ( false, 'Cerrar posicion al terminar la ventana',               group = G_SESS, display = display.none )
+i_useBlack   = input.bool   ( false, 'Bloquear ventana de datos macro',                      group = G_SESS, display = display.none,
+     tooltip = 'No abre posiciones nuevas dentro de la ventana. No cierra una posicion ya abierta.' )
+i_blackSess  = input.session( '0830-0900', 'Ventana bloqueada',                              group = G_SESS, display = display.none )
+i_skipHol    = input.bool   ( false, 'Saltar feriados de EE.UU.',                            group = G_SESS, display = display.none,
+     tooltip = 'Solo tiene sentido en instrumentos US.' )
+i_hardFlat   = input.bool   ( false, 'Flatten horario forzado (compliance)',                 group = G_SESS, display = display.none )
+i_flatHH     = input.int    ( 16,    'Hora del flatten (0-23)', minval = 0, maxval = 23,     group = G_SESS, display = display.none )
+i_flatMM     = input.int    ( 40,    'Minuto del flatten', minval = 0, maxval = 59,          group = G_SESS, display = display.none )
+i_dateFilter = input.bool   ( false, 'Filtrar por rango de fechas',                          group = G_SESS, display = display.none )
+i_start      = input.time   ( timestamp('01 Jan 2000 00:00 +0000'), 'Desde',                 group = G_SESS, display = display.none )
+i_end        = input.time   ( timestamp('01 Jan 2100 00:00 +0000'), 'Hasta',                 group = G_SESS, display = display.none )
+
+// ═══════════ 8 · VISUALES Y ALERTAS ═══════════
+var string G_VIS = '8 · VISUALES Y ALERTAS'
+i_showPanel  = input.bool   ( true,  'Mostrar panel de estado',                              group = G_VIS, display = display.none )
+i_showLevels = input.bool   ( true,  'Mostrar niveles (stop / TP / BE)',                     group = G_VIS, display = display.none )
+i_showSqz    = input.bool   ( true,  'Sombrear las zonas de squeeze',                        group = G_VIS, display = display.none )
+i_alertsOn   = input.bool   ( false, 'Emitir alertas JSON (TradersPost)',                    group = G_VIS, display = display.none )
+
+
+// =============================================================================
+//  FUNCIONES
+// =============================================================================
+
+//@function MA de la base de las Bollinger. Lee i_basisType directo del input en vez de
+//          recibirlo por parametro: asi se ejecuta solo la rama elegida, sin runtime warning.
+f_basisMa ( float _v, int _len ) =>
+    i_basisType  == 'SMA'  ?  ta.sma  ( _v, _len ) :
+     i_basisType == 'EMA'  ?  ta.ema  ( _v, _len ) :
+     i_basisType == 'HMA'  ?  ta.hma  ( _v, _len ) :
+     i_basisType == 'RMA'  ?  ta.rma  ( _v, _len ) :
+     i_basisType == 'WMA'  ?  ta.wma  ( _v, _len ) :
+     i_basisType == 'VWMA' ?  ta.vwma ( _v, _len ) :
+     na
+
+//@function Percentile rank del ancho de banda actual sobre una ventana movil, con buffer
+//          ordenado + binary search: da valores desde la primera barra util en vez de
+//          esperar el lookback completo. Adaptado de The_Caretaker (MPL 2.0).
+f_bbwp ( float _price, int _bbwLen, int _bbwpLen ) =>
+    var array<float> a_raw    = array.new_float()   // buffer FIFO, orden cronologico
+    var array<float> a_sorted = array.new_float()   // mismo contenido, ordenado ascendente
+
+    float _basis = f_basisMa ( _price, _bbwLen )
+    // ta.stdev fuera del ternario: toda funcion ta.* debe evaluarse en TODAS las barras o su
+    // estado interno se desincroniza (Pine avisa con CW10004).
+    float _sd    = ta.stdev ( _price, _bbwLen )
+    // math.abs en el denominador: hay futuros que cotizan cerca de cero o en negativo
+    // (spreads, energia 2020). Sin esto el ancho cambia de signo y el percentil es basura.
+    float _bbw   = math.abs(_basis) > 0 ? 2 * _sd / math.abs(_basis) : na
+
+    float _out = na
+    if bar_index >= _bbwLen and not na(_bbw)
+        int cnt = array.binary_search_rightmost ( a_sorted, _bbw )   // nro de valores <= actual
+        _out := array.size(a_sorted) > 0 ? cnt * 100.0 / array.size(a_sorted) : na
+        array.push   ( a_raw, _bbw )
+        array.insert ( a_sorted, array.binary_search_rightmost ( a_sorted, _bbw ), _bbw )
+        if array.size ( a_raw ) > _bbwpLen
+            float old = array.shift ( a_raw )
+            array.remove ( a_sorted, array.binary_search_rightmost ( a_sorted, old ) )
+    _out
+
+//@function Feriados mayores del mercado US.
+f_isHoliday () =>
+    m  = month      ( time, i_tz )
+    d  = dayofmonth ( time, i_tz )
+    dw = dayofweek  ( time, i_tz )
+    mo = dayofweek.monday
+    th = dayofweek.thursday
+    newYear      = m == 1  and d == 1
+    juneteenth   = m == 6  and d == 19
+    independence = m == 7  and d == 4
+    christmas    = m == 12 and d == 25
+    mlk          = m == 1  and dw == mo and d >= 15 and d <= 21
+    presidents   = m == 2  and dw == mo and d >= 15 and d <= 21
+    memorial     = m == 5  and dw == mo and d >= 25
+    labor        = m == 9  and dw == mo and d <= 7
+    thanksgiving = m == 11 and dw == th and d >= 22 and d <= 28
+    newYear or juneteenth or independence or christmas or mlk or presidents or memorial or labor or thanksgiving
+
+
+// =============================================================================
+//  INDICADORES
+// =============================================================================
+
+float bbwp = f_bbwp ( i_src, i_basisLen, i_lookback )
+float rsi  = ta.rsi ( close, i_rsiLen )
+float atr  = ta.atr ( i_atrLen )
+float ema  = ta.ema ( close, i_trendLen )
+
+// Las tres variantes de momentum se calculan siempre y se elige despues: una funcion ta.*
+// dentro de un ternario solo se evalua algunas barras y su estado interno se corrompe.
+[_macd, _sig, _hist] = ta.macd ( close, i_macdFast, i_macdSlow, i_macdSig )
+float _momRaw = ta.mom ( close, i_momLen )
+float _rocRaw = ta.roc ( close, i_momLen )
+float mom = i_momType == 'MACD Hist' ? _hist : i_momType == 'Momentum' ? _momRaw : _rocRaw
+
+// --- 1 · Volatilidad extremadamente baja (squeeze sostenido)
+// ta.highest(bbwp, 1) es bbwp, asi que el caso "1 barra" no necesita rama aparte.
+float bbwpMaxN = ta.highest ( bbwp, i_sqzBars )
+bool bbwpReady = not na(bbwp) and (not i_reqFullLb or bar_index >= i_lookback + i_basisLen)
+bool sqzOk     = bbwpReady and not na(bbwpMaxN) and bbwpMaxN <= i_sqzMax
+
+// --- 2 · Tendencia bajista
+bool emaBear   = not i_useEma or (close < ema and ema < ema[i_slopeLook])
+bool rocBear   = not i_useRoc or (close < close[i_rocLook])
+bool bearTrend = emaBear and rocBear
+
+// --- 3 · La bajada no esta apoyada por RSI ni momentum
+float priorLowPx  = ta.lowest ( low, i_divLook )[1]
+float priorLowRsi = ta.lowest ( rsi, i_divLook )[1]
+float priorLowMom = ta.lowest ( mom, i_divLook )[1]
+
+bool newLow       = not i_reqNewLow or low <= priorLowPx
+bool rsiNoConfirm = rsi > priorLowRsi + i_rsiMargin
+bool momNoConfirm = not i_useMom or mom > priorLowMom
+bool rsiZoneOk    = rsi <= i_rsiZoneMax
+bool nonConfirm   = newLow and rsiNoConfirm and momNoConfirm and rsiZoneOk
+
+
+// =============================================================================
+//  SESION Y CALENDARIO
+// =============================================================================
+
+bool isHoliday = i_skipHol and f_isHoliday()
+bool inSess    = not i_useSess  or not na ( time ( timeframe.period, i_tradeSess, i_tz ) )
+bool inBlack   = i_useBlack and not na ( time ( timeframe.period, i_blackSess, i_tz ) )
+bool inWindow  = not i_dateFilter or (time >= i_start and time <= i_end)
+
+int  etMin   = hour ( time, i_tz ) * 60 + minute ( time, i_tz )
+bool flatNow = i_hardFlat and timeframe.isintraday and etMin >= (i_flatHH * 60 + i_flatMM)
+
+
+// =============================================================================
+//  ESTADO DE CUENTA  (lo que mide la prop, no lo que uno quisiera)
+// =============================================================================
+
+var float dayStart   = na
+var float peakEq     = na
+var int   lossRun    = 0
+var int   tradesDay  = 0
+var float cumCost    = 0.0
+
+// El limite diario solo tiene sentido intradia: en diario cada barra es un dia nuevo.
+bool newDay = timeframe.isintraday and timeframe.change ( 'D' )
+if newDay or na(dayStart)
+    dayStart  := strategy.equity
+    tradesDay := 0
+
+peakEq := na(peakEq) ? strategy.equity : math.max ( peakEq, strategy.equity )
+float ddPct  = peakEq > 0 ? (peakEq - strategy.equity) / peakEq * 100.0 : 0.0
+float dayPct = not na(dayStart) and dayStart > 0 ? (dayStart - strategy.equity) / dayStart * 100.0 : 0.0
+
+bool blockDD     = i_useDD     and ddPct  >= i_maxDDPct
+bool blockDay    = i_useDay    and timeframe.isintraday and dayPct >= i_maxDayPct
+bool blockStreak = i_useStreak and lossRun >= i_maxStreak
+bool blockCount  = i_maxTrades > 0 and timeframe.isintraday and tradesDay >= i_maxTrades
+bool blocked     = blockDD or blockDay or blockStreak
+
+// Racha perdedora y coste acumulado: se leen al cerrar cada operacion.
+if strategy.closedtrades > nz ( strategy.closedtrades[1] )
+    int ci = strategy.closedtrades - 1
+    if ci >= 0
+        lossRun := strategy.closedtrades.profit ( ci ) < 0 ? lossRun + 1 : 0
+        cumCost := cumCost + strategy.closedtrades.commission ( ci )
+
+
+// =============================================================================
+//  SIZING AGNOSTICO DE ACTIVO
+// =============================================================================
+
+// Cripto y forex admiten fracciones; acciones, ETFs y futuros no.
+bool allowFrac = i_fracQty == 'Si' ? true : i_fracQty == 'No' ? false : (syminfo.type == 'crypto' or syminfo.type == 'forex')
+
+//@function Cantidad a operar. na = no operar (o delegar en Properties).
+f_qty ( float _stopDist ) =>
+    float _q = na
+    if i_sizeMode == 'Riesgo fijo ($)' or i_sizeMode == 'Riesgo % del equity'
+        float _riskCash = i_sizeMode == 'Riesgo fijo ($)' ? i_riskUSD : strategy.equity * i_riskPct / 100.0
+        // pointvalue traduce "1 punto de precio" a dinero: 1 en acciones/ETFs, 50 en ES, 20 en NQ.
+        float _perUnit  = math.max ( _stopDist, syminfo.mintick ) * syminfo.pointvalue
+        _q := _perUnit > 0 ? _riskCash / _perUnit : na
+    else if i_sizeMode == 'Cantidad fija'
+        _q := i_fixedQty
+    if not na(_q)
+        _q := allowFrac ? _q : math.floor ( _q )
+        if not allowFrac and _q < 1
+            _q := i_minOne ? 1 : na          // si no alcanza ni para 1 unidad, no operamos
+        if not na(_q) and i_maxQty > 0
+            _q := math.min ( _q, i_maxQty )
+        _q := not na(_q) and _q > 0 ? _q : na
+    _q
+
+
+// =============================================================================
+//  SENAL
+// =============================================================================
+
+bool longSignal = sqzOk and bearTrend and nonConfirm and inWindow and inSess and not inBlack
+                   and not isHoliday and not blocked and not blockCount and not flatNow
+                   and not na(atr) and atr > 0
+
+
+// =============================================================================
+//  ORDENES
+// =============================================================================
+
+var float atrEntry = na    // ATR congelado al entrar: el stop no se mueve solo despues
+var float slPx     = na
+var float tpPx     = na
+var float bePx     = na
+var bool  beHit    = false
+
+if longSignal and strategy.position_size == 0
+    float stopDist = i_slAtr * atr
+    float qty      = f_qty ( stopDist )
+    if i_sizeMode == 'Preferencias del chart' or not na(qty)
+        atrEntry := atr
+        beHit    := false
+        tradesDay := tradesDay + 1
+        if i_sizeMode == 'Preferencias del chart'
+            strategy.entry ( 'L', strategy.long )
+        else
+            strategy.entry ( 'L', strategy.long, qty = qty )
+
+if strategy.position_size > 0
+    float base  = strategy.position_avg_price
+    float risk  = i_slAtr * atrEntry
+    // Redondeo al mintick: en futuros una orden fuera de la grilla de ticks es invalida.
+    slPx := math.round_to_mintick ( base - risk )
+    tpPx := math.round_to_mintick ( base + i_rrTarget * risk )
+    bePx := math.round_to_mintick ( base + i_beR * risk )
+
+    if i_useBE and high >= bePx
+        beHit := true
+
+    strategy.exit ( 'SL/TP', from_entry = 'L', stop = beHit ? math.round_to_mintick(base) : slPx, limit = tpPx )
+
+    int barsHeld = bar_index - strategy.opentrades.entry_bar_index ( 0 )
+    if i_useTime and barsHeld >= i_maxBars
+        strategy.close ( 'L', comment = 'TIME' )
+    else if i_useRsiExit and rsi >= i_rsiExitLvl
+        strategy.close ( 'L', comment = 'RSI' )
+    else if i_useVolExit and not na(bbwp) and bbwp >= i_volExitLvl
+        strategy.close ( 'L', comment = 'VOL' )
+else
+    atrEntry := na
+    slPx     := na
+    tpPx     := na
+    bePx     := na
+
+// --- Cierres forzados: fin de ventana, limites de cuenta, flatten horario
+if strategy.position_size != 0
+    if i_useSess and i_flatEOS and not inSess
+        strategy.close_all ( comment = 'EOS' )
+    else if blocked
+        strategy.close_all ( comment = 'limite de cuenta' )
+    else if flatNow
+        strategy.close_all ( comment = 'flatten' )
+
+
+// =============================================================================
+//  VISUALES
+// =============================================================================
+
+plot ( i_useEma ? ema : na, 'EMA tendencia', color.new(color.orange, 0), 1 )
+bgcolor ( i_showSqz and sqzOk ? color.new(color.blue, 90) : na, title = 'Squeeze BBWP' )
+bgcolor ( blocked ? color.new(color.red, 88) : na, title = 'Bloqueado por limites de cuenta' )
+plotshape ( longSignal and strategy.position_size == 0, 'Senal long', shape.triangleup, location.belowbar, color.new(color.lime, 0), size = size.small )
+
+plot ( i_showLevels and strategy.position_size > 0 ? (beHit ? strategy.position_avg_price : slPx) : na, 'Stop', color.red,    style = plot.style_linebr )
+plot ( i_showLevels and strategy.position_size > 0 ? tpPx : na,                                          'TP',   color.green,  style = plot.style_linebr )
+plot ( i_showLevels and i_useBE and strategy.position_size > 0 ? bePx : na,                              'BE',   color.yellow, style = plot.style_linebr )
+
+// Disponibles en Data Window aunque no se dibujen sobre el precio
+plot ( bbwp, 'BBWP',     display = display.data_window )
+plot ( rsi,  'RSI',      display = display.data_window )
+plot ( mom,  'Momentum', display = display.data_window )
+plot ( atr,  'ATR',      display = display.data_window )
+
+f_px ( float x ) => na(x) ? '—' : str.tostring ( x, format.mintick )
+
+if i_showPanel and barstate.islast
+    var table p = table.new ( position.top_right, 2, 13, frame_color = color.new(color.gray, 40), frame_width = 1,
+         border_color = color.new(color.gray, 60), border_width = 1 )
+    // Cadena de estado escrita como if/else y no como ternario multilinea: Pine solo toma una
+    // linea como continuacion si su indentacion NO es multiplo de 4; si lo es, la lee como
+    // bloque nuevo y tira "end of line without line continuation" (CE10156).
+    string st = 'ACUMULANDO MUESTRAS'
+    if blocked
+        st := 'BLOQUEADO'
+    else if strategy.position_size > 0
+        st := 'EN POSICION'
+    else if blockCount
+        st := 'CUPO DIARIO USADO'
+    else if not inSess
+        st := 'FUERA DE VENTANA'
+    else if inBlack
+        st := 'BLACKOUT'
+    else if sqzOk
+        st := 'SQUEEZE - ESPERANDO SENAL'
+    else if bbwpReady
+        st := 'SIN SQUEEZE'
+    float nextQty = f_qty ( i_slAtr * atr )
+    bool  zeroCost = strategy.closedtrades > 0 and cumCost == 0
+
+    table.cell ( p, 0, 0,  'BBWP SQUEEZE · LONG', text_color = color.black, bgcolor = #d4a017, text_size = size.normal )
+    table.cell ( p, 1, 0,  syminfo.ticker + ' ' + timeframe.period, text_color = color.black, bgcolor = #d4a017 )
+    table.cell ( p, 0, 1,  st, text_color = color.white, text_size = size.small,
+         bgcolor = blocked ? color.new(color.red, 30) : color.new(color.teal, 40) )
+    table.cell ( p, 1, 1,  na(bbwp) ? '—' : 'BBWP ' + str.tostring(bbwp, '#.0'), text_color = color.white, text_size = size.small,
+         bgcolor = blocked ? color.new(color.red, 30) : color.new(color.teal, 40) )
+    table.cell ( p, 0, 2,  'Entrada',      text_color = color.gray, text_size = size.small )
+    table.cell ( p, 1, 2,  strategy.position_size > 0 ? f_px(strategy.position_avg_price) : '—', text_color = color.white, text_size = size.small )
+    table.cell ( p, 0, 3,  'Stop loss',    text_color = color.red, text_size = size.small )
+    table.cell ( p, 1, 3,  f_px(slPx),     text_color = color.white, text_size = size.small )
+    table.cell ( p, 0, 4,  'Break-even',   text_color = color.yellow, text_size = size.small )
+    table.cell ( p, 1, 4,  not i_useBE ? 'off' : beHit ? 'HIT' : f_px(bePx), text_color = color.white, text_size = size.small )
+    table.cell ( p, 0, 5,  'Take profit',  text_color = color.green, text_size = size.small )
+    table.cell ( p, 1, 5,  f_px(tpPx),     text_color = color.white, text_size = size.small )
+    table.cell ( p, 0, 6,  'Drawdown',     text_color = color.gray, text_size = size.small )
+    table.cell ( p, 1, 6,  str.tostring(ddPct, '#.2') + '%', text_size = size.small,
+         text_color = ddPct >= i_maxDDPct ? color.red : ddPct >= i_maxDDPct * 0.7 ? color.orange : color.white )
+    table.cell ( p, 0, 7,  'Perdida del dia', text_color = color.gray, text_size = size.small )
+    table.cell ( p, 1, 7,  timeframe.isintraday ? str.tostring(math.max(dayPct, 0), '#.2') + '%' : 'n/a', text_size = size.small,
+         text_color = dayPct >= i_maxDayPct ? color.red : color.white )
+    table.cell ( p, 0, 8,  'Racha perdedora', text_color = color.gray, text_size = size.small )
+    table.cell ( p, 1, 8,  str.tostring(lossRun), text_size = size.small,
+         text_color = lossRun >= i_maxStreak ? color.red : lossRun >= 3 ? color.orange : color.white )
+    table.cell ( p, 0, 9,  'Qty proxima',  text_color = color.gray, text_size = size.small )
+    table.cell ( p, 1, 9,  i_sizeMode == 'Preferencias del chart' ? 'Properties' : na(nextQty) ? '—' : str.tostring(nextQty, '#.####'),
+         text_color = color.white, text_size = size.small )
+    table.cell ( p, 0, 10, 'Comisiones',   text_color = color.gray, text_size = size.small )
+    table.cell ( p, 1, 10, zeroCost ? 'CERO · REVISAR' : str.tostring(cumCost, '#.0'), text_size = size.small,
+         text_color = zeroCost ? color.red : color.white )
+    table.cell ( p, 0, 11, 'Simbolo',      text_color = color.gray, text_size = size.tiny )
+    table.cell ( p, 1, 11, syminfo.type + ' · pv ' + str.tostring(syminfo.pointvalue) + ' · ' + (allowFrac ? 'frac' : 'entero'),
+         text_color = color.gray, text_size = size.tiny )
+    table.cell ( p, 0, 12, str.tostring(i_slAtr, '#.#') + '×ATR · R:R ' + str.tostring(i_rrTarget, '#.##'), text_color = color.gray, text_size = size.tiny )
+    table.cell ( p, 1, 12, 'muestras ' + str.tostring(math.min(bar_index, i_lookback)) + '/' + str.tostring(i_lookback),
+         text_color = color.gray, text_size = size.tiny )
+
+
+// =============================================================================
+//  ALERTAS
+// =============================================================================
+
+alertcondition ( sqzOk and bearTrend and nonConfirm, 'BBWP-SQZ-L: senal long',
+     'Squeeze + tendencia bajista sin confirmacion de RSI/momentum' )
+
+if i_alertsOn and strategy.position_size > 0 and strategy.position_size[1] <= 0
+    alert ( '{"ticker":"' + syminfo.ticker + '","action":"buy","stopLoss":{"type":"stop","price":' + str.tostring(slPx) +
+            '},"takeProfit":{"limitPrice":' + str.tostring(tpPx) + '}}', alert.freq_once_per_bar )
+
+if i_alertsOn and strategy.position_size == 0 and strategy.position_size[1] > 0
+    alert ( '{"ticker":"' + syminfo.ticker + '","action":"exit","flatten":true}', alert.freq_once_per_bar )
