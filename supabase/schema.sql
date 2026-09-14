@@ -209,8 +209,12 @@ do $$ begin
   if not exists (select 1 from pg_constraint where conname = 'trades_asset_qqq_check') then
     alter table public.trades add constraint trades_asset_qqq_check check (asset = 'QQQ') not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'analysis_log_asset_qqq_check') then
-    alter table public.analysis_log add constraint analysis_log_asset_qqq_check check (asset = 'QQQ') not valid;
+  -- analysis_log: migrated from qqq-only to QQQ+BTCUSD (v3.1.18)
+  if exists (select 1 from pg_constraint where conname = 'analysis_log_asset_qqq_check') then
+    alter table public.analysis_log drop constraint analysis_log_asset_qqq_check;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'analysis_log_asset_check') then
+    alter table public.analysis_log add constraint analysis_log_asset_check check (asset in ('QQQ', 'BTCUSD')) not valid;
   end if;
   if not exists (select 1 from pg_constraint where conname = 'volume_profiles_symbol_qqq_check') then
     alter table public.volume_profiles add constraint volume_profiles_symbol_qqq_check check (symbol = 'QQQ') not valid;

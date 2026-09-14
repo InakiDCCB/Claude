@@ -230,8 +230,22 @@ def resolve(rows: list[dict], today: str) -> dict:
         return {"error": f"today {today} not in bars (markets closed?)"}
 
     v1_sigs, v2_sigs = compute_signals(rows)
-    v1_set = set(v1_sigs)
-    v2_set = set(v2_sigs)
+
+    # slot filter: skip signal if a prior trade is still open (fidelidad con backtest)
+    def _slot_filter(sigs: list[int], hold: int) -> tuple[list[int], list[int]]:
+        accepted, skipped = [], []
+        last_exit = -1
+        for s in sorted(sigs):
+            if s + 1 > last_exit:   # entry cae después del exit previo
+                accepted.append(s)
+                last_exit = s + hold
+            else:
+                skipped.append(s)
+        return accepted, skipped
+
+    v1_accepted, v1_skipped = _slot_filter(v1_sigs, HOLD)
+    v1_set = set(v1_accepted)
+    v2_set = set(v2_sigs) & v1_set   # v2 hereda el filtro de slot de v1
 
     def _entry_info(sig_i, version_label):
         entry_idx = sig_i + 1
@@ -257,14 +271,30 @@ def resolve(rows: list[dict], today: str) -> dict:
     for sig_i in sorted(v1_set):
         entry_i = sig_i + 1
         exit_i  = sig_i + HOLD
-        if entry_i >= len(dates) or exit_i >= len(dates):
-            continue
+        if entry_i >= len(dates):
+            continue  # entrada aún en el futuro
         entry_d = dates[entry_i]
-        exit_d  = dates[exit_i]
         if entry_d > today:
             continue
         in_v2 = sig_i in v2_set
 
+        if exit_i >= len(dates):
+            # trade abierto: exit_date todavía fuera del rango de barras cacheadas
+            days_held = today_idx - entry_i
+            pending.append({
+                "signal_date":    dates[sig_i],
+                "entry_date":     entry_d,
+                "exit_target":    None,
+                "entry_price":    round(opens[entry_i], 2),
+                "current_close":  round(closes[today_idx], 2),
+                "unrealized_pct": round((closes[today_idx] / opens[entry_i] - 1) * 100, 2),
+                "days_held":      days_held,
+                "days_left":      exit_i - today_idx,
+                "also_v2":        in_v2,
+            })
+            continue
+
+        exit_d  = dates[exit_i]
         if exit_d == today:
             ep  = opens[entry_i]
             xp  = closes[exit_i]
@@ -302,13 +332,14 @@ def resolve(rows: list[dict], today: str) -> dict:
     resolved = resolved_list if resolved_list else None
 
     return {
-        "today":          today,
-        "new_signal_v1":  new_signal_v1,
-        "new_signal_v2":  new_signal_v2,
-        "resolved":       resolved,
-        "pending":        pending,
-        "n_bars":         len(rows),
-        "bars_range":     f"{dates[0]} -> {dates[-1]}",
+        "today":              today,
+        "new_signal_v1":      new_signal_v1,
+        "new_signal_v2":      new_signal_v2,
+        "resolved":           resolved,
+        "pending":            pending,
+        "skipped_overlap_v1": [dates[i] for i in v1_skipped if i < len(dates)],
+        "n_bars":             len(rows),
+        "bars_range":         f"{dates[0]} -> {dates[-1]}",
     }
 
 
@@ -370,6 +401,10 @@ def main():
                   f"{p['days_held']}d/{HOLD}d | exit target {p['exit_target']}")
     else:
         print("\n  Sin trades pendientes.")
+
+    skipped = result.get("skipped_overlap_v1", [])
+    if skipped:
+        print(f"\n  Skipped (overlap slot): {', '.join(skipped)}")
     print()
 
 
