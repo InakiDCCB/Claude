@@ -14,7 +14,6 @@ export default async function Page() {
   let dailyPnl:     DailyPnlPoint[]     = []
   let ranking:      StrategyRanking[]   = []
   let registry:     StrategyRegistry[]  = []
-  let alpacaDebug:  string              = ''
 
   try {
     const sb = createSupabase()
@@ -43,7 +42,6 @@ export default async function Page() {
       // ALPACA_SECRET_KEY ausentes o desactualizadas para el environment
       // Production (distintas de dashboard/.env.local en local).
       console.error('fetchAlpacaState failed:', liveAlpaca.error)
-      alpacaDebug = liveAlpaca.error ?? 'unknown'
     }
     if (dailyPnlRes.length === 0) {
       console.error('fetchAlpacaDailyPnl returned empty — check ALPACA_API_KEY/ALPACA_SECRET_KEY in Vercel')
@@ -66,8 +64,6 @@ export default async function Page() {
 
   return (
     <main className="min-h-screen bg-[var(--surface-0)] pb-16">
-      {/* TEMP debug 2026-09-15 — remove once Alpaca prod fetch is confirmed fixed */}
-      {alpacaDebug && <div dangerouslySetInnerHTML={{ __html: `<!-- alpaca-debug: ${alpacaDebug.replace(/--/g, '—')} -->` }} />}
       <DashboardHeader sessionState={sessionState} alpacaState={alpacaState} />
 
       <div className="max-w-[1680px] mx-auto px-8 pt-6 flex flex-col gap-6">
