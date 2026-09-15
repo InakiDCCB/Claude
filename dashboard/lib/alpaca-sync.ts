@@ -47,12 +47,20 @@ type AlpacaRawPosition = {
 // the alpaca_state table (which depends on the external cron staying alive —
 // it silently went stale for 11 days, 2026-09-04→09-15, before this split).
 export async function fetchAlpacaState(): Promise<SyncResult> {
-  const [accountRes, positionsRes] = await Promise.all([
-    fetch(`${ALPACA_BASE}/account`,   { headers: alpacaHeaders(), next: { revalidate: 15 } }),
-    fetch(`${ALPACA_BASE}/positions`, { headers: alpacaHeaders(), next: { revalidate: 15 } }),
-  ])
+  let accountRes: Response, positionsRes: Response
+  try {
+    [accountRes, positionsRes] = await Promise.all([
+      fetch(`${ALPACA_BASE}/account`,   { headers: alpacaHeaders(), next: { revalidate: 15 } }),
+      fetch(`${ALPACA_BASE}/positions`, { headers: alpacaHeaders(), next: { revalidate: 15 } }),
+    ])
+  } catch (e) {
+    return { ok: false, error: `Alpaca fetch threw: ${e instanceof Error ? e.message : String(e)}` }
+  }
 
-  if (!accountRes.ok) return { ok: false, error: `Alpaca account ${accountRes.status}` }
+  if (!accountRes.ok) {
+    const body = await accountRes.text().catch(() => '')
+    return { ok: false, error: `Alpaca account ${accountRes.status}: ${body.slice(0, 200)}` }
+  }
 
   const account   = await accountRes.json()
   const rawPos: AlpacaRawPosition[] = positionsRes.ok ? await positionsRes.json() : []
