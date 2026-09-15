@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
       exit_type,
       pnl,
       status:     'filled',
-      strategy:   'Pulse-v2.4',
+      strategy:   'reconciled_unlogged',
       order_id:   sell.id,
       notes:      `reconciled; buy_order=${matchBuy.id}`,
     })

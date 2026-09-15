@@ -16,26 +16,30 @@ export default async function Page() {
 
   try {
     const sb = createSupabase()
-    const [tradesRes, alpacaStateRes, sessionStateRes, shadowAccumRes, pnlRes, rankingRes, registryRes] = await Promise.all([
-      sb.from('trades').select('*').order('created_at', { ascending: false }).limit(2000),
+    // trades: una sola fetch (limit 5000 — cubre tanto la tabla reciente como el
+    // historial de P&L completo, hoy con margen amplio sobre las ~140 filas reales;
+    // antes eran 2 queries redundantes con distinto limit/orden/filtro sobre la
+    // misma tabla). Se deriva ambas vistas en memoria.
+    const [tradesRes, alpacaStateRes, sessionStateRes, shadowAccumRes, rankingRes, registryRes] = await Promise.all([
+      sb.from('trades').select('*').order('created_at', { ascending: false }).limit(5000),
       sb.from('alpaca_state').select('*').eq('key', 'current').single(),
       sb.from('session_state').select('*').order('date', { ascending: false }).limit(1).maybeSingle(),
       // C.4 — outcomes shadow acumulados (misma fuente que memoria)
       sb.from('v_shadow_accumulated').select('*'),
-      // Performance: P&L realizado de TODA la vida de la cuenta, fuente = trades (broker-reconciled)
-      sb.from('trades')
-        .select('created_at,pnl')
-        .not('pnl', 'is', null)
-        .order('created_at', { ascending: true }).limit(5000),
       // Fase 3 — ranking de estrategias (último snapshot)
       sb.from('v_strategy_ranking').select('*'),
       sb.from('strategy_registry').select('*').order('strategy_id'),
     ])
-    trades       = (tradesRes.data       ?? []) as Trade[]
+    const allTrades = (tradesRes.data ?? []) as Trade[]
+    trades       = allTrades.slice(0, 2000)
+    // Performance: P&L realizado de TODA la vida de la cuenta, fuente = trades (broker-reconciled)
+    pnlHistory   = allTrades
+      .filter((t): t is Trade & { pnl: number } => t.pnl !== null)
+      .map(t => ({ created_at: t.created_at, pnl: t.pnl }))
+      .sort((a, b) => a.created_at.localeCompare(b.created_at))
     alpacaState  = (alpacaStateRes.data  ?? null) as AlpacaState | null
     sessionState = (sessionStateRes.data ?? null) as SessionStateRow | null
     shadowAccum  = (shadowAccumRes.data  ?? []) as ShadowAccum[]
-    pnlHistory   = (pnlRes.data          ?? []) as PnlPoint[]
     ranking      = (rankingRes.data      ?? []) as StrategyRanking[]
     registry     = (registryRes.data     ?? []) as StrategyRegistry[]
   } catch {

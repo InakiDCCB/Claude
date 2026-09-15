@@ -179,6 +179,13 @@ create index if not exists situational_symbol_date_idx
 -- loggea cuando un sistema SHADOW dispara: S1 RSI2-dip / S4 SWP / S5 GAPF)
 -- a filas planas para el dashboard y la validación de 5 sesiones.
 -- security_invoker => respeta el RLS de analysis_log (anon select).
+-- 2026-09-14 (bug fix, migración fix_shadow_signals_key_collision_and_view_guard):
+-- post-close.md STEP 4c-4 reusaba esta misma clave para el batch GDSL con forma
+-- de OBJETO (no array), rompiendo jsonb_array_elements() con 22023. El key
+-- collision se corrigió en post-close.md (GDSL ahora loggea bajo 'gdsl_signals')
+-- y esta vista quedó defensiva: solo expande cuando el valor es efectivamente
+-- un array, así un futuro error de escritura degrada a "fila ignorada" en vez
+-- de romper cada lector (post-close, dashboard).
 create or replace view public.shadow_signals
   with (security_invoker = true) as
 select
@@ -195,7 +202,8 @@ select
   s->>'note'                    as note
 from public.analysis_log al
 cross join lateral jsonb_array_elements(al.indicators->'shadow_signals') as s
-where al.indicators ? 'shadow_signals';
+where al.indicators ? 'shadow_signals'
+  and jsonb_typeof(al.indicators->'shadow_signals') = 'array';
 
 grant select on public.shadow_signals to anon;
 
@@ -348,10 +356,19 @@ grant select on public.strategy_performance to anon;
 -- Igual que fase3c: la matemática (classify_market_context, refresh_market_patterns,
 -- refresh_market_hypotheses, situational_snapshot) y las vistas (v_strategy_ranking,
 -- v_shadow_accumulated, v_market_intelligence, v_market_context, v_market_patterns,
--- v_market_hypotheses, v_emerging_context_labels, v_market_recommendations) viven
--- como migraciones aplicadas directo en Supabase (lógica procedural) — no versionadas
--- aquí. Este archivo solo documenta las tablas base. Añadido 2026-08-09 (auditoría:
--- estaban en la DB desde 06-26 pero nunca se agregaron a este schema.sql).
+-- v_market_hypotheses, v_emerging_context_labels) viven como migraciones aplicadas
+-- directo en Supabase (lógica procedural) — no versionadas aquí. Este archivo solo
+-- documenta las tablas base. Añadido 2026-08-09 (auditoría: estaban en la DB desde
+-- 06-26 pero nunca se agregaron a este schema.sql).
+-- 2026-09-14 (migración drop_orphaned_v_market_recommendations): `v_market_recommendations`
+-- ELIMINADA — huérfana desde la auditoría 08-09 (flagged de nuevo, sin consumidor en
+-- dashboard/ ni workflows/), definición preservada en el comentario de esa migración.
+-- 2026-09-14 (bug fix, migración fix_v_shadow_accumulated_security_definer):
+-- v_shadow_accumulated se recreó con security_invoker=true — el advisor de
+-- seguridad de Supabase la marcaba ERROR por correr SECURITY DEFINER (ignora el
+-- RLS de quien consulta) pese a exponerse vía anon key en el dashboard. Solo lee
+-- session_memory (RLS anon_select ya en true), así que el cambio no afecta las
+-- lecturas legítimas del dashboard.
 -- ============================================================
 create table if not exists market_context (
   session_date    date not null,

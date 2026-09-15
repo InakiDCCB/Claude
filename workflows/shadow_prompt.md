@@ -1,5 +1,14 @@
 # Pulse — Shadow agent (A4) — v1 (2026-06-18)
 
+> ⚠️ **DEPRECADO — NO INVOCAR (auditoría 2026-09-14).** El diseño multiagente A1/A4
+> (`docs/multiagent_architecture.md`) nunca se adoptó: STEP 6b de `cycle_prompt.md` absorbió el
+> shadow logging in-cycle, y este archivo quedó huérfano — ningún workflow ni comando global lo
+> referencia. Si se invocara hoy fallaría o correría con lógica muerta: evalúa S5 GAPF (descartada
+> 2026-07-10) y S6 SWP-short (retirado v3.1.10) como señales activas, y lee `state.QQQ.ema9/rsi14/
+> atr1m` — podados en v3.1.5/v3.1.10. Se conserva sin borrar por la regla de `CLAUDE.md` de no
+> descartar workflows tras un solo uso; si el split A1/A4 se retoma algún día, reescribir desde
+> cero contra el `cycle_prompt.md` vigente en vez de reactivar este archivo.
+
 Agente **SHADOW de solo lectura**. Computa las señales de los sistemas en validación (S1 RSI2,
 S4 SWP, S5 GAPF, S6 SWP-short) sobre datos live y las LOGGEA con precios/niveles exactos.
 **JAMÁS coloca, cancela ni modifica órdenes. JAMÁS toca `session_state.positions` ni `trades`.**

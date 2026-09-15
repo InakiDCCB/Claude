@@ -1,19 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { Trade, AlpacaState, PnlPoint } from '@/lib/supabase'
 
 const START_CAPITAL = 100_000
 const GREEN = 'var(--green)'
 const RED   = 'var(--red)'
-
-type AlpacaAccount = {
-  portfolio_value: string
-  equity: string
-  last_equity: string
-  long_market_value: string
-  cash: string
-}
 
 function money(v: number): string {
   return (v >= 0 ? '+$' : '−$') + Math.abs(v).toFixed(2)
@@ -42,13 +34,8 @@ export default function PerformanceSummary({ trades, alpacaState, pnlHistory }: 
   alpacaState: AlpacaState | null
   pnlHistory:  PnlPoint[]
 }) {
-  const [account, setAccount] = useState<AlpacaAccount | null>(null)
   const [hover, setHover]  = useState<number | null>(null)
   const [sel, setSel]      = useState<number | null>(null)
-
-  useEffect(() => {
-    fetch('/api/account').then(r => r.json()).then(setAccount).catch(() => {})
-  }, [])
 
   // ─── Aggregate realized P&L by ET session day (source: trades, broker-reconciled) ───
   const byDay = new Map<string, { pnl: number; n: number; w: number }>()
@@ -83,9 +70,9 @@ export default function PerformanceSummary({ trades, alpacaState, pnlHistory }: 
   const hitPct = hitTotal > 0 ? Math.round((wins / hitTotal) * 100) : 0
   const avgPnL = closed.length > 0 ? closed.reduce((s, t) => s + (t.pnl ?? 0), 0) / closed.length : 0
 
-  const account_ = account
-  const invested = account_ ? parseFloat(account_.long_market_value) : 0
-  const cash     = account_ ? parseFloat(account_.cash) : 0
+  const equity   = alpacaState?.equity ?? null
+  const cash     = alpacaState?.cash ?? 0
+  const invested = (alpacaState?.positions ?? []).reduce((s, p) => s + p.market_value, 0)
 
   // ─── Last 8 sessions: equity curve + bar strip (ported from the design canvas) ───
   const last8 = cumSeries.slice(-8)
@@ -139,7 +126,7 @@ export default function PerformanceSummary({ trades, alpacaState, pnlHistory }: 
         <div className="bg-[var(--surface-1)] border border-[var(--border)] rounded-lg p-[18px] flex flex-col gap-4">
           <div>
             <div className="font-mono text-[10px] tracking-widest uppercase text-[var(--text-4)] mb-1.5">Equity actual</div>
-            <div className="font-mono text-[32px] font-semibold tabular-nums tracking-tight text-[var(--text-0)]">{fmtUSD(account_?.portfolio_value)}</div>
+            <div className="font-mono text-[32px] font-semibold tabular-nums tracking-tight text-[var(--text-0)]">{fmtUSD(equity)}</div>
             <div className="flex gap-4 mt-1.5 font-mono text-[11px] text-[var(--text-4)]">
               <span>cash {fmtUSD(cash)}</span>
               <span>invertido {fmtUSD(invested)}</span>
