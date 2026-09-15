@@ -126,13 +126,6 @@ export type SessionStateRow = {
   }
 }
 
-// Punto de P&L realizado (trades cerrados, vida completa de la cuenta) — fuente del PerformanceCard.
-// Se deriva de `trades` (reconciliada con broker), NO de session_memory (diario cualitativo).
-export type PnlPoint = {
-  created_at: string
-  pnl: number
-}
-
 // Fila de la vista shadow_signals (validación 5 sesiones de S1/S4/S5)
 export type ShadowSignal = {
   log_id: string

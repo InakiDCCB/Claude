@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import type { Trade, AlpacaState, PnlPoint } from '@/lib/supabase'
+import type { Trade, AlpacaState } from '@/lib/supabase'
+import type { DailyPnlPoint } from '@/lib/alpaca-sync'
 
 const START_CAPITAL = 100_000
 const GREEN = 'var(--green)'
@@ -29,38 +30,38 @@ function Stat({ label, value, color }: { label: string; value: string; color?: s
   )
 }
 
-export default function PerformanceSummary({ trades, alpacaState, pnlHistory }: {
+export default function PerformanceSummary({ trades, alpacaState, dailyPnl }: {
   trades:      Trade[]
   alpacaState: AlpacaState | null
-  pnlHistory:  PnlPoint[]
+  dailyPnl:    DailyPnlPoint[]
 }) {
   const [hover, setHover]  = useState<number | null>(null)
   const [sel, setSel]      = useState<number | null>(null)
 
-  // ─── Aggregate realized P&L by ET session day (source: trades, broker-reconciled) ───
-  const byDay = new Map<string, { pnl: number; n: number; w: number }>()
-  for (const r of pnlHistory) {
-    const day = new Date(r.created_at).toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
-    const d = byDay.get(day) ?? { pnl: 0, n: 0, w: 0 }
-    d.pnl += Number(r.pnl); d.n += 1
-    if (Number(r.pnl) > 0) d.w += 1
-    byDay.set(day, d)
-  }
-  const days = [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b))
+  // ─── P&L diario: curva real de Alpaca (broker truth), NO trades.pnl agregado por día ───
+  // El ledger interno (`trades`) arrastra ~$20 de drift acumulado vs. la cuenta real: fees
+  // TAF/CAT/REG que Alpaca cobra y nunca se loguean ahí, más un puñado de fills viejos de
+  // mayo-junio con precio de salida estimado a mano en vez de leído del fill real. Iguala
+  // lo que se ve en la propia app de Alpaca. `trades` sigue siendo la fuente correcta para
+  // métricas por-trade (hit ratio, avg P&L) — el broker no las expone.
+  const days = [...dailyPnl].sort((a, b) => a.day.localeCompare(b.day))
 
   let cum = 0
-  const cumSeries = days.map(([day, d]) => { cum += d.pnl; return { day, pnl: d.pnl, cum } })
-  const net = cum
+  const cumSeries = days.map(d => { cum += d.pnl; return { day: d.day, pnl: d.pnl, cum } })
+
+  // Headline: equity en vivo (fetch separado, más fresco que el último bar diario de arriba).
+  // Fallback a cum (curva diaria) si ese fetch en vivo falló.
+  const net = alpacaState?.equity != null ? alpacaState.equity - START_CAPITAL : cum
   const netPct = (net / START_CAPITAL) * 100
 
   const nowMonth = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }).slice(0, 7)
-  const mtd = days.filter(([day]) => day.startsWith(nowMonth)).reduce((a, [, d]) => a + d.pnl, 0)
+  const mtd = days.filter(d => d.day.startsWith(nowMonth)).reduce((a, d) => a + d.pnl, 0)
 
   let peak = 0, maxDD = 0
-  for (const c of cumSeries) { peak = Math.max(peak, c.cum); maxDD = Math.max(maxDD, peak - c.cum) }
+  for (const c of cumSeries) { peak = Math.max(peak, c.cum); maxDD = Math.max(peak - c.cum, maxDD) }
 
-  const grossW = days.reduce((a, [, d]) => a + Math.max(d.pnl, 0), 0)
-  const grossL = days.reduce((a, [, d]) => a + Math.max(-d.pnl, 0), 0)
+  const grossW = days.reduce((a, d) => a + Math.max(d.pnl, 0), 0)
+  const grossL = days.reduce((a, d) => a + Math.max(-d.pnl, 0), 0)
   const pf = grossL > 0 ? (grossW / grossL).toFixed(2) : grossW > 0 ? '∞' : '—'
 
   const closed = trades.filter(t => t.pnl != null)
@@ -104,7 +105,7 @@ export default function PerformanceSummary({ trades, alpacaState, pnlHistory }: 
   const detailIdx = hover ?? sel
   const sessionDetail = detailIdx != null && N > 0
     ? `${fmtDate(last8[detailIdx].day)} · ${money(last8[detailIdx].pnl)}`
-    : 'net realized acumulado · fuente trades'
+    : 'equity acumulado · fuente alpaca'
 
   function onChartMove(e: React.MouseEvent<HTMLDivElement>) {
     const r = e.currentTarget.getBoundingClientRect()
@@ -118,7 +119,7 @@ export default function PerformanceSummary({ trades, alpacaState, pnlHistory }: 
       <div className="flex items-center gap-3 mb-2.5">
         <span className="font-mono text-[10px] font-semibold tracking-[0.16em] uppercase text-[var(--text-3)]">Performance</span>
         <span className="h-px flex-1 bg-[var(--border-soft)]" />
-        <span className="font-mono text-[10px] text-[var(--text-5)]">{days.length} sesiones · broker-reconciled</span>
+        <span className="font-mono text-[10px] text-[var(--text-5)]">{days.length} sesiones · fuente alpaca</span>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4">
@@ -159,7 +160,7 @@ export default function PerformanceSummary({ trades, alpacaState, pnlHistory }: 
         <div className="bg-[var(--surface-1)] border border-[var(--border)] rounded-lg p-[18px] flex flex-col">
           <div className="flex items-center justify-between mb-1.5">
             <span className="font-mono text-[10px] tracking-widest uppercase text-[var(--text-4)]">P&amp;L acumulado</span>
-            <span className="font-mono text-[10px] text-[var(--text-5)]">realized · source: trades</span>
+            <span className="font-mono text-[10px] text-[var(--text-5)]">equity diario · source: alpaca</span>
           </div>
 
           {N === 0 ? (

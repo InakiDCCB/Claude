@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { createSupabase } from '@/lib/supabase'
-import type { Trade, AlpacaState, SessionStateRow, ShadowAccum, PnlPoint, StrategyRanking, StrategyRegistry } from '@/lib/supabase'
+import type { Trade, AlpacaState, SessionStateRow, ShadowAccum, StrategyRanking, StrategyRegistry } from '@/lib/supabase'
+import type { DailyPnlPoint } from '@/lib/alpaca-sync'
 import PerformanceSummary from './PerformanceSummary'
 import HealthGrid from './HealthGrid'
 import DataTabs from './DataTabs'
@@ -64,7 +65,7 @@ export default function TradingPanel({
   alpacaState,
   sessionState,
   shadowAccum,
-  pnlHistory,
+  dailyPnl,
   ranking,
   registry,
 }: {
@@ -72,7 +73,7 @@ export default function TradingPanel({
   alpacaState:   AlpacaState | null
   sessionState:  SessionStateRow | null
   shadowAccum:   ShadowAccum[]
-  pnlHistory:    PnlPoint[]
+  dailyPnl:      DailyPnlPoint[]
   ranking:       StrategyRanking[]
   registry:      StrategyRegistry[]
 }) {
@@ -110,7 +111,7 @@ export default function TradingPanel({
     <>
       {toast && <TradeToast trade={toast} onClose={() => setToast(null)} />}
 
-      <PerformanceSummary trades={trades} alpacaState={alpacaState} pnlHistory={pnlHistory} />
+      <PerformanceSummary trades={trades} alpacaState={alpacaState} dailyPnl={dailyPnl} />
       <HealthGrid sessionState={sessionState} alpacaState={alpacaState} trades={trades} />
       <DataTabs trades={trades} newTradeId={newTradeId} />
       <SystemsCard ranking={ranking} registry={registry} accum={shadowAccum} trades={trades} />
