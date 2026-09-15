@@ -37,6 +37,15 @@ export default async function Page() {
     const allTrades = (tradesRes.data ?? []) as Trade[]
     trades       = allTrades.slice(0, 2000)
     dailyPnl     = dailyPnlRes
+    if (!liveAlpaca.ok) {
+      // Visible en Vercel → Project → Logs. Causa típica: ALPACA_API_KEY/
+      // ALPACA_SECRET_KEY ausentes o desactualizadas para el environment
+      // Production (distintas de dashboard/.env.local en local).
+      console.error('fetchAlpacaState failed:', liveAlpaca.error)
+    }
+    if (dailyPnlRes.length === 0) {
+      console.error('fetchAlpacaDailyPnl returned empty — check ALPACA_API_KEY/ALPACA_SECRET_KEY in Vercel')
+    }
     alpacaState  = liveAlpaca.ok
       ? {
           key: 'current', synced_at: liveAlpaca.synced_at!, equity: liveAlpaca.equity ?? null,
