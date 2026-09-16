@@ -44,7 +44,15 @@ export default function PerformanceSummary({ trades, alpacaState, dailyPnl }: {
   // mayo-junio con precio de salida estimado a mano en vez de leído del fill real. Iguala
   // lo que se ve en la propia app de Alpaca. `trades` sigue siendo la fuente correcta para
   // métricas por-trade (hit ratio, avg P&L) — el broker no las expone.
+  //
+  // Alpaca's portfolio/history?timeframe=1D only includes data up to the previous session
+  // close — today's bar doesn't appear until EOD processing. Patch it from alpacaState.day_pl
+  // (which is account.equity − account.last_equity, always current).
+  const todayET = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
   const days = [...dailyPnl].sort((a, b) => a.day.localeCompare(b.day))
+  if (alpacaState?.day_pl != null && (days.length === 0 || days[days.length - 1].day < todayET)) {
+    days.push({ day: todayET, pnl: alpacaState.day_pl, equity: alpacaState.equity ?? 0 })
+  }
 
   let cum = 0
   const cumSeries = days.map(d => { cum += d.pnl; return { day: d.day, pnl: d.pnl, cum } })
