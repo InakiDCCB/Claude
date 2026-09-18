@@ -53,6 +53,17 @@
 /post-close ✦ 8. MI enriquecido ✦ 9. Ranking validado ✦ 10. Promociones solo con evidencia ✦
 11. Memorias sin redundancia ✦ 12. Dashboard sincronizado.
 
+## Hipótesis verificadas — pendiente validación 3 sesiones
+
+Backtest confirma la dirección; la spec NO cambia hasta completar las 3 sesiones. Fuente: `tools/lab/rsi2_abort_sweep.py` (10 años, n≈25k señales S1 RSI2).
+
+| ID | Hipótesis | Evidencia backtest | Costo | Acción cuando se valide |
+|---|---|---|---|---|
+| **H1** | Excluir entradas RSI2 antes de 12:00 ET | PF 1.081→1.122 (+0.042), 9/11 años mejoran; peor año: −0.008 (flat) | −26.4% señales (6.775) | Añadir gate `seal_bar >= 149` en STEP 7-fill de `cycle_prompt.md` |
+| **H3** | Subir abort latencia 150s→300s | Cliff real a 420–480s (bar 7-8); bars 1-6 PF 1.03–1.08, sin degradación material | Ninguno (añade trades) | Cambiar constante abort en STEP 7-fill de `cycle_prompt.md` |
+
+Sesiones completadas (0/3 cada una): iniciar conteo desde la próxima sesión con señales RSI2.
+
 ---
 *Histórico de decisiones y sistemas: memoria `project_systems_history.md`. Roadmap operativo previo
 (2026-06-18) superseded por este backlog: memoria `project_roadmap.md` apunta aquí.*
