@@ -70,7 +70,7 @@ Agent_Aconcagua/
 | Close          | 15:55       | Cierre forzado total (`exit_type=TIME`)                       |
 | Post-close     | ≥16:00      | `/post-close`: niveles de mañana + resolución de shadows + aprendizaje |
 
-**Sistemas LIVE**: S2 FVG (limit al midpoint, gate rvol30), S3 VWAPPB (pullback VWAP, días choppy), S1 RSI2-dip (RSI2(5m)<15, tp/sl por ATR5m, time-stop 15m), S4 Sweep&Reclaim (sweep session-low + reclaim), **S6 SWP-short (short, sweep session-high + rechazo — promovido, corriendo hasta n=100)**. Multi-posición: `state.positions[]`, máx 4, cap 70% suma, sizing 8%, prioridad por score, **exclusión de dirección long/short ACTIVA**. **C4 global**: 2 pérdidas consecutivas de un sistema → apagado hasta el día siguiente.
+**Sistemas LIVE**: S2 FVG (limit al midpoint, gate rvol30), S3 VWAPPB (pullback VWAP, días choppy), S1 RSI2-dip (RSI2(5m)<15, tp/sl por ATR5m, time-stop 15m), S4 Sweep&Reclaim (sweep session-low + reclaim), **S6 SWP-short (short, sweep session-high + rechazo — promovido, corriendo hasta n=100)**. Multi-posición: `state.positions[]`, máx 4, cap 70% suma, sizing 10% (subido de 8% en v3.1.19, decisión usuario), prioridad por score, **exclusión de dirección long/short ACTIVA**. **C4 global**: 2 pérdidas consecutivas de un sistema → apagado hasta el día siguiente.
 
 **Sistemas SHADOW (cero órdenes)**: OB/OBNB (rechazadas 07-16, sin acción), Golden Ticket (4 señales diarias), TD Sequential (TD9S). Se resuelven en `/post-close` como validación antes de una eventual promoción a LIVE — la promoción siempre la decide el usuario. (S5 GapFill descartada 07-10.)
 

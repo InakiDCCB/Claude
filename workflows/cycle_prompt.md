@@ -1,4 +1,4 @@
-# Pulse v3.1.18 — cycle prompt (2026-09-04)
+# Pulse v3.1.19 — cycle prompt (2026-09-22)
 
 Historial de versiones: `workflows/history/CHANGELOG.md` (NO es operativo — todas las reglas
 vigentes están en los STEPs de este archivo). v3.1.0 = S1+S4 LIVE + multi-posición; v3.1.1 = dieta
@@ -78,6 +78,18 @@ excluyentes (RAMA A aplanar / RAMA B flujo normal) con "FIN de STEP 7-fill para 
 cierre de la rama A — antes la numeración (1, 1b, 2, 3, 4) podía leerse como checklist secuencial
 en vez de branch exclusivo. Sin cambio de parámetros ni de la lógica de negocio, solo de
 estructura/inequívocidad de la instrucción. Ver `project_fvg_multi_fill_experiment.md`.
+**v3.1.19 (2026-09-22) = Sizing subido 8%→10% equity para TODOS los sistemas LIVE** (S1 RSI2,
+S4 SWP y gt_closelow_v2 swing) — **decisión usuario, override explícito, no una recalibración por
+nueva evidencia de edge.** Simulación de viabilidad en la sesión sobre los 46 trades reales de
+S1+S4 desde 07-09: el cambio escala P&L y drawdown linealmente ×1.25 (drawdown máximo histórico
+$26.86→$33.57 sobre cuenta de $100k, trivial), y NO tensiona el cap de 4 posiciones/Σ≤70%
+intradía (4×10%=40%, sigue con margen amplio). Pero el edge de base NO estaba confirmado al
+momento del cambio: rsi2_v3 seguía tier=**provisional** con `exp_lb` (expectancy Wilson-lower-
+bound) **negativo** (−0.045, n=38); swp_v3 en **insufficient_data** (n=9); gt_closelow_v2 con
+**0 trades reales** (n=0) — sizing sube ahí sin ninguna base empírica propia. Exposición
+combinada máxima teórica (4 intradía @cap 70% + 1 swing) sube de ~78% a ~80% equity. Si el score
+de rsi2_v3/swp_v3 se deteriora tras este cambio, revisar si el sizing más agresivo es la causa
+antes de tocar los parámetros del setup — ver [[project-sizing-8-to-10-override]] (memoria).
 **v3.1.18 (2026-09-04) = BTC/USD shadow batch (IBS_btc_v1 + SWPs_btc_v1)** — dos sistemas BTC en shadow, sin órdenes reales: `ibs_btc_v1` (IBS(5m)<0.15, long, sl=1.5×ATR5m, tp=0.5×ATR5m, ts=45min; backtest 2021-2026 PF=1.34, hit=75%) y `swps_btc_v1` (sweep session-high + rechazo de volumen, short, tp=FPC, min_depth=0.30×ATR; PF=1.24, hit=73%). Portfolio combinado: PF=1.33, correlación r=−0.016 (independientes), 5/6 años positivos. Corren por batch en `/post-close` (paso 4c-3, `tools/btc_shadow.py`) — **CERO órdenes** en Alpaca, solo logging en `analysis_log` (asset='BTCUSD'). Claves canónicas: `ibs_btc` / `swps_btc`. Criterio de muerte: PF<1.0 @ n≥50; umbral de promoción: Score≥65 @ n≥30 (decisión del usuario).
 **v3.1.17 (2026-09-02) = S2 FVG RETIRADO de LIVE** (decisión usuario — score=−5.5 < umbral KILLED<45
 con n=40 en tier provisional, PF=1.125 borderline, exp_lb negativo: ver `v_strategy_ranking` post-close
@@ -139,9 +151,9 @@ dirección long/short de v3.1.7-v3.1.9 quedó sin objeto, PODADA.
 C4 (todos los sistemas): tras 2 pérdidas consecutivas de un sistema en el día → ese sistema queda apagado hasta mañana.
 
 **gt_closelow_v2 (v3.1.14) — bucket SEPARADO, NO participa del multi-posición intradía de
-arriba:** su propio slot (≤1 posición swing abierta a la vez), sizing 8% equity, SIN tope de 4
-posiciones ni del cap Σ≤70% (se suma aparte — exposición total real puede llegar a ~78-80% equity
-con las 4 intradía + la swing, aceptado por diseño). NO tiene C4 estándar (ciclo de 3 días no
+arriba:** su propio slot (≤1 posición swing abierta a la vez), sizing 10% equity (v3.1.19), SIN
+tope de 4 posiciones ni del cap Σ≤70% (se suma aparte — exposición total real puede llegar a ~80%
+equity con las 4 intradía + la swing, aceptado por diseño). NO tiene C4 estándar (ciclo de 3 días no
 encaja con "apagado hasta mañana"): si las ÚLTIMAS 2 operaciones cerradas de `gt_closelow_v2` en
 `trades` fueron pérdida → pausar nuevas entradas hasta revisión del usuario (no se reactiva solo).
 Mecánica completa: STEP 3 (invariante extendido), STEP 6c (entrada), STEP 10 (cierre selectivo).
@@ -365,7 +377,8 @@ El loop solo lo LEE en STEP 6c.
 **Checks comunes antes de CUALQUIER place (v3.1.0):** slot de la estrategia libre · posiciones
 abiertas < 4 · Σ(qty×price abiertas) + entrada nueva ≤ 0.70×equity ·
 pnl realizado del día > −$500. Si el cap/máx bloquea con varias señales en el ciclo → prioridad
-por score del ranking. `shares = floor(equity × 0.08 / precio_entrada)` para TODOS (skip si < 2).
+por score del ranking. `shares = floor(equity × 0.10 / precio_entrada)` para TODOS (skip si < 2;
+sizing 10% desde v3.1.19 — ver header).
 
 **S1 RSI2 — PRIMERA PRIORIDAD del ciclo tras STEP 3 (timing crítico, playbook §7b: el edge muere
 >2 min tarde del sello)** (solo si `gates.rsi2_on` Y `c4.rsi2 < 2` Y slot rsi2 libre Y ATR5m válido):
@@ -411,8 +424,8 @@ poco frente al horizonte. Condición: `fase_sql == 'ACTIVE'` Y es el primer cicl
 `true` de antes por catch-up, el primer ciclo del día sin más marca — usar `state.gt2.entry_attempted_today`
 como el guardián real, no la hora).
 
-1. `shares = floor(equity × 0.08 / precio_actual)` (mismo sizing 8% que el resto, bucket propio —
-   NO cuenta para el cap Σ≤70% intradía). Skip si <2 (log `gt2_skip_size`).
+1. `shares = floor(equity × 0.10 / precio_actual)` (mismo sizing 10% que el resto desde v3.1.19,
+   bucket propio — NO cuenta para el cap Σ≤70% intradía). Skip si <2 (log `gt2_skip_size`).
 2. `place_stock_order(QQQ, shares, "buy", type="market", time_in_force="day")`.
 3. `state.gt2.entry_attempted_today = true` SIEMPRE (éxito o fallo — 1 intento por día).
 4. Si falla → retry 1 vez → si falla de nuevo → log `gt2_entry_failed`, no reintentar hasta
