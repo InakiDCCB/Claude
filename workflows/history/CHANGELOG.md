@@ -1,5 +1,21 @@
 # Pulse — historial de versiones del cycle_prompt
 
+## v3.1.20 (2026-09-25) — PASSIVE movido de 15:30 a 15:40
+
+**Motivación:** señal RSI2=9.4 bloqueada en post-close 09-25 por fase PASSIVE (15:31 ET). Análisis
+del bucket 15:30-15:40 sobre backtest OOS (32 sesiones, 106 días, `trades_30d.json`):
+
+| Bucket | n | hit% | mean | PF |
+|---|---|---|---|---|
+| < 15:30 (baseline) | 594 | 76.1% | +0.060 | 1.22 |
+| 15:30–15:40 | 27 | 77.8% | +0.074 | **1.58** |
+| 15:40–15:55 | 10 | 40.0% | −0.193 | 0.40 |
+
+**Cambio:** SQL de STEP 0 `>= '15:30'` → `>= '15:40'`. Aplica a todos los sistemas LIVE (S1 RSI2,
+S4 SWP). gt_closelow_v2 no aplica (swing, su ventana ya es indiferente a esta fase). El bucket
+15:40-15:55 sigue bloqueado — su degradación es contundente. RSI2 time-stop de 15min garantiza
+que una entrada a las 15:39 sale a las 15:54, antes del MOC real.
+
 ## v3.1.16 (2026-08-31) — Ahorro de créditos: STEP 0 sin `cycle_log` + reposo 15→30min
 
 **Problema real (aclarado por el usuario tras la investigación de huecos de v3.1.15):** no es un

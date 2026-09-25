@@ -1,4 +1,4 @@
-# Pulse v3.1.19 — cycle prompt (2026-09-22)
+# Pulse v3.1.20 — cycle prompt (2026-09-25)
 
 Historial de versiones: `workflows/history/CHANGELOG.md` (NO es operativo — todas las reglas
 vigentes están en los STEPs de este archivo). v3.1.0 = S1+S4 LIVE + multi-posición; v3.1.1 = dieta
@@ -78,6 +78,8 @@ excluyentes (RAMA A aplanar / RAMA B flujo normal) con "FIN de STEP 7-fill para 
 cierre de la rama A — antes la numeración (1, 1b, 2, 3, 4) podía leerse como checklist secuencial
 en vez de branch exclusivo. Sin cambio de parámetros ni de la lógica de negocio, solo de
 estructura/inequívocidad de la instrucción. Ver `project_fvg_multi_fill_experiment.md`.
+**v3.1.20 (2026-09-25) = PASSIVE movido de 15:30 a 15:40** — backtest OOS (32s, n=27 bucket 15:30-15:40): RSI2 hit=77.8% PF=1.58 en esa ventana (mejor que baseline 76.1%/PF=1.22); bucket 15:40-15:55 colapsa (hit=40% PF=0.40) → se mantiene bloqueado. La fase PASSIVE arranca ahora a las 15:40 (aplica a todos los sistemas LIVE — S4 SWP sin datos propios del bucket pero mismo razonamiento de tiempo; gt_closelow_v2 no aplica).
+
 **v3.1.19 (2026-09-22) = Sizing subido 8%→10% equity para TODOS los sistemas LIVE** (S1 RSI2,
 S4 SWP y gt_closelow_v2 swing) — **decisión usuario, override explícito, no una recalibración por
 nueva evidencia de edge.** Simulación de viabilidad en la sesión sobre los 46 trades reales de
@@ -208,7 +210,7 @@ mcp__claude_ai_Supabase__execute_sql(project_id="rdenehqcxgvffyvlwvba",
   query="SELECT (SELECT state - 'cycle_log' FROM session_state WHERE date = CURRENT_DATE) AS state, now() AS t0,
     to_char(now() AT TIME ZONE 'America/New_York','HH24:MI:SS') AS et_now,
     CASE WHEN (now() AT TIME ZONE 'America/New_York')::time >= '15:55' THEN 'CLOSE'
-         WHEN (now() AT TIME ZONE 'America/New_York')::time >= '15:30' THEN 'PASSIVE'
+         WHEN (now() AT TIME ZONE 'America/New_York')::time >= '15:40' THEN 'PASSIVE'
          WHEN (now() AT TIME ZONE 'America/New_York')::time < '10:00' THEN 'PRE'
          ELSE 'ACTIVE' END AS fase_sql;")
 ```
@@ -237,7 +239,7 @@ ciclo CON señal añade >60s de latencia y revienta el abort de S1 (bug 07-09).
 |---|---|
 | PRE | heartbeat "pre-market" → ScheduleWakeup hasta 10:00:10 ET → FIN |
 | ACTIVE | ciclo completo (STEPs 2-9) |
-| PASSIVE | solo STEP 3 (seguridad) + gestión; sin entries (reales ni shadow) |
+| PASSIVE | solo STEP 3 (seguridad) + gestión; sin entries (reales ni shadow) — **desde 15:40 ET (v3.1.20; antes 15:30)** |
 | CLOSE | STEP 10: cerrar posición INTRADÍA a market (exit_type=TIME; gt_closelow_v2 se excluye salvo que hoy sea su día de salida) → memoria → FIN |
 
 **REGLA DURA (bug 07-14, ver [[feedback-phase-from-clock-only]] para la historia completa):** el
