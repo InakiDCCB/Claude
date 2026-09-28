@@ -63,7 +63,7 @@ cambios. gt_closelow_v2 es el primer sistema swing (hold multi-día) del agente 
 nueva: entra al open (aproximado al primer ciclo ACTIVE, ~10:00, con market order — el loop no
 tiene ciclos entre 9:30-9:55), NO tiene OCO (fiel al backtest: señal pura sin SL/TP, solo hold
 fijo), sobrevive el cierre forzado diario de las 15:55 hasta su propio día de salida (entry+2
-sesiones hábiles), bucket de sizing/cap propio (8% equity, fuera del cap 4-posiciones/70%
+sesiones hábiles), bucket de sizing/cap propio (10% equity desde v3.1.19, fuera del cap 4-posiciones/70%
 intradía) — ver STEP 3 (invariante extendido), STEP 6c (entrada), STEP 10 (cierre selectivo).
 Posición trackeada vía `trades` (persiste entre días, a diferencia de `session_state` que es
 por-fecha), NO vía `state.positions[]`. `gt_closelow_v2_shadow.py` DEJA de correr en `/post-close`

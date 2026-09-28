@@ -28,7 +28,7 @@ import csv, math
 
 DATA_DIR = Path(__file__).parents[1] / "data" / "qqq_1min"
 ENTRY_MIN = 30   # bar 30 ~ 10:00 ET (alineado al backtest original)
-ENTRY_MAX = 355  # bar 355 ~ 15:30 ET
+ENTRY_MAX = 370  # bar 370 ~ 15:40 ET (PASSIVE v3.1.20)
 
 TP_MULT  = 0.5   # spec: tp = entry + 0.5×atr5m
 SL_MULT  = 1.0   # spec: sl = entry − 1.0×atr5m
@@ -75,7 +75,7 @@ def collect_signals(days):
     """Devuelve todos los momentos donde RSI2 < THRESH al sellar un bloque 5-min."""
     signals = []
     for day in days:
-        for i in range(day.n - 6):  # necesitamos al menos 5 barras adelante
+        for i in range(day.n - 9):  # PARTE 4 usa delay hasta 8 barras → seal_bar+8 < day.n-1
             if (i + 1) % 5 != 0:
                 continue
             k = (i + 1) // 5 - 1
@@ -136,22 +136,17 @@ def fmt(label, trades_pnl):
 def h1_time_filter_analysis(signals):
     """
     H1: ¿Un filtro horario mejora S1 RSI2 de forma robusta?
-    Compara full universe (10:00-15:30) vs restricted (12:00-15:30).
+    Compara full universe (10:00-15:40) vs restricted (12:00-15:40).
     delay=1 bar en ambos (baseline).
     Reporta: PF global, year-by-year, y el costo de excluir la manana.
     """
     print("\n" + "=" * 70)
     print("H1 — Filtro horario: ¿excluir 10:00-12:00 mejora S1 RSI2?")
-    print("  FULL:   10:00-15:30 (bars 30-355)")
-    print("  FILTER: 12:00-15:30 (bars 120-355)")
+    print("  FULL:   10:00-15:40 (bars 30-370)")
+    print("  FILTER: 12:00-15:40 (bars 149-370)")
     print("=" * 70)
 
-    BAR_12 = 150  # bar 150 = barra que CIERRA a las 12:00 (9:30+150min=12:00)
-    # Revisión: bar 0 = primera barra 9:30-9:31. Bar 150 = 12:00-12:01.
-    # ENTRY_MIN=30 (10:00). Bloque 5-min sellado en bar 29 = 10:00 (bars 25-29).
-    # Para 12:00: bar 150 = barra 9:30+150min = 12:00-12:01. Primer bloque 5-min
-    # que SELLA en o después de 12:00: bars 145-149 sella en bar 149 → i=149, k=29.
-    # La condición (i+1)%5==0 y i=149 → k=(150)//5-1=29. Barra del día ~12:00.
+    # Bar 0=9:30 ET; bloque 145-149 sella en bar 149 → primer sello ≥12:00 ET.
     BAR_12 = 149  # índice i del primer sello 5-min en 12:00 ET (bars 145-149)
 
     full_by_year, filt_by_year = {}, {}
@@ -208,7 +203,7 @@ def main():
     days = load_days(range(2016, 2027))
     print(f"{len(days)} dias cargados.")
 
-    print("\nExtrayendo senales RSI2 (RSI2<15, ATR valido, 10:00-15:30)...")
+    print("\nExtrayendo senales RSI2 (RSI2<15, ATR valido, 10:00-15:40)...")
     signals = collect_signals(days)
     print(f"{len(signals)} senales encontradas.\n")
 
@@ -231,31 +226,35 @@ def main():
     # ── PARTE 2: efecto del threshold de abort ───────────────────────────────
     print("\n" + "=" * 70)
     print("PARTE 2 — Efecto del umbral de abort")
-    print("  Modelo: el agente llega con lat UNIFORME en [0, max_lat]")
-    print("  -> delay_bars = ceil(lat/60), solo entra si lat <= threshold")
-    print("  Comparamos: 'trades que pasan' vs 'trades abortados' por threshold")
+    print("  Modelo: entra todas las senales al peor delay posible para ese threshold")
+    print("  delay_bars = ceil(thr/60); thresholds con igual delay se omiten (filas duplicadas)")
     print("=" * 70)
 
     thresholds = [60, 90, 120, 150, 180, 210, 240, 300]
+    seen_delays = {}
     for thr in thresholds:
-        max_delay = max(1, math.ceil(thr / 60))
+        delay = max(1, math.ceil(thr / 60))
+        if delay in seen_delays:
+            print(f"  abort<={thr:>3}s: (mismo delay={delay}b que abort<={seen_delays[delay]}s — omitido)")
+            continue
+        seen_delays[delay] = thr
         passed = []
         for sig in signals:
-            r = simulate_entry_at_delay(sig["day"], sig["seal_bar"], sig["atr5"], max_delay)
+            r = simulate_entry_at_delay(sig["day"], sig["seal_bar"], sig["atr5"], delay)
             if r is not None:
                 passed.append(r["pnl"])
-        print(fmt(f"abort<={thr}s", passed))
+        print(fmt(f"abort<={thr}s(d={delay}b)", passed))
 
     # ── PARTE 3: bucket horario ───────────────────────────────────────────────
     print("\n" + "=" * 70)
     print("PARTE 3 — PF por franja horaria (delay=1, baseline)")
-    print("  Franjas: 10:00-12:00 / 12:00-14:00 / 14:00-15:30")
+    print("  Franjas: 10:00-12:00 / 12:00-14:00 / 14:00-15:40")
     print("=" * 70)
 
     bands = {
         "10:00-12:00": (30, 119),
         "12:00-14:00": (120, 239),
-        "14:00-15:30": (240, 355),
+        "14:00-15:40": (240, 370),
     }
     for name, (lo, hi) in bands.items():
         results = []
