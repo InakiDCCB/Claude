@@ -1,4 +1,4 @@
-# Pulse v3.1.20 — cycle prompt (2026-09-25)
+# Pulse v3.1.21 — cycle prompt (2026-09-29)
 
 Historial de versiones: `workflows/history/CHANGELOG.md` (NO es operativo — todas las reglas
 vigentes están en los STEPs de este archivo). v3.1.0 = S1+S4 LIVE + multi-posición; v3.1.1 = dieta
@@ -78,6 +78,17 @@ excluyentes (RAMA A aplanar / RAMA B flujo normal) con "FIN de STEP 7-fill para 
 cierre de la rama A — antes la numeración (1, 1b, 2, 3, 4) podía leerse como checklist secuencial
 en vez de branch exclusivo. Sin cambio de parámetros ni de la lógica de negocio, solo de
 estructura/inequívocidad de la instrucción. Ver `project_fvg_multi_fill_experiment.md`.
+**v3.1.21 (2026-09-29) = S1 abort 150s→300s + filtro VWAP de S1 en logging paralelo + fixes de
+ejecución de S4** (decisión usuario tras la revisión trade-por-trade de los 51 trades live +
+backtest de 10.7 años con dos modelos de fill). (1) **S1 abort de latencia 150s→300s** (H3 del
+backlog): con 150s el loop abortaba ~70% de las señales (100 aborts vs 42 trades; ciclo medio
+220s) sin degradación medible del edge hasta ~6 min. (2) **Filtro precio > VWAP para S1 — SOLO
+LOGGING (`vwap_ok` en notes + `s1_signals` en analysis_log), NO filtra todavía**: regla de ≥3
+sesiones antes de tocar la decisión de entrada; `/post-close` compara P&L vwap_ok vs no. (3) **S4:
+precio fresco obligatorio en el pre-submit**, **guarda post-fill `fill ≤ sl` → aplanar sin OCO**
+(STEP 7-fill 1b, aplica a todos los intradía) y **TP de SWP siempre sobre el fill con check
+explícito** — bugs 09-16 (entrada bajo su propio stop, −$12.52) y 09-08/09-11 (TP a 2.3-2.9R en
+vez de 0.5R). Son fallas de ejecución de la spec, no cambios del setup.
 **v3.1.20 (2026-09-25) = PASSIVE movido de 15:30 a 15:40** — backtest OOS (32s, n=27 bucket 15:30-15:40): RSI2 hit=77.8% PF=1.58 en esa ventana (mejor que baseline 76.1%/PF=1.22); bucket 15:40-15:55 colapsa (hit=40% PF=0.40) → se mantiene bloqueado. La fase PASSIVE arranca ahora a las 15:40 (aplica a todos los sistemas LIVE — S4 SWP sin datos propios del bucket pero mismo razonamiento de tiempo; gt_closelow_v2 no aplica).
 
 **v3.1.19 (2026-09-22) = Sizing subido 8%→10% equity para TODOS los sistemas LIVE** (S1 RSI2,
@@ -382,15 +393,25 @@ pnl realizado del día > −$500. Si el cap/máx bloquea con varias señales en 
 por score del ranking. `shares = floor(equity × 0.10 / precio_entrada)` para TODOS (skip si < 2;
 sizing 10% desde v3.1.19 — ver header).
 
-**S1 RSI2 — PRIMERA PRIORIDAD del ciclo tras STEP 3 (timing crítico, playbook §7b: el edge muere
->2 min tarde del sello)** (solo si `gates.rsi2_on` Y `c4.rsi2 < 2` Y slot rsi2 libre Y ATR5m válido):
+**S1 RSI2 — PRIMERA PRIORIDAD del ciclo tras STEP 3 (timing crítico: colocar lo antes posible;
+el edge se cae a partir de ~7 min tarde del sello, H3)** (solo si `gates.rsi2_on` Y `c4.rsi2 < 2` Y slot rsi2 libre Y ATR5m válido):
 - Al sellar bloque 5-min con RSI2 < 15 → señal. `entry = close del bloque`;
   `tp = round(entry + 0.5×atr5m, 2)`; `sl = round(entry − 1.0×atr5m, 2)`.
-- **Pre-submit:** ABORT (log `rsi2_abort`) si `now − sello del bloque > 150s` (a 1 min tarde el
-  backtest degrada a PF 1.51; a 2 min PF 0.95 — colocar tarde es regalar el edge) o si
-  `get_stock_latest_trade` da `last ≤ sl`. **El abort de 150s es INCONDICIONAL — sin excepciones
-  por la causa de la demora** (07-09: una señal con lat 216s por carga de tools se colocó igual;
-  ganó, pero fuera de spec es fuera de spec).
+- **Filtro VWAP — SOLO LOGGING, NO filtra (v3.1.21, validación en paralelo ≥3 sesiones):** en
+  cada señal computar `vwap_ok = (entry > state.QQQ.vwap)` con el VWAP al sello del bloque. NO
+  cambia la decisión: la señal se coloca (o aborta) igual que siempre. Se registra en DOS lugares:
+  (a) si se coloca/fillea → `vwap_ok=1|0 vwap=X.XX` en el notes del INSERT de STEP 7-fill;
+  (b) SIEMPRE (colocada, abortada o no fill) → `s1_signals` en el indicators del STEP 8:
+  `[{"ts_ET":"HH:MM","rsi2":N,"entry":X,"vwap":X,"vwap_ok":true|false,"outcome":"placed|rsi2_abort|no_fill|blocked"}]`.
+  `/post-close` compara P&L de `vwap_ok` vs no. Motivo: 10.7 años (`docs/backlog.md` H-VWAP) dan
+  +0.4 bp/trade exigiendo precio > VWAP bajo ambos modelos de fill; en live los perdedores caen
+  en días débiles (mediana −0.25% desde apertura vs −0.07% en ganadores).
+- **Pre-submit:** ABORT (log `rsi2_abort`) si `now − sello del bloque > 300s` o si
+  `get_stock_latest_trade` da `last ≤ sl`. **El abort de 300s es INCONDICIONAL — sin excepciones
+  por la causa de la demora.** (v3.1.21: subido de 150s — H3, `tools/lab/rsi2_abort_sweep.py` sobre
+  10 años: sin degradación material hasta ~6 min, cliff real a 420-480s. Con 150s el loop abortaba
+  ~70% de las señales: 100 aborts vs 42 trades 07-09→09-29, ciclo medio 220s / p90 340s. El dato
+  viejo "a 2 min PF 0.95" era de entrada a mercado sin el modelo de fill, superado por H3.)
 - `place_stock_order(QQQ, shares, buy, type="limit", limit_price=entry, tif="day")` — COLOCAR COMO
   PRIMERA acción del ciclo (antes de log/gates/shadow). Vida del limit: **3 min** (cancel si no fillea).
 - Al fill → STEP 7-fill (OCO con el tp/sl de la señal). **Time-stop 15 min** (lo gestiona STEP 3.4).
@@ -401,8 +422,13 @@ sizing 10% desde v3.1.19 — ver header).
   con vol ≥ 1.5× promedio de las 5 previas → señal. `entry = close de la barra reclaim`;
   `sl = round(sweep_low − 0.05, 2)`; `tp = round(entry + 0.5×(entry − sl), 2)`.
 - **Stale check (gap_recovery):** si `now_ET − t_reclaim > 60 min` → log `swp_stale_abort` y SKIP. Tesis expirada — la reclaim de hace >1h no predice nada.
-- Pre-submit: `get_stock_latest_trade` → ABORT (log `swp_abort`) si `last ≤ sl`.
+- Pre-submit: `get_stock_latest_trade` **en la llamada inmediatamente anterior al place** (NO el
+  close del fetch del STEP 2, puede tener minutos) → ABORT (log `swp_abort`) si `last ≤ sl`.
+  (v3.1.21 — bug 09-16: limit colocado a 15:20 con el stop en 701.49 y fill instantáneo a 701.35,
+  POR DEBAJO de su propio stop; el OCO quedó con el stop sobre el mercado y salió a 700.21, −$12.52.)
 - `place_stock_order(QQQ, shares, buy, type="limit", limit_price=entry, tif="day")`. Vida 3 min.
+  Un limit por encima del mercado es marketable: llena al instante al precio vigente, que puede
+  estar bastante por debajo de `entry` — por eso el TP se recalcula SIEMPRE sobre el fill (STEP 7-fill).
 - Al fill → STEP 7-fill. Sin time-stop (igual que el backtest C2, TP 0.5R).
 
 (S2 FVG RETIRADO v3.1.17 — ver header. S3 VWAPPB y S6 SWP-short PODADOS v3.1.10 — breakeven en backtest de 10 años, ver header.)
@@ -475,11 +501,22 @@ añadir otros shorts sin backtest.**
 
 1. `get_order_by_id` → `fill_price`.
 
+1b. **Guarda fill-bajo-stop (v3.1.21, todas las estrategias intradía):** si `fill_price ≤ sl` →
+   NO armar OCO (un stop por encima del mercado dispara al instante con slippage libre). Market
+   sell de ESA qty YA, registrar el trade con `exit_type='SL'` y notes `fill_below_sl fill=X sl=Y`,
+   contar para C4. FIN de STEP 7-fill para este fill. (Fiel al backtest: `sl ≥ entry` = trade
+   inexistente. Bug real 09-16 S4.)
+
 2. **Armar el OCO de ESA estrategia INMEDIATAMENTE** (antes de loggear nada; cada posición
    tiene su propio OCO con su qty — así el broker mantiene la atribución por estrategia):
    - RSI2: tp/sl DE LA SEÑAL (`tp = entry_señal + 0.5×atr5m`, `sl = entry_señal − 1.0×atr5m`,
      recomputados sobre `fill` si difiere >0.05 del entry de señal).
-   - SWP: tp/sl DE LA SEÑAL (`sl = sweep_low − 0.05`, `tp = fill + 0.5×(fill − sl)`).
+   - SWP: `sl = sweep_low − 0.05` (el de la señal), **`tp = round(fill + 0.5×(fill − sl), 2)` —
+     SIEMPRE sobre el fill, PROHIBIDO reusar el `tp` calculado en STEP 6 con el `entry` de la
+     señal.** Check obligatorio antes del place: `|(tp − fill) − 0.5×(fill − sl)| ≤ 0.02`; si no
+     cuadra, recomputar. (v3.1.21 — bug 09-08 y 09-11: fills marketable ~$0.9 bajo el `entry`
+     dejaron el TP de la señal a 2.3-2.9R en vez de 0.5R; esos dos trades explican +$21.89 de los
+     +$15.36 totales de S4 — resultado fuera de spec, no del setup.)
    ```
    place_stock_order(QQQ, qty_de_esta_estrategia, "sell", order_class="oco", type="limit",
      limit_price=TP, take_profit_limit_price=TP, stop_loss_stop_price=SL, time_in_force="day")
@@ -490,7 +527,7 @@ añadir otros shorts sin backtest.**
 4. Registrar trade (SQL directo — NO endpoints HTTP):
    ```sql
    INSERT INTO trades (asset, side, quantity, price, order_id, status, strategy, notes)
-   VALUES ('QQQ','buy',N,FILL,'<order_id>','filled','rsi2_v3|swp_v3','sl=.. tp=.. <lat_s=N si RSI2 (now−sello de señal)>');
+   VALUES ('QQQ','buy',N,FILL,'<order_id>','filled','rsi2_v3|swp_v3','sl=.. tp=.. <lat_s=N vwap_ok=1|0 vwap=X.XX si RSI2>');
    ```
    Al cerrar (STEP 3.2): UPDATE de esa misma fila (por order_id) con exit_price/exit_type/pnl —
    NUNCA fila nueva. **PnL:** `(exit − entry) × qty`.
@@ -512,7 +549,7 @@ van en UNA sola llamada `execute_sql`** (sentencias separadas por `;`). Una fila
 INSERT INTO analysis_log (asset, timeframe, signal, confidence, indicators, thesis)
 VALUES ('QQQ','5m','bullish|bearish|neutral|watching',N,'<JSON>'::jsonb,'1 línea');
 ```
-indicators JSONB: `{vwap, rsi2_5m, atr5m, last_close, gates:{...solo el ciclo que se computan}, shadow_signals:[...solo si hubo]}` (ema9/ema21 PODADOS v3.1.5, rsi14/atr1m PODADOS v3.1.10 — cero consumidores vivos)
+indicators JSONB: `{vwap, rsi2_5m, atr5m, last_close, gates:{...solo el ciclo que se computan}, shadow_signals:[...solo si hubo], s1_signals:[...solo si hubo señal S1 — v3.1.21, ver STEP 6]}` (ema9/ema21 PODADOS v3.1.5, rsi14/atr1m PODADOS v3.1.10 — cero consumidores vivos)
 
 **Instrumentación (v3.0.4) — añadir SIEMPRE `cycle_s` y `cycle_type` a indicators.** Computa `cycle_s`
 server-side usando el `t0` del STEP 0: construye el indicators con
@@ -604,7 +641,7 @@ ciclo) — NUNCA con la hora del STEP 1** (bug 06-12: delays calculados al inici
 a sello+2min en vez de sello+10s). Si han pasado >30s desde el último get_clock, re-deriva la
 hora del timestamp de la respuesta SQL del STEP 9 o re-llama get_clock antes de calcular.
 **SIEMPRE apuntar al sello INMEDIATO+10s — si faltan <60s, programa 60 (llegará ~sello+65: tarde
-pero la vela SE EVALÚA y S1 aún cabe en su abort de 150s). PROHIBIDO saltar al sello siguiente**
+pero la vela SE EVALÚA y S1 aún cabe en su abort de 300s). PROHIBIDO saltar al sello siguiente**
 (bug 07-16: la regla vieja "si <45s → siguiente boundary" perdió ~10 velas/día — ver
 `workflows/history/CHANGELOG.md` v3.1.4).
 

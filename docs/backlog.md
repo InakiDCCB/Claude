@@ -60,9 +60,10 @@ Backtest confirma la dirección; la spec NO cambia hasta completar las 3 sesione
 | ID | Hipótesis | Evidencia backtest | Costo | Acción cuando se valide |
 |---|---|---|---|---|
 | **H1** | Excluir entradas RSI2 antes de 12:00 ET | PF 1.081→1.122 (+0.042), 9/11 años mejoran; peor año: −0.008 (flat) | −26.4% señales (6.775) | Añadir gate `seal_bar >= 149` en **STEP 6** (bloque S1 RSI2, antes de `place_stock_order`) de `cycle_prompt.md` |
-| **H3** | Subir abort latencia 150s→300s | Cliff real a 420–480s (bar 7-8); bars 1-6 PF 1.03–1.08, sin degradación material | Ninguno (añade trades) | Cambiar constante abort `150s` en **STEP 6** (Pre-submit S1 RSI2: `ABORT si now−sello>150s`) de `cycle_prompt.md` |
+| **H3** | Subir abort latencia 150s→300s | Cliff real a 420–480s (bar 7-8); bars 1-6 PF 1.03–1.08, sin degradación material | Ninguno (añade trades) | ✅ **IMPLEMENTADA v3.1.21 (2026-09-29)** — decisión usuario sin esperar las 3 sesiones: en live el abort de 150s mataba ~70% de las señales (100 aborts vs 42 trades, ciclo medio 220s). Confirmado también con el modelo de fill límite: colocar a ~5 min no degrada vs ~3 min. |
+| **H-VWAP** | S1 solo si `close del bloque > VWAP` al sello | 10.7 años, TP0.5/SL1.0/ts15, límite al cierre ~3 min tarde, neto de fees: fill al toque +0.01→+0.42 bp/trade (LB +0.08, 9/11 años); fill con cola (1¢ through) −0.43→+0.02 bp. Única mejora robusta bajo ambos modelos. Live: perdedores en días débiles (mediana −0.25% desde apertura vs −0.07%). | −60% señales | **En logging paralelo desde v3.1.21** (`vwap_ok` en notes de `trades` + `s1_signals` en `analysis_log`). Tras ≥3 sesiones con señales: si P&L de `vwap_ok=1` > `vwap_ok=0`, añadir `entry > state.QQQ.vwap` como condición de la señal S1 en STEP 6. |
 
-Sesiones completadas (0/3 cada una): iniciar conteo desde la próxima sesión con señales RSI2.
+Sesiones completadas: H1 0/3 · H-VWAP 0/3 (empieza a contar la próxima sesión con señales RSI2). Revisión completa y scripts de validación: sesión 2026-09-29 (reporte "Revisión de Trades Aconcagua").
 
 ---
 *Histórico de decisiones y sistemas: memoria `project_systems_history.md`. Roadmap operativo previo
