@@ -1,4 +1,4 @@
-# Pulse v3.1.21 — cycle prompt (2026-09-29)
+# Pulse v3.1.22 — cycle prompt (2026-10-01)
 
 Historial de versiones: `workflows/history/CHANGELOG.md` (NO es operativo — todas las reglas
 vigentes están en los STEPs de este archivo). v3.1.0 = S1+S4 LIVE + multi-posición; v3.1.1 = dieta
@@ -78,17 +78,15 @@ excluyentes (RAMA A aplanar / RAMA B flujo normal) con "FIN de STEP 7-fill para 
 cierre de la rama A — antes la numeración (1, 1b, 2, 3, 4) podía leerse como checklist secuencial
 en vez de branch exclusivo. Sin cambio de parámetros ni de la lógica de negocio, solo de
 estructura/inequívocidad de la instrucción. Ver `project_fvg_multi_fill_experiment.md`.
-**v3.1.21 (2026-09-29) = S1 abort 150s→300s + filtro VWAP de S1 en logging paralelo + fixes de
-ejecución de S4** (decisión usuario tras la revisión trade-por-trade de los 51 trades live +
-backtest de 10.7 años con dos modelos de fill). (1) **S1 abort de latencia 150s→300s** (H3 del
-backlog): con 150s el loop abortaba ~70% de las señales (100 aborts vs 42 trades; ciclo medio
-220s) sin degradación medible del edge hasta ~6 min. (2) **Filtro precio > VWAP para S1 — SOLO
-LOGGING (`vwap_ok` en notes + `s1_signals` en analysis_log), NO filtra todavía**: regla de ≥3
-sesiones antes de tocar la decisión de entrada; `/post-close` compara P&L vwap_ok vs no. (3) **S4:
-precio fresco obligatorio en el pre-submit**, **guarda post-fill `fill ≤ sl` → aplanar sin OCO**
-(STEP 7-fill 1b, aplica a todos los intradía) y **TP de SWP siempre sobre el fill con check
-explícito** — bugs 09-16 (entrada bajo su propio stop, −$12.52) y 09-08/09-11 (TP a 2.3-2.9R en
-vez de 0.5R). Son fallas de ejecución de la spec, no cambios del setup.
+**v3.1.22 (2026-10-01) = H-VWAP eliminado** — backtest 10 años (27,262 señales, 2016-2026) no
+encuentra edge robusto en ninguna dirección: below VWAP PF=1.049 vs above VWAP PF=1.109 en TRAIN,
+pero en OOS 2022-2026 se invierte (below 1.058 vs above 1.048). El tiered sizing sobre gap_norm
+tiene lift≈0% en el pool y negativo en TRAIN. Conclusión: RSI2<15 ya captura el edge; la posición
+relativa al VWAP no añade información. Eliminados: `vwap_ok` de trade notes y `s1_signals` de
+analysis_log. Ver `tools/lab/rsi2_vwap_sizing.py` para el análisis completo.
+**v3.1.21 (2026-09-29) = S1 abort 150s→300s + fixes de ejecución de S4** (1) abort 150s→300s: con
+150s el loop abortaba ~70% señales sin degradación del edge hasta ~6 min. (2) S4: precio fresco
+en pre-submit, guarda fill≤sl sin OCO, TP siempre sobre el fill.
 **v3.1.20 (2026-09-25) = PASSIVE movido de 15:30 a 15:40** — backtest OOS (32s, n=27 bucket 15:30-15:40): RSI2 hit=77.8% PF=1.58 en esa ventana (mejor que baseline 76.1%/PF=1.22); bucket 15:40-15:55 colapsa (hit=40% PF=0.40) → se mantiene bloqueado. La fase PASSIVE arranca ahora a las 15:40 (aplica a todos los sistemas LIVE — S4 SWP sin datos propios del bucket pero mismo razonamiento de tiempo; gt_closelow_v2 no aplica).
 
 **v3.1.19 (2026-09-22) = Sizing subido 8%→10% equity para TODOS los sistemas LIVE** (S1 RSI2,
@@ -397,15 +395,6 @@ sizing 10% desde v3.1.19 — ver header).
 el edge se cae a partir de ~7 min tarde del sello, H3)** (solo si `gates.rsi2_on` Y `c4.rsi2 < 2` Y slot rsi2 libre Y ATR5m válido):
 - Al sellar bloque 5-min con RSI2 < 15 → señal. `entry = close del bloque`;
   `tp = round(entry + 0.5×atr5m, 2)`; `sl = round(entry − 1.0×atr5m, 2)`.
-- **Filtro VWAP — SOLO LOGGING, NO filtra (v3.1.21, validación en paralelo ≥3 sesiones):** en
-  cada señal computar `vwap_ok = (entry > state.QQQ.vwap)` con el VWAP al sello del bloque. NO
-  cambia la decisión: la señal se coloca (o aborta) igual que siempre. Se registra en DOS lugares:
-  (a) si se coloca/fillea → `vwap_ok=1|0 vwap=X.XX` en el notes del INSERT de STEP 7-fill;
-  (b) SIEMPRE (colocada, abortada o no fill) → `s1_signals` en el indicators del STEP 8:
-  `[{"ts_ET":"HH:MM","rsi2":N,"entry":X,"vwap":X,"vwap_ok":true|false,"outcome":"placed|rsi2_abort|no_fill|blocked"}]`.
-  `/post-close` compara P&L de `vwap_ok` vs no. Motivo: 10.7 años (`docs/backlog.md` H-VWAP) dan
-  +0.4 bp/trade exigiendo precio > VWAP bajo ambos modelos de fill; en live los perdedores caen
-  en días débiles (mediana −0.25% desde apertura vs −0.07% en ganadores).
 - **Pre-submit:** ABORT (log `rsi2_abort`) si `now − sello del bloque > 300s` o si
   `get_stock_latest_trade` da `last ≤ sl`. **El abort de 300s es INCONDICIONAL — sin excepciones
   por la causa de la demora.** (v3.1.21: subido de 150s — H3, `tools/lab/rsi2_abort_sweep.py` sobre
@@ -527,7 +516,7 @@ añadir otros shorts sin backtest.**
 4. Registrar trade (SQL directo — NO endpoints HTTP):
    ```sql
    INSERT INTO trades (asset, side, quantity, price, order_id, status, strategy, notes)
-   VALUES ('QQQ','buy',N,FILL,'<order_id>','filled','rsi2_v3|swp_v3','sl=.. tp=.. <lat_s=N vwap_ok=1|0 vwap=X.XX si RSI2>');
+   VALUES ('QQQ','buy',N,FILL,'<order_id>','filled','rsi2_v3|swp_v3','sl=.. tp=.. <lat_s=N si RSI2>');
    ```
    Al cerrar (STEP 3.2): UPDATE de esa misma fila (por order_id) con exit_price/exit_type/pnl —
    NUNCA fila nueva. **PnL:** `(exit − entry) × qty`.
@@ -549,7 +538,7 @@ van en UNA sola llamada `execute_sql`** (sentencias separadas por `;`). Una fila
 INSERT INTO analysis_log (asset, timeframe, signal, confidence, indicators, thesis)
 VALUES ('QQQ','5m','bullish|bearish|neutral|watching',N,'<JSON>'::jsonb,'1 línea');
 ```
-indicators JSONB: `{vwap, rsi2_5m, atr5m, last_close, gates:{...solo el ciclo que se computan}, shadow_signals:[...solo si hubo], s1_signals:[...solo si hubo señal S1 — v3.1.21, ver STEP 6]}` (ema9/ema21 PODADOS v3.1.5, rsi14/atr1m PODADOS v3.1.10 — cero consumidores vivos)
+indicators JSONB: `{vwap, rsi2_5m, atr5m, last_close, gates:{...solo el ciclo que se computan}, shadow_signals:[...solo si hubo]}` (ema9/ema21 PODADOS v3.1.5, rsi14/atr1m PODADOS v3.1.10, s1_signals PODADO v3.1.22 — cero consumidores vivos)
 
 **Instrumentación (v3.0.4) — añadir SIEMPRE `cycle_s` y `cycle_type` a indicators.** Computa `cycle_s`
 server-side usando el `t0` del STEP 0: construye el indicators con
