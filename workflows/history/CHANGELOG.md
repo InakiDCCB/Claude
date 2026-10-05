@@ -1,5 +1,22 @@
 # Pulse — historial de versiones del cycle_prompt
 
+## v3.1.23 (2026-10-05) — Gate H1: S1 RSI2 solo desde 12:00 ET
+
+**Motivación:** rsi2_v3 llega a tier=established (n=52) con score=14.0 < KILL<45. Exploración de nuevos indicadores (14 señales nuevas: IBS 5m, ORB, PDL reclaim, RSI2 variantes) confirma que no hay edge intraday sin explotar — todos KILLED. H1 es la única mejora pendiente con respaldo empírico.
+
+**Evidencia backtest** (`tools/lab/rsi2_abort_sweep.py`, 10 años, n≈25k señales):
+
+| Variante | n | PF | pnl/sh |
+|---|---|---|---|
+| Baseline (sin gate) | ~25k | 1.081 | — |
+| H1 (k ≥ 29, desde 12:00 ET) | ~18k | **1.122** | mejora en 9/11 años |
+
+−26.4% señales (−6.7k); peor año: −0.008 PF (flat). Entradas pre-noon tienen el edge más bajo del día.
+
+**Cambio:** STEP 6 S1 RSI2 — añadido gate `bloque k ≥ 29` (sello a ≥ 16:00Z = 12:00 ET). k = número de bloques 5-min desde 13:30Z. Implementado a contador H1 1/3 (usuario decidió no esperar 3/3 — ver `docs/backlog.md`).
+
+---
+
 ## v3.1.20 (2026-09-25) — PASSIVE movido de 15:30 a 15:40
 
 **Motivación:** señal RSI2=9.4 bloqueada en post-close 09-25 por fase PASSIVE (15:31 ET). Análisis

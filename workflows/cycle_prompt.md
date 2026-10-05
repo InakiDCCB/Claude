@@ -1,4 +1,4 @@
-# Pulse v3.1.22 — cycle prompt (2026-10-01)
+# Pulse v3.1.23 — cycle prompt (2026-10-05)
 
 Historial de versiones: `workflows/history/CHANGELOG.md` (NO es operativo — todas las reglas
 vigentes están en los STEPs de este archivo). v3.1.0 = S1+S4 LIVE + multi-posición; v3.1.1 = dieta
@@ -78,6 +78,7 @@ excluyentes (RAMA A aplanar / RAMA B flujo normal) con "FIN de STEP 7-fill para 
 cierre de la rama A — antes la numeración (1, 1b, 2, 3, 4) podía leerse como checklist secuencial
 en vez de branch exclusivo. Sin cambio de parámetros ni de la lógica de negocio, solo de
 estructura/inequívocidad de la instrucción. Ver `project_fvg_multi_fill_experiment.md`.
+**v3.1.23 (2026-10-05) = gate H1 para S1 RSI2: bloque k ≥ 29 (primera entrada a 12:00 ET en punto).** Backtest `tools/lab/rsi2_abort_sweep.py` 10 años: PF 1.081→1.122 (+0.042), 9/11 años mejoran, peor año −0.008 (flat), −26.4% señales. Implementado directamente (usuario decidió no esperar el ciclo de validación 3/3 completo — H1 ya en contador 1/3, ver `docs/backlog.md`). Gate en STEP 6 S1: `bloque k ≥ 29`. Cómo calcular k en live: bloques 5-min desde 13:30Z; k=29 sella a 16:00Z (12:00 ET).
 **v3.1.22 (2026-10-01) = H-VWAP eliminado** — backtest 10 años (27,262 señales, 2016-2026) no
 encuentra edge robusto en ninguna dirección: below VWAP PF=1.049 vs above VWAP PF=1.109 en TRAIN,
 pero en OOS 2022-2026 se invierte (below 1.058 vs above 1.048). El tiered sizing sobre gap_norm
@@ -393,7 +394,8 @@ sizing 10% desde v3.1.19 — ver header).
 
 **S1 RSI2 — PRIMERA PRIORIDAD del ciclo tras STEP 3 (timing crítico: colocar lo antes posible;
 el edge se cae a partir de ~7 min tarde del sello, H3)** (solo si `gates.rsi2_on` Y `c4.rsi2 < 2` Y slot rsi2 libre Y ATR5m válido):
-- Al sellar bloque 5-min con RSI2 < 15 → señal. `entry = close del bloque`;
+- Al sellar bloque 5-min con RSI2 < 15 **Y bloque k ≥ 29 (sello a ≥ 16:00Z = 12:00 ET — gate H1,
+  v3.1.23: backtest 10 años PF 1.081→1.122, −26.4% señales, 9/11 años mejoran)** → señal. `entry = close del bloque`;
   `tp = round(entry + 0.5×atr5m, 2)`; `sl = round(entry − 1.0×atr5m, 2)`.
 - **Pre-submit:** ABORT (log `rsi2_abort`) si `now − sello del bloque > 300s` o si
   `get_stock_latest_trade` da `last ≤ sl`. **El abort de 300s es INCONDICIONAL — sin excepciones

@@ -59,11 +59,11 @@ Backtest confirma la dirección; la spec NO cambia hasta completar las 3 sesione
 
 | ID | Hipótesis | Evidencia backtest | Costo | Acción cuando se valide |
 |---|---|---|---|---|
-| **H1** | Excluir entradas RSI2 antes de 12:00 ET | PF 1.081→1.122 (+0.042), 9/11 años mejoran; peor año: −0.008 (flat) | −26.4% señales (6.775) | Añadir gate `seal_bar >= 149` en **STEP 6** (bloque S1 RSI2, antes de `place_stock_order`) de `cycle_prompt.md` |
+| **H1** | Excluir entradas RSI2 antes de 12:00 ET | PF 1.081→1.122 (+0.042), 9/11 años mejoran; peor año: −0.008 (flat) | −26.4% señales (6.775) | ✅ **IMPLEMENTADA v3.1.23 (2026-10-05)** — `bloque k ≥ 29` en STEP 6 S1. Contador 1/3 sesiones live (para confirmar sin efectos secundarios). |
 | **H3** | Subir abort latencia 150s→300s | Cliff real a 420–480s (bar 7-8); bars 1-6 PF 1.03–1.08, sin degradación material | Ninguno (añade trades) | ✅ **IMPLEMENTADA v3.1.21 (2026-09-29)** — decisión usuario sin esperar las 3 sesiones: en live el abort de 150s mataba ~70% de las señales (100 aborts vs 42 trades, ciclo medio 220s). Confirmado también con el modelo de fill límite: colocar a ~5 min no degrada vs ~3 min. |
 | **H-VWAP** | S1 solo si `close del bloque > VWAP` al sello | ~~10.7 años…~~ **CERRADA v3.1.22 (2026-10-01): backtest 27,262 señales 2016-2026 con `tools/lab/rsi2_vwap_sizing.py` no encuentra edge robusto en ninguna dirección. TRAIN: above VWAP PF=1.246 > below 1.030; OOS 2022-2026: se invierte (below 1.058 > above 1.048). Tiered sizing lift≈0% en pool, −22.9% en TRAIN. RSI2<15 ya captura el edge; posición relativa al VWAP no añade información. `vwap_ok` y `s1_signals` eliminados de la spec.** | — | ❌ **NO implementar** |
 
-Sesiones completadas: H1 0/3 · H-VWAP **CERRADA** (2 sesiones de live confirmaron patrón opuesto al backtest original; backtest exhaustivo 10 años no encontró dirección robusta). Revisión completa y scripts de validación: sesión 2026-09-29 (reporte "Revisión de Trades Aconcagua").
+Sesiones completadas: H1 **1/3** (2026-10-05: S1 B56 @14:10 ET → post-noon, no filtrada; S1 B74-75 PASSIVE, no cuenta) · H-VWAP **CERRADA** (2 sesiones de live confirmaron patrón opuesto al backtest original; backtest exhaustivo 10 años no encontró dirección robusta). Revisión completa y scripts de validación: sesión 2026-09-29 (reporte "Revisión de Trades Aconcagua").
 
 ---
 *Histórico de decisiones y sistemas: memoria `project_systems_history.md`. Roadmap operativo previo
