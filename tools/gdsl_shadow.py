@@ -44,7 +44,6 @@ HEADERS = {
     "APCA-API-SECRET-KEY": _env["ALPACA_SECRET_KEY"],
 }
 DATA_URL = "https://data.alpaca.markets/v2"
-CACHE    = Path(__file__).parent / "data" / "qqq_1day.csv"
 
 HOLD = 5   # sesiones hábiles desde la señal
 
@@ -65,18 +64,18 @@ def _get(url, params, retries=5):
             raise
 
 
-def _fetch_bars(start: str, end: str) -> list[dict]:
+def _fetch_bars(start: str, end: str, symbol: str = "QQQ") -> list[dict]:
     cap = (datetime.now(timezone.utc) - timedelta(minutes=16)).strftime("%Y-%m-%dT%H:%M:%SZ")
     end = min(end, cap)
     bars, params = [], {
-        "symbols": "QQQ", "timeframe": "1Day",
+        "symbols": symbol, "timeframe": "1Day",
         "start": start, "end": end,
         "limit": "10000", "feed": "sip",
         "adjustment": "split", "sort": "asc",
     }
     while True:
         data = _get(f"{DATA_URL}/stocks/bars", params)
-        batch = data.get("bars", {}).get("QQQ", [])
+        batch = data.get("bars", {}).get(symbol, [])
         bars.extend(batch)
         npt = data.get("next_page_token")
         if not npt:
@@ -85,18 +84,23 @@ def _fetch_bars(start: str, end: str) -> list[dict]:
     return bars
 
 
-def load_bars(since_year=2015) -> list[dict]:
-    """Carga barras diarias QQQ desde cache, actualiza incrementalmente."""
-    CACHE.parent.mkdir(parents=True, exist_ok=True)
+def _cache_path(symbol: str) -> Path:
+    return Path(__file__).parent / "data" / f"{symbol.lower()}_1day.csv"
+
+
+def load_bars(since_year=2015, symbol: str = "QQQ") -> list[dict]:
+    """Carga barras diarias desde cache, actualiza incrementalmente."""
+    cache = _cache_path(symbol)
+    cache.parent.mkdir(parents=True, exist_ok=True)
     rows: list[dict] = []
 
-    if CACHE.exists():
-        with open(CACHE, newline="") as f:
+    if cache.exists():
+        with open(cache, newline="") as f:
             rows = list(csv.DictReader(f))
         last  = rows[-1]["date"] if rows else f"{since_year}-01-01"
         today = datetime.now(timezone.utc).date().isoformat()
         if last < today:
-            raw = _fetch_bars(last + "T00:00:00Z", today + "T23:59:59Z")
+            raw = _fetch_bars(last + "T00:00:00Z", today + "T23:59:59Z", symbol)
             seen = {r["date"] for r in rows}
             for b in raw:
                 d = b["t"][:10]
@@ -108,11 +112,12 @@ def load_bars(since_year=2015) -> list[dict]:
                     })
                     seen.add(d)
             rows.sort(key=lambda r: r["date"])
-            _save_cache(rows)
+            _save_cache(rows, cache)
     else:
         raw = _fetch_bars(
             f"{since_year}-01-01T00:00:00Z",
             datetime.now(timezone.utc).date().isoformat() + "T23:59:59Z",
+            symbol,
         )
         rows = [{
             "date": b["t"][:10], "o": b["o"], "h": b["h"],
@@ -120,13 +125,13 @@ def load_bars(since_year=2015) -> list[dict]:
             "vw": b.get("vw") or b["c"],
         } for b in raw]
         rows.sort(key=lambda r: r["date"])
-        _save_cache(rows)
+        _save_cache(rows, cache)
 
     return rows
 
 
-def _save_cache(rows):
-    with open(CACHE, "w", newline="") as f:
+def _save_cache(rows, cache: Path):
+    with open(cache, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=["date", "o", "h", "l", "c", "v", "vw"])
         w.writeheader()
         w.writerows(rows)
@@ -345,8 +350,8 @@ def resolve(rows: list[dict], today: str) -> dict:
 
 # ── main ──────────────────────────────────────────────────────────────────────
 
-def gdsl_shadow(date: str) -> dict:
-    rows = load_bars(since_year=2015)
+def gdsl_shadow(date: str, symbol: str = "QQQ") -> dict:
+    rows = load_bars(since_year=2015, symbol=symbol)
     return resolve(rows, date)
 
 
@@ -358,16 +363,17 @@ def main():
 
     ap = argparse.ArgumentParser()
     ap.add_argument("date", help="YYYY-MM-DD (fecha ET del dia post-close)")
+    ap.add_argument("--symbol", default="QQQ", help="Ticker (default: QQQ)")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args()
 
-    result = gdsl_shadow(a.date)
+    result = gdsl_shadow(a.date, symbol=a.symbol)
 
     if a.json:
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return
 
-    print(f"\nGDSL Shadow — {a.date}  ({result.get('bars_range','')})")
+    print(f"\nGDSL Shadow [{a.symbol}] — {a.date}  ({result.get('bars_range','')})")
 
     v1 = result.get("new_signal_v1")
     v2 = result.get("new_signal_v2")
