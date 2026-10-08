@@ -9,6 +9,9 @@ const ID_TO_SYS: Record<string, string> = {
   gt_closelow_v2: 'GTCLV2',
 }
 
+// Batch shadows acumulan pnl_pct (%) en session_memory, no $/sh
+const BATCH_SHADOW_IDS = new Set(['gdsl_v1', 'gdsl_v2_atr', 'ibs_btc_v1', 'swps_btc_v1', 'ohl_v1'])
+
 const GREEN = 'var(--green)', RED = 'var(--red)'
 
 // Descripciones y notas de investigación por sistema — texto curado, no viene de la DB.
@@ -24,6 +27,29 @@ const INFO: Record<string, { desc: string; badges?: string[]; rule?: string }> =
   lwr_v1: {
     desc: 'Busca velas de 1 minuto con una mecha inferior muy larga y volumen muy por encima de lo normal — un barrido de liquidez bajo el precio. Entra en contra de ese movimiento esperando el rebote inmediato.',
     rule: 'Regla: mecha inferior ≥60% del rango + volumen ≥3× avgv5 → fade alcista. Offline: n=79, hit 72.2%, PF 1.49, Horizon Score 60.1/100. SHORT descartado (killed 96/96 celdas).',
+  },
+  gdsl_v1: {
+    desc: 'QQQ abre y cierra por debajo del mínimo del día anterior — gap abajo exterior que el mercado no recupera. Con régimen alcista macro (EMA200 + YoY>0) la reversión tiende a completarse en 5 sesiones. Hold 5 días, sin SL/TP.',
+    badges: ['PF 2.11', 'hit 66%', 'score 70.5 DEPLOY', 'WF OOS 2.57'],
+    rule: 'Regla: open_D < low_{D-1} AND close_D < low_{D-1} + EMA200 + YoY>0 → long open_{D+1}, exit close_{D+5}.',
+  },
+  gdsl_v2_atr: {
+    desc: 'Variante de GDSL v1 con filtro adicional de baja volatilidad relativa (ATR14-pct-60d < 0.50). Señales más selectivas (~5/año) y edge notablemente mayor. La baja volatilidad previa amplifica el rebote post-gap.',
+    badges: ['PF 6.44', 'hit 82.6%', 'score 95.8 DEPLOY', 'WF OOS 5.50'],
+    rule: 'Regla: GDSL v1 + ATR14_pct_60d < 0.50 (baja vol relativa). ~5 señales/año.',
+  },
+  ibs_btc_v1: {
+    desc: 'IBS (Internal Bar Strength) < 0.15 en BTC/USD dentro de la sesión NY — la vela de 5 min cierra pegada a su mínimo, análogo a clr<0.15 en QQQ. Mean-reversion sobre crypto. Sin órdenes en Alpaca.',
+    badges: ['PF 1.34', 'hit 75%', 'portfolio r=−0.016 con SWPS'],
+  },
+  swps_btc_v1: {
+    desc: 'Sweep del máximo de sesión en BTC/USD seguido de rechazo (vela roja + volumen alto). Short shadow sobre crypto NY session. Independiente de IBS — correlación casi cero.',
+    badges: ['PF 1.24', 'hit 73%'],
+  },
+  ohl_v1: {
+    desc: 'QQQ abrió optimista (por encima del cierre anterior) pero los vendedores dominaron toda la sesión — cierre en el 15% inferior del rango del día. Distribución intradiaria que tiende a resolverse al alza en las siguientes 3 sesiones.',
+    badges: ['PF 2.26', 'hit 63.6%', 'score 71.2 DEPLOY', '~14/año'],
+    rule: 'Regla: open_D > close_{D-1} AND clr_D < 0.15 → long open_{D+1}, exit close_{D+3}.',
   },
 }
 
@@ -125,6 +151,7 @@ function ShadowCards({ registry, accum }: { registry: StrategyRegistry[]; accum:
         const sys = ID_TO_SYS[reg.strategy_id] ?? reg.strategy_id
         const wr = a?.wr_pct != null ? Number(a.wr_pct) : null
         const pnl = a?.pnl_sh != null ? Number(a.pnl_sh) : null
+        const isBatch = BATCH_SHADOW_IDS.has(reg.strategy_id)
         return (
           <div key={reg.strategy_id} className={i < shadows.length - 1 ? 'px-4 py-3.5 border-b border-[var(--border-faint)]' : 'px-4 py-3.5'}>
             <div className="flex items-baseline justify-between gap-3 mb-1.5">
@@ -145,7 +172,7 @@ function ShadowCards({ registry, accum }: { registry: StrategyRegistry[]; accum:
                   {wr != null && <span className="font-mono text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}>WR {wr.toFixed(0)}%</span>}
                   {pnl != null && (
                     <span className="font-mono text-[10px] px-1.5 py-0.5 rounded" style={{ background: pnl >= 0 ? 'var(--green-bg)' : 'var(--red-bg)', color: pnl >= 0 ? GREEN : RED }}>
-                      {pnl >= 0 ? '+' : ''}{pnl.toFixed(2)} $/sh
+                      {pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}{isBatch ? '% acum' : ' $/sh'}
                     </span>
                   )}
                 </>

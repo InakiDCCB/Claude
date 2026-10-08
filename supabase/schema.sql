@@ -370,6 +370,11 @@ grant select on public.strategy_performance to anon;
 -- RLS de quien consulta) pese a exponerse vía anon key en el dashboard. Solo lee
 -- session_memory (RLS anon_select ya en true), así que el cambio no afecta las
 -- lecturas legítimas del dashboard.
+-- 2026-10-08 (migración extend_v_shadow_accumulated_batch_shadows):
+-- v_shadow_accumulated extendida con 5 claves de batch shadows (gdsl_v1, gdsl_v2,
+-- ibs_btc, swps_btc, ohl_v1). Añadido fallback win->tp y (n-win)->sl para sistemas
+-- sin desglose tp/sl, y pnl_pct->pnl para los que no usan pnl/pnl_total. El campo
+-- pnl_sh muestra % acum para batch shadows (no $/sh) — diferenciado en el dashboard.
 -- ============================================================
 create table if not exists market_context (
   session_date    date not null,
