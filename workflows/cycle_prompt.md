@@ -63,7 +63,7 @@ cambios. gt_closelow_v2 es el primer sistema swing (hold multi-día) del agente 
 nueva: entra al open (aproximado al primer ciclo ACTIVE, ~10:00, con market order — el loop no
 tiene ciclos entre 9:30-9:55), NO tiene OCO (fiel al backtest: señal pura sin SL/TP, solo hold
 fijo), sobrevive el cierre forzado diario de las 15:55 hasta su propio día de salida (entry+2
-sesiones hábiles), bucket de sizing/cap propio (10% equity desde v3.1.19, fuera del cap 4-posiciones/70%
+sesiones hábiles), bucket de sizing/cap propio (8% equity desde v3.1.24, fuera del cap 4-posiciones/70%
 intradía) — ver STEP 3 (invariante extendido), STEP 6c (entrada), STEP 10 (cierre selectivo).
 Posición trackeada vía `trades` (persiste entre días, a diferencia de `session_state` que es
 por-fecha), NO vía `state.positions[]`. `gt_closelow_v2_shadow.py` DEJA de correr en `/post-close`
@@ -78,6 +78,8 @@ excluyentes (RAMA A aplanar / RAMA B flujo normal) con "FIN de STEP 7-fill para 
 cierre de la rama A — antes la numeración (1, 1b, 2, 3, 4) podía leerse como checklist secuencial
 en vez de branch exclusivo. Sin cambio de parámetros ni de la lógica de negocio, solo de
 estructura/inequívocidad de la instrucción. Ver `project_fvg_multi_fill_experiment.md`.
+**v3.1.25 (2026-10-13) = gate H2 para S1 RSI2: bloquear gap-down × midday (k=29–41, 12:00–13:00 ET).** Backtest `tools/lab/tod_regime_lab.py` 10 años: 534 señales bloqueadas (PF=0.951, wLB=57%) → PF H1+H2 1.110→1.119 (+0.009), pnl/señal +$0.0142→+$0.0151, 6/11 años mejoran, peor delta −0.007 (plano). Gate en STEP 6 S1: skip si `gates.gap_pct < −0.3` Y `k ≤ 41`. Solo elimina ~0.25 señales/día.
+**v3.1.24 (2026-10-13) = Sizing revertido 10%→8% equity para TODOS los sistemas LIVE** (S1 RSI2, S4 SWP, gt_closelow_v2 swing) — reversión al valor pre-v3.1.19. Motivo: ningún sistema tiene edge confirmado en vivo al momento de la reversión (rsi2_v3 established score=1.2 KILLED<45, exp_lb negativo; swp_v3 insufficient_data n=10; gt_closelow_v2 n=1). El sizing de 10% fue override sin base empírica (v3.1.19) — se revierte hasta que al menos un sistema cruce score≥45 con tier provisional o superior. Fórmula en STEP 6 y 6c: `floor(equity × 0.08 / precio)`.
 **v3.1.23 (2026-10-05) = gate H1 para S1 RSI2: bloque k ≥ 29 (primera entrada a 12:00 ET en punto).** Backtest `tools/lab/rsi2_abort_sweep.py` 10 años: PF 1.081→1.122 (+0.042), 9/11 años mejoran, peor año −0.008 (flat), −26.4% señales. Implementado directamente (usuario decidió no esperar el ciclo de validación 3/3 completo — H1 ya en contador 1/3, ver `docs/backlog.md`). Gate en STEP 6 S1: `bloque k ≥ 29`. Cómo calcular k en live: bloques 5-min desde 13:30Z; k=29 sella a 16:00Z (12:00 ET).
 **v3.1.22 (2026-10-01) = H-VWAP eliminado** — backtest 10 años (27,262 señales, 2016-2026) no
 encuentra edge robusto en ninguna dirección: below VWAP PF=1.049 vs above VWAP PF=1.109 en TRAIN,
@@ -163,7 +165,7 @@ dirección long/short de v3.1.7-v3.1.9 quedó sin objeto, PODADA.
 C4 (todos los sistemas): tras 2 pérdidas consecutivas de un sistema en el día → ese sistema queda apagado hasta mañana.
 
 **gt_closelow_v2 (v3.1.14) — bucket SEPARADO, NO participa del multi-posición intradía de
-arriba:** su propio slot (≤1 posición swing abierta a la vez), sizing 10% equity (v3.1.19), SIN
+arriba:** su propio slot (≤1 posición swing abierta a la vez), sizing 8% equity (v3.1.24), SIN
 tope de 4 posiciones ni del cap Σ≤70% (se suma aparte — exposición total real puede llegar a ~80%
 equity con las 4 intradía + la swing, aceptado por diseño). NO tiene C4 estándar (ciclo de 3 días no
 encaja con "apagado hasta mañana"): si las ÚLTIMAS 2 operaciones cerradas de `gt_closelow_v2` en
@@ -389,13 +391,12 @@ El loop solo lo LEE en STEP 6c.
 **Checks comunes antes de CUALQUIER place (v3.1.0):** slot de la estrategia libre · posiciones
 abiertas < 4 · Σ(qty×price abiertas) + entrada nueva ≤ 0.70×equity ·
 pnl realizado del día > −$500. Si el cap/máx bloquea con varias señales en el ciclo → prioridad
-por score del ranking. `shares = floor(equity × 0.10 / precio_entrada)` para TODOS (skip si < 2;
-sizing 10% desde v3.1.19 — ver header).
+por score del ranking. `shares = floor(equity × 0.08 / precio_entrada)` para TODOS (skip si < 2;
+sizing 8% — revertido a pre-v3.1.19 en v3.1.24, ver header).
 
 **S1 RSI2 — PRIMERA PRIORIDAD del ciclo tras STEP 3 (timing crítico: colocar lo antes posible;
 el edge se cae a partir de ~7 min tarde del sello, H3)** (solo si `gates.rsi2_on` Y `c4.rsi2 < 2` Y slot rsi2 libre Y ATR5m válido):
-- Al sellar bloque 5-min con RSI2 < 15 **Y bloque k ≥ 29 (sello a ≥ 16:00Z = 12:00 ET — gate H1,
-  v3.1.23: backtest 10 años PF 1.081→1.122, −26.4% señales, 9/11 años mejoran)** → señal. `entry = close del bloque`;
+- Al sellar bloque 5-min con RSI2 < 15 **Y bloque k ≥ 29 (gate H1, v3.1.23)** **Y NO (`gates.gap_pct < −0.3` Y `k ≤ 41`) (gate H2, v3.1.25: gap-down × midday bloqueado — PF=0.951 en 534 señales de 10 años)** → señal. `entry = close del bloque`;
   `tp = round(entry + 0.5×atr5m, 2)`; `sl = round(entry − 1.0×atr5m, 2)`.
 - **Pre-submit:** ABORT (log `rsi2_abort`) si `now − sello del bloque > 300s` o si
   `get_stock_latest_trade` da `last ≤ sl`. **El abort de 300s es INCONDICIONAL — sin excepciones
@@ -443,7 +444,7 @@ poco frente al horizonte. Condición: `fase_sql == 'ACTIVE'` Y es el primer cicl
 `true` de antes por catch-up, el primer ciclo del día sin más marca — usar `state.gt2.entry_attempted_today`
 como el guardián real, no la hora).
 
-1. `shares = floor(equity × 0.10 / precio_actual)` (mismo sizing 10% que el resto desde v3.1.19,
+1. `shares = floor(equity × 0.08 / precio_actual)` (sizing 8% — revertido v3.1.24,
    bucket propio — NO cuenta para el cap Σ≤70% intradía). Skip si <2 (log `gt2_skip_size`).
 2. `place_stock_order(QQQ, shares, "buy", type="market", time_in_force="day")`.
 3. `state.gt2.entry_attempted_today = true` SIEMPRE (éxito o fallo — 1 intento por día).

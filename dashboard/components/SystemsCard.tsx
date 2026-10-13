@@ -17,7 +17,7 @@ const GREEN = 'var(--green)', RED = 'var(--red)'
 // Descripciones y notas de investigación por sistema — texto curado, no viene de la DB.
 const INFO: Record<string, { desc: string; badges?: string[]; rule?: string }> = {
   fvg_v3: { desc: 'Busca huecos de precio que dejan las velas de impulso (fair value gaps) y entra cuando el precio vuelve a rellenar ese hueco, con confirmación de volumen relativo por encima de lo normal.' },
-  rsi2_v3: { desc: 'Espera una caída corta y profunda — RSI de 2 periodos en sobreventa — dentro de la tendencia intradía, y compra el rebote inmediato.' },
+  rsi2_v3: { desc: 'Espera una caída corta y profunda — RSI de 2 periodos en sobreventa — dentro de la tendencia intradía, y compra el rebote inmediato. Gate H1 (v3.1.23): solo señales desde las 12:00 ET. Gate H2 (v3.1.25): bloqueado en días gap-down (<−0.3%) en el tramo 12:00-13:00 ET.' },
   swp_v3: { desc: 'Espera que el precio barra un mínimo previo (caza de stops) y lo recupere de inmediato; entra en esa recuperación, no en el barrido.' },
   gt_closelow_v2: {
     desc: 'Busca días en los que el cierre queda pegado al mínimo del día — venta agotada. Compra en la apertura del día siguiente y mantiene la posición 3 días hábiles, sin stop intradía.',

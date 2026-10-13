@@ -88,12 +88,18 @@ function BrokerCard({ alpacaState, trades, sessionDate }: {
 function GatesCard({ sessionState }: { sessionState: SessionStateRow | null }) {
   const g = sessionState?.state?.gates
   const c4 = sessionState?.state?.c4 ?? {}
+  const gapPct: number | null = g?.gap_pct ?? null
+  const h2GapBlocked = gapPct != null && gapPct < -0.3
   const gates: { label: string; on: boolean | null; detail?: string }[] = [
-    { label: 'S2 fvg',  on: g?.computed_10 ? (g.fvg_on ?? false) : null, detail: g?.rvol30 != null ? `rvol ${fmt(g.rvol30)}` : undefined },
-    { label: 'S1 rsi2', on: g?.computed_10 ? (g.rsi2_on ?? false) : null, detail: g?.open_loc ?? undefined },
+    { label: 'S1 rsi2', on: g?.computed_10 ? (g.rsi2_on ?? false) : null,
+      detail: g?.computed_10
+        ? (g.rsi2_on ? (h2GapBlocked ? 'on · H2↓gap' : (g.open_loc ?? 'on')) : `off · ${g.open_loc ?? '—'}`)
+        : (gapPct != null ? `gap ${gapPct >= 0 ? '+' : ''}${gapPct.toFixed(2)}%` : undefined) },
+    { label: 'S4 swp',  on: g?.computed_10 ? (Number(c4?.swp ?? 0) < 2) : null,
+      detail: g?.computed_10 ? (Number(c4?.swp ?? 0) >= 2 ? 'C4 off' : `rvol ${fmt(g.rvol30)}`) : undefined },
   ]
   const blocked = gates.filter(x => x.on === false).length
-  const c4Chips = ['fvg', 'swp', 'rsi2'].map(k => ({ k, v: Number(c4[k] ?? 0) }))
+  const c4Chips = ['swp', 'rsi2'].map(k => ({ k, v: Number(c4[k] ?? 0) }))
 
   return (
     <CardShell>
@@ -184,7 +190,7 @@ function PulseCard({ sessionState }: { sessionState: SessionStateRow | null }) {
           <span className="w-1.5 h-1.5 rounded-full animate-pulse-dot" style={{ background: statusColor }} />
           <span className="font-mono text-[10px] tracking-wide" style={{ color: statusColor }}>{statusLabel}</span>
         </span>
-      }>Loop v3.0.6</CardLabel>
+      }>Loop v3.1</CardLabel>
       <div className="flex items-baseline gap-2.5">
         <span className="font-mono text-[30px] font-semibold tabular-nums tracking-tight text-[var(--text-0)]">{median != null ? fmtDur(median) : '—'}</span>
         <span className="font-mono text-[11px] text-[var(--text-4)]">mediana / ciclo</span>
