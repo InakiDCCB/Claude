@@ -32,6 +32,7 @@ from collections import defaultdict
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 from backtest import Day, simulate
+from _score_common import wilson_lb
 
 # ── constantes ────────────────────────────────────────────────────────────────
 DATA_DIR = Path(__file__).parents[1] / "data" / "qqq_1min"
@@ -63,15 +64,6 @@ GAP_DOWN_THRESH = -0.3   # %
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
-def wilson_lb(wins, n, z=1.96):
-    if n == 0:
-        return None
-    p = wins / n
-    d = 1 + z * z / n
-    c = p + z * z / (2 * n)
-    m = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
-    return (c - m) / d
-
 
 def pf_from_pnls(pnls):
     gain = sum(p for p in pnls if p > 0)
@@ -198,7 +190,7 @@ def swp_signals(days):
             for j in range(i + 1, min(i + 4, day.n - 1)):
                 if day.c[j] <= sweep_low:
                     continue
-                if day.v[j - 4] is None:
+                if j < 4:
                     continue
                 avgv5 = day.avgv5[j] if day.avgv5[j] else None
                 if avgv5 is None or day.v[j] < SWP_VOL_MULT * avgv5:
@@ -394,12 +386,14 @@ def gate_impact_analysis(recs_on, days):
     print(f"  {'Year':<6}  {'H1 n':>5}  {'H1 PF':>6}  {'H1+H2 n':>8}  {'H1+H2 PF':>9}  {'delta PF':>9}  {'elim n':>7}")
     print(f"  {'-'*65}")
     years_seen = sorted({r["date"][:4] for r in h1})
+    pf_by_year = {}
     for yr in years_seen:
         h1_y   = [r for r in h1   if r["date"][:4] == yr]
         h2_y   = [r for r in h1h2 if r["date"][:4] == yr]
         el_y   = [r for r in elim if r["date"][:4] == yr]
         pf1    = pf_from_pnls([r["pnl"] for r in h1_y])
         pf2    = pf_from_pnls([r["pnl"] for r in h2_y])
+        pf_by_year[yr] = (pf1, pf2)
         delta  = pf2 - pf1
         sign   = "+" if delta >= 0 else ""
         mark   = " OK" if delta > 0 else (" !!" if delta < -0.02 else "  ")
@@ -407,11 +401,7 @@ def gate_impact_analysis(recs_on, days):
               f"{sign}{delta:>8.3f}{mark}  {len(el_y):>7}")
 
     # robustez: ¿en cuántos años mejora H2?
-    improve = sum(
-        1 for yr in years_seen
-        if pf_from_pnls([r["pnl"] for r in h1h2 if r["date"][:4] == yr]) >
-           pf_from_pnls([r["pnl"] for r in h1   if r["date"][:4] == yr])
-    )
+    improve = sum(1 for yr in years_seen if pf_by_year[yr][1] > pf_by_year[yr][0])
     print(f"\n  H2 mejora en {improve}/{len(years_seen)} años")
     print(f"  Señales eliminadas: {len(elim)} de {len(h1)} ({100*len(elim)/len(h1):.1f}% del universo H1)")
 
