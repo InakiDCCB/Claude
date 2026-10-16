@@ -1,5 +1,21 @@
 # Pulse — historial de versiones del cycle_prompt
 
+## v3.1.27 (2026-10-16) — ohl_v1 PROMOVIDO a LIVE (swing, override n≥20)
+
+**Motivación:** OHL Distribution tiene el backtest más robusto entre los shadows activos (PF=2.26 full / 2.21 recent, score=71.2 DEPLOY, n=141 episodios, robusto en 3 hold periods). Con S1 RSI2 retirado (v3.1.26), el sistema queda con un solo intradía (S4 SWP) y dos swings (gt2, ahora también ohl). Override del protocolo n≥20 — precedente: gt_closelow_v2 promovido con n=0.
+
+**Arquitectura gate:** OHL requiere el close_D para computarse, así que NO puede calcularse en pre-market. Flujo: post-close computa `ohl_next` → lo guarda en `session_memory.observations.ohl_next` → pre-market (STEP 4c nuevo) lo lee y pone en `gates.ohl_on`. Fallback en pre-market si no hay session_memory: fetch 1Day bar para calcular manualmente.
+
+**Cambios:**
+- cycle_prompt.md: STEP 3.0b (state.ohl refresco), STEP 6d (entrada OHL), STEP 10.0b (salida OHL), invariante extendido con ohl.qty, SISTEMAS table, MULTI-POSICIÓN, RESTRICCIONES
+- pre-market.md: fetch D (session_memory ohl_next), STEP 4c (gates.ohl_on), output + JSON
+- post-close.md: 4c-6 retira batch OHL → computa ohl_next + agrega a session_memory; añade verificación OHL a paso 3
+- strategy_registry: ohl_v1 → status='live'
+
+`tools/ohl_shadow.py` sigue existiendo (referencia histórica/backtest) pero ya no corre en post-close. Sus outcomes van por `trades` como cualquier sistema LIVE.
+
+---
+
 ## v3.1.26 (2026-10-16) — S1 RSI2 RETIRADO de LIVE
 
 **Motivación:** rsi2_v3 alcanza tier=established (n=65) con score=−0.6 < KILL<45. Override de 2026-09-09 (n=22, score=−7.4) establecía revisión al llegar a established negativo — condición cumplida. exp_lb=−0.10, PF=0.950, wr=58.5%. H1 3/3 completado.

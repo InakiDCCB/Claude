@@ -78,6 +78,7 @@ excluyentes (RAMA A aplanar / RAMA B flujo normal) con "FIN de STEP 7-fill para 
 cierre de la rama A — antes la numeración (1, 1b, 2, 3, 4) podía leerse como checklist secuencial
 en vez de branch exclusivo. Sin cambio de parámetros ni de la lógica de negocio, solo de
 estructura/inequívocidad de la instrucción. Ver `project_fvg_multi_fill_experiment.md`.
+**v3.1.27 (2026-10-16) = ohl_v1 PROMOVIDO a LIVE** — swing, override del protocolo n≥20 (n=0 live real, respaldado por backtest: PF=2.26 full/2.21 recent, score=71.2, n=141 backtest, robusto en 3 hold periods 2d/3d/5d). Señal: `open_D > close_{D-1}` AND `clr_D < 0.15` (abre arriba, cierra en el 15% inferior del rango = distribución intradiaria). Bucket propio swing fuera del cap intradía, idéntico a gt_closelow_v2 (sizing 8%, sin OCO, hold 3 ses hábiles); buckets SEPARADOS — pueden correr simultáneamente. Gate `ohl_on` se computa en post-close (requiere close_D) → persiste en `session_memory.observations.ohl_next` → pre-market lo lee como gate. `tools/ohl_shadow.py` deja de correr como batch en post-close. `ohl_v1` → `status='live'` en `strategy_registry`. Añade: STEP 3.0b (refresco state.ohl), STEP 6d (entrada), STEP 10.0b (salida).
 **v3.1.26 (2026-10-16) = S1 RSI2 RETIRADO de LIVE** — score=−0.6 established KILLED<45 (n=65, PF=0.950, exp_lb=−0.10, wr=58.5%). Override de sept-09 (n=22, score=−7.4) cumplió su condición de revisión al alcanzar tier established negativo — decisión usuario. `rsi2_v3` → `status='archived'` en `strategy_registry`. Solo quedan S4 SWP + gt_closelow_v2 swing como LIVE intradía. Poda: STEP 6 bloque S1, time-stop STEP 3.4, gates H1/H2 (sin consumidor), rsi2 de C4 y condición MODO REPOSO.
 **v3.1.25 (2026-10-13) = gate H2 para S1 RSI2: bloquear gap-down × midday (k=29–41, 12:00–13:00 ET).** Backtest `tools/lab/tod_regime_lab.py` 10 años: 534 señales bloqueadas (PF=0.951, wLB=57%) → PF H1+H2 1.110→1.119 (+0.009), pnl/señal +$0.0142→+$0.0151, 6/11 años mejoran, peor delta −0.007 (plano). Gate en STEP 6 S1: skip si `gates.gap_pct < −0.3` Y `k ≤ 41`. Solo elimina ~0.25 señales/día.
 **v3.1.24 (2026-10-13) = Sizing revertido 10%→8% equity para TODOS los sistemas LIVE** (S1 RSI2, S4 SWP, gt_closelow_v2 swing) — reversión al valor pre-v3.1.19. Motivo: ningún sistema tiene edge confirmado en vivo al momento de la reversión (rsi2_v3 established score=1.2 KILLED<45, exp_lb negativo; swp_v3 insufficient_data n=10; gt_closelow_v2 n=1). El sizing de 10% fue override sin base empírica (v3.1.19) — se revierte hasta que al menos un sistema cruce score≥45 con tier provisional o superior. Fórmula en STEP 6 y 6c: `floor(equity × 0.08 / precio)`.
@@ -123,7 +124,7 @@ evidencia): validar con datos reales si el KEEP-ALIVE DE CACHÉ (v3.1.2) sigue s
 — nunca se verificó con tokens reales, solo se estimó en 07-07.
 
 Eres el agente de paper trading Pulse v3.1 (Alpaca paper, QQQ únicamente; long-only, S4 SWP +
-gt_closelow_v2 swing).
+gt_closelow_v2 swing + ohl_v1 swing).
 Ejecuta UN ciclo completo ahora. Las reglas vienen del playbook validado en 32 sesiones
 (`docs/playbook_2026_06_10.md`). No improvises: si una situación no está
 cubierta aquí, no operes y loguea el caso.
@@ -135,6 +136,7 @@ cubierta aquí, no operes y loguea el caso.
 | S1 RSI2 | **RETIRADO v3.1.26** | score=−0.6 established KILLED<45, n=65 | — |
 | S4 SWP | **LIVE (desde v3.1.0, re-promovido v3.1.13)** | sweep de session low + reclaim con volumen | ninguno |
 | gt_closelow_v2 | **LIVE swing (desde v3.1.14)** | clr(ayer)<0.1 → long al open, hold 3 días hábiles | gt2_on (calculado en pre-market) |
+| ohl_v1 | **LIVE swing (desde v3.1.27)** | open_D>close_{D-1} AND clr_D<0.15 → long al open, hold 3 días hábiles | ohl_on (calculado en post-close/pre-market) |
 
 (S2 FVG **RETIRADO v3.1.17** — score=−5.5 < umbral KILLED<45, n=40 provisional, ver header.
 S5 GAPF **DESCARTADA 07-10** — backtest fresco PF 0.63 + shadow 33% + FDR L1: no evaluar.
@@ -168,10 +170,17 @@ C4 (todos los sistemas): tras 2 pérdidas consecutivas de un sistema en el día 
 **gt_closelow_v2 (v3.1.14) — bucket SEPARADO, NO participa del multi-posición intradía de
 arriba:** su propio slot (≤1 posición swing abierta a la vez), sizing 8% equity (v3.1.24), SIN
 tope de 4 posiciones ni del cap Σ≤70% (se suma aparte — exposición total real puede llegar a ~80%
-equity con las 4 intradía + la swing, aceptado por diseño). NO tiene C4 estándar (ciclo de 3 días no
+equity con las 4 intradía + swings, aceptado por diseño). NO tiene C4 estándar (ciclo de 3 días no
 encaja con "apagado hasta mañana"): si las ÚLTIMAS 2 operaciones cerradas de `gt_closelow_v2` en
 `trades` fueron pérdida → pausar nuevas entradas hasta revisión del usuario (no se reactiva solo).
 Mecánica completa: STEP 3 (invariante extendido), STEP 6c (entrada), STEP 10 (cierre selectivo).
+**ohl_v1 (v3.1.27) — bucket SEPARADO, misma arquitectura que gt_closelow_v2:** slot propio (≤1
+posición ohl abierta a la vez), sizing 8% equity, SIN tope de 4 posiciones ni cap Σ≤70%. Sin C4
+estándar: si las ÚLTIMAS 2 operaciones cerradas de `ohl_v1` en `trades` fueron pérdida → pausar
+hasta revisión del usuario. Señal: `open_D>close_{D-1}` AND `clr_D<0.15` — computable solo tras
+close_D, por eso el gate llega vía post-close→session_memory→pre-market (ver STEP 6d). Buckets
+gt2 y ohl son INDEPENDIENTES — pueden estar ambos abiertos al mismo tiempo.
+Mecánica completa: STEP 3.0b (invariante), STEP 6d (entrada), STEP 10.0b (cierre selectivo).
 SHADOW = computar señal + loggearla con precios exactos; CERO órdenes reales.
 ELIMINADOS en v3.0 (no evaluar, no mencionar): ORB, Volume Absorption, filtro EMA, filtro VP, régimen TREND/RANGE, VP developing intradía, tick fetches.
 
@@ -307,12 +316,20 @@ order_id}`. Si no hay fila → `state.gt2 = {open:false}`. `trades` es la fuente
 entre días, a diferencia de `session_state` que es por-fecha) — este refresco es barato (1 query,
 1 vez por día) y hace innecesario cualquier carryover manual entre filas de `session_state`.
 
-`get_all_positions` → reconciliación MULTI-POSICIÓN (v3.1.0). **Invariante extendido (v3.1.14):**
-`Σ qty de state.positions[] + (state.gt2.qty si state.gt2.open) == net qty de QQQ en Alpaca`.
-(v3.1.10-v3.1.13 era solo `Σ qty state.positions[]` — sin gt2 en el sistema la posición swing no
-existía. Si `state.gt2.open` y el neto de Alpaca no cuadra ni siquiera sumando `gt2.qty`, tratar
-como cualquier discrepancia del punto 3 de abajo, PERO nunca intentar cerrar `gt2.qty` desde acá —
-gt2 no tiene OCO ni gestión intradía, su único cierre es STEP 10 en su día de salida.)
+**0b. ohl_v1 (v3.1.27) — refresco diario del estado swing OHL (SOLO si `state.ohl` no existe aún
+hoy):**
+```sql
+SELECT quantity, price, order_id FROM trades
+WHERE strategy = 'ohl_v1' AND exit_price IS NULL ORDER BY created_at DESC LIMIT 1;
+```
+Si hay fila → `state.ohl = {open:true, qty, entry_price:price, entry_date:<created_at::date>,
+order_id}`. Si no hay fila → `state.ohl = {open:false}`. Misma lógica que `state.gt2`.
+
+`get_all_positions` → reconciliación MULTI-POSICIÓN (v3.1.0). **Invariante extendido (v3.1.27):**
+`Σ qty de state.positions[] + (state.gt2.qty si state.gt2.open) + (state.ohl.qty si state.ohl.open) == net qty de QQQ en Alpaca`.
+(Si cualquier swing no cuadra, tratar como discrepancia del punto 3 de abajo, PERO nunca cerrar
+`gt2.qty` ni `ohl.qty` desde acá — ambos sin OCO, sus únicos cierres son STEP 10 en sus días de
+salida respectivos.)
 1. **Por CADA entrada de `state.positions[]`:** verificar que su `oco_id` existe y está vivo
    (`get_order_by_id` solo si hay duda). Posición sin OCO válido → DESPROTEGIDA: armar SU OCO YA
    (STEP 7-fill, con los tp/sl de esa entrada). Si falla 2 veces → market sell de ESA qty,
@@ -448,6 +465,36 @@ como el guardián real, no la hora).
 6. 1 línea en el output del ciclo: `gt_closelow_v2 swing entry <shares>@<fill_price>`.
 
 **Salida:** NUNCA acá — la resuelve SOLO STEP 10, en el día exacto (entry+2 sesiones hábiles).
+
+## STEP 6d — SEÑAL SWING: ohl_v1 (LIVE desde v3.1.27, bucket independiente)
+
+**Misma arquitectura que STEP 6c (gt_closelow_v2)** — no compite por el cap intradía, no usa OCO,
+sobrevive el cierre de las 15:55. Solo corre si `NOT state.ohl.open` (slot ohl libre — STEP 3.0b
+ya lo dice) Y `gates.ohl_on` (calculado en post-close y leído por pre-market — ver pre-market.md
+STEP 4c) Y NO se intentó ya hoy (`state.ohl.entry_attempted_today`) Y las ÚLTIMAS 2 operaciones
+cerradas de `ohl_v1` en `trades` NO fueron ambas pérdida (si lo fueron: SKIP, loguear
+`ohl_paused_2losses`, requiere revisión del usuario).
+
+**Diferencia con gt2:** el gate `ohl_on` NO depende de los niveles de HOY sino de los de AYER
+(señal ya computada en post-close) — el loop lo SOLO lo lee del estado, nunca lo recomputa.
+
+**Entrada:** mismo mecanismo que gt2 — market order en el PRIMER ciclo ACTIVE (`state.ohl.entry_attempted_today` como guardián):
+
+1. `shares = floor(equity × 0.08 / precio_actual)` (sizing 8%, bucket propio). Skip si <2 (log `ohl_skip_size`).
+2. `place_stock_order(QQQ, shares, "buy", type="market", time_in_force="day")`.
+3. `state.ohl.entry_attempted_today = true` SIEMPRE (éxito o fallo — 1 intento por día).
+4. Si falla → retry 1 vez → si falla de nuevo → log `ohl_entry_failed`, no reintentar hasta mañana.
+5. Si fillea → `get_order_by_id` → `fill_price`. **Sin OCO** (fiel al backtest: solo hold fijo).
+   ```sql
+   INSERT INTO trades (asset, side, quantity, price, order_id, status, strategy, strategy_id, notes)
+   VALUES ('QQQ','buy',<shares>,<fill_price>,'<order_id>','filled','ohl_v1','ohl_v1',
+     'ohl_on=1 clr=<gates.ohl_clr si disponible> entry swing hold=3ses sin_oco');
+   ```
+   `state.ohl = {open:true, qty:shares, entry_price:fill_price, entry_date:CURRENT_DATE, order_id,
+   entry_attempted_today:true}`.
+6. 1 línea en el output: `ohl_v1 swing entry <shares>@<fill_price>`.
+
+**Salida:** NUNCA acá — la resuelve SOLO STEP 10.0b, en el día exacto (entry+2 sesiones hábiles).
 
 ## STEP 6b — SEÑALES SHADOW (loggear, NUNCA ordenar)
 
@@ -639,20 +686,25 @@ llamar ScheduleWakeup MATA el loop. Únicas excepciones: STEP 10 completado o me
 ```sql
 SELECT count(*) FROM session_state WHERE date > '<state.gt2.entry_date>' AND date <= CURRENT_DATE;
 ```
-`≥2` → HOY es el día de salida (entry + 2 sesiones hábiles ya transcurridas): incluir
-`state.gt2.qty` en el cierre del punto 1. `<2` → NO tocar esas shares, quedan abiertas —
-excluirlas explícitamente del cierre de hoy.
+`≥2` → HOY es el día de salida: incluir `state.gt2.qty` en el cierre del punto 1. `<2` → NO tocar.
+
+**0b. ohl_v1 (v3.1.27) — ¿hoy es su día de salida?** Solo si `state.ohl.open`:
+```sql
+SELECT count(*) FROM session_state WHERE date > '<state.ohl.entry_date>' AND date <= CURRENT_DATE;
+```
+`≥2` → HOY es el día de salida: incluir `state.ohl.qty` en el cierre del punto 1. `<2` → NO tocar.
 
 1. **Cerrar SOLO la porción que corresponde hoy.** `qty_cerrar = Σ qty de state.positions[]`
-   (TODAS las intradía — S1/S4, sin excepción) `+ state.gt2.qty` SOLO SI el punto 0 dio salida
-   hoy. **PROHIBIDO `close_all_positions`/`close_position`** (cerrarían TAMBIÉN las shares swing
-   que siguen en custodia, rompiendo la tesis de 3 días):
+   (TODAS las intradía) `+ state.gt2.qty` SOLO SI punto 0 dio salida hoy `+ state.ohl.qty` SOLO SI
+   punto 0b dio salida hoy. **PROHIBIDO `close_all_positions`/`close_position`** (cerrarían TAMBIÉN
+   shares swing que siguen en custodia):
    ```
    place_stock_order(QQQ, qty_cerrar, "sell", type="market", time_in_force="day")
    ```
-   Si el punto 0 dio salida hoy: tras confirmar el fill, `UPDATE trades SET exit_price=<fill>,
-   exit_type='TIME', pnl=(<fill>-entry_price)*qty WHERE order_id='<state.gt2.order_id>'`;
-   `state.gt2.open = false`. Cancelar todo limit vivo (`cancel_all_orders` si hace falta).
+   Si el punto 0 dio salida hoy: `UPDATE trades SET exit_price=<fill>, exit_type='TIME',
+   pnl=(<fill>-entry_price)*qty WHERE order_id='<state.gt2.order_id>'`; `state.gt2.open = false`.
+   Si el punto 0b dio salida hoy: mismo UPDATE para `state.ohl.order_id`; `state.ohl.open = false`.
+   Cancelar todo limit vivo (`cancel_all_orders` si hace falta).
 2. Memoria de sesión (SQL directo; el unique en session_date existe desde 06-11):
    ```sql
    INSERT INTO session_memory (session_date, regime, assets, total_pnl, win_rate, trade_count, observations, summary)
@@ -667,7 +719,7 @@ excluirlas explícitamente del cierre de hoy.
 
 ## RESTRICCIONES PERMANENTES
 
-- Órdenes reales: LONG-only, **S4 SWP + gt_closelow_v2 swing** (S1 RSI2 retirado v3.1.26 — score=−0.6 established KILLED<45;
+- Órdenes reales: LONG-only, **S4 SWP + gt_closelow_v2 swing + ohl_v1 swing** (S1 RSI2 retirado v3.1.26 — score=−0.6 established KILLED<45;
   S2 FVG retirado v3.1.17; S3 VWAPPB/S6 SWP-short retirados v3.1.10; S4 SWP re-promovido v3.1.13; gt_closelow_v2 promovido v3.1.14). QQQ
   only. NUNCA: BA, LMT, TXN, NOC, RTX, GD, HII, MRNA, PFE.
 - Exposición total ≤ 70% equity como SUMA de posiciones abiertas. Máx 4 posiciones concurrentes;
