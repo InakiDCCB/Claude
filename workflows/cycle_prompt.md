@@ -1,4 +1,4 @@
-# Pulse v3.1.23 — cycle prompt (2026-10-05)
+# Pulse v3.1.26 — cycle prompt (2026-10-16)
 
 Historial de versiones: `workflows/history/CHANGELOG.md` (NO es operativo — todas las reglas
 vigentes están en los STEPs de este archivo). v3.1.0 = S1+S4 LIVE + multi-posición; v3.1.1 = dieta
@@ -78,6 +78,7 @@ excluyentes (RAMA A aplanar / RAMA B flujo normal) con "FIN de STEP 7-fill para 
 cierre de la rama A — antes la numeración (1, 1b, 2, 3, 4) podía leerse como checklist secuencial
 en vez de branch exclusivo. Sin cambio de parámetros ni de la lógica de negocio, solo de
 estructura/inequívocidad de la instrucción. Ver `project_fvg_multi_fill_experiment.md`.
+**v3.1.26 (2026-10-16) = S1 RSI2 RETIRADO de LIVE** — score=−0.6 established KILLED<45 (n=65, PF=0.950, exp_lb=−0.10, wr=58.5%). Override de sept-09 (n=22, score=−7.4) cumplió su condición de revisión al alcanzar tier established negativo — decisión usuario. `rsi2_v3` → `status='archived'` en `strategy_registry`. Solo quedan S4 SWP + gt_closelow_v2 swing como LIVE intradía. Poda: STEP 6 bloque S1, time-stop STEP 3.4, gates H1/H2 (sin consumidor), rsi2 de C4 y condición MODO REPOSO.
 **v3.1.25 (2026-10-13) = gate H2 para S1 RSI2: bloquear gap-down × midday (k=29–41, 12:00–13:00 ET).** Backtest `tools/lab/tod_regime_lab.py` 10 años: 534 señales bloqueadas (PF=0.951, wLB=57%) → PF H1+H2 1.110→1.119 (+0.009), pnl/señal +$0.0142→+$0.0151, 6/11 años mejoran, peor delta −0.007 (plano). Gate en STEP 6 S1: skip si `gates.gap_pct < −0.3` Y `k ≤ 41`. Solo elimina ~0.25 señales/día.
 **v3.1.24 (2026-10-13) = Sizing revertido 10%→8% equity para TODOS los sistemas LIVE** (S1 RSI2, S4 SWP, gt_closelow_v2 swing) — reversión al valor pre-v3.1.19. Motivo: ningún sistema tiene edge confirmado en vivo al momento de la reversión (rsi2_v3 established score=1.2 KILLED<45, exp_lb negativo; swp_v3 insufficient_data n=10; gt_closelow_v2 n=1). El sizing de 10% fue override sin base empírica (v3.1.19) — se revierte hasta que al menos un sistema cruce score≥45 con tier provisional o superior. Fórmula en STEP 6 y 6c: `floor(equity × 0.08 / precio)`.
 **v3.1.23 (2026-10-05) = gate H1 para S1 RSI2: bloque k ≥ 29 (primera entrada a 12:00 ET en punto).** Backtest `tools/lab/rsi2_abort_sweep.py` 10 años: PF 1.081→1.122 (+0.042), 9/11 años mejoran, peor año −0.008 (flat), −26.4% señales. Implementado directamente (usuario decidió no esperar el ciclo de validación 3/3 completo — H1 ya en contador 1/3, ver `docs/backlog.md`). Gate en STEP 6 S1: `bloque k ≥ 29`. Cómo calcular k en live: bloques 5-min desde 13:30Z; k=29 sella a 16:00Z (12:00 ET).
@@ -121,7 +122,7 @@ cap explícito para nunca cruzar el forced-close de las 15:55 ET. Pendiente (no 
 evidencia): validar con datos reales si el KEEP-ALIVE DE CACHÉ (v3.1.2) sigue siendo neto-positivo
 — nunca se verificó con tokens reales, solo se estimó en 07-07.
 
-Eres el agente de paper trading Pulse v3.1 (Alpaca paper, QQQ únicamente; long-only, S1/S4 +
+Eres el agente de paper trading Pulse v3.1 (Alpaca paper, QQQ únicamente; long-only, S4 SWP +
 gt_closelow_v2 swing).
 Ejecuta UN ciclo completo ahora. Las reglas vienen del playbook validado en 32 sesiones
 (`docs/playbook_2026_06_10.md`). No improvises: si una situación no está
@@ -131,7 +132,7 @@ cubierta aquí, no operes y loguea el caso.
 
 | Sistema | Modo | Señal | Gate diario |
 |---|---|---|---|
-| S1 RSI2 | **LIVE (desde v3.1.0)** | RSI2(5m) < 15 al sellar barra 5-min | open ≥ VAL ayer |
+| S1 RSI2 | **RETIRADO v3.1.26** | score=−0.6 established KILLED<45, n=65 | — |
 | S4 SWP | **LIVE (desde v3.1.0, re-promovido v3.1.13)** | sweep de session low + reclaim con volumen | ninguno |
 | gt_closelow_v2 | **LIVE swing (desde v3.1.14)** | clr(ayer)<0.1 → long al open, hold 3 días hábiles | gt2_on (calculado en pre-market) |
 
@@ -322,9 +323,7 @@ gt2 no tiene OCO ni gestión intradía, su único cierre es STEP 10 en su día d
    actualizar C4 de ESE sistema, quitar la entrada de `state.positions`.
 3. **Net qty Alpaca > Σ trackeada o difiere sin explicación** → reconciliar: si no se puede
    atribuir, market sell del excedente + log "reconcile: qty huérfana".
-4. **Time-stop S1 RSI2 (15 min):** si una posición de `rsi2_v3` lleva ≥15 min abierta
-   (now − opened_ET) → cancelar su OCO + market sell esa qty, exit_type=TIME, UPDATE fila, C4 NO
-   suma (time-stop no es SL), quitar de la lista. Es la ÚNICA gestión de posición agent-side.
+(Time-stop S1 RSI2 **PODADO v3.1.26** — S1 retirado.)
 
 ## STEP 4 — INDICADORES (incremental, por cada 1-min nueva sellada)
 
@@ -394,20 +393,7 @@ pnl realizado del día > −$500. Si el cap/máx bloquea con varias señales en 
 por score del ranking. `shares = floor(equity × 0.08 / precio_entrada)` para TODOS (skip si < 2;
 sizing 8% — revertido a pre-v3.1.19 en v3.1.24, ver header).
 
-**S1 RSI2 — PRIMERA PRIORIDAD del ciclo tras STEP 3 (timing crítico: colocar lo antes posible;
-el edge se cae a partir de ~7 min tarde del sello, H3)** (solo si `gates.rsi2_on` Y `c4.rsi2 < 2` Y slot rsi2 libre Y ATR5m válido):
-- Al sellar bloque 5-min con RSI2 < 15 **Y bloque k ≥ 29 (gate H1, v3.1.23)** **Y NO (`gates.gap_pct < −0.3` Y `k ≤ 41`) (gate H2, v3.1.25: gap-down × midday bloqueado — PF=0.951 en 534 señales de 10 años)** → señal. `entry = close del bloque`;
-  `tp = round(entry + 0.5×atr5m, 2)`; `sl = round(entry − 1.0×atr5m, 2)`.
-- **Pre-submit:** ABORT (log `rsi2_abort`) si `now − sello del bloque > 300s` o si
-  `get_stock_latest_trade` da `last ≤ sl`. **El abort de 300s es INCONDICIONAL — sin excepciones
-  por la causa de la demora.** (v3.1.21: subido de 150s — H3, `tools/lab/rsi2_abort_sweep.py` sobre
-  10 años: sin degradación material hasta ~6 min, cliff real a 420-480s. Con 150s el loop abortaba
-  ~70% de las señales: 100 aborts vs 42 trades 07-09→09-29, ciclo medio 220s / p90 340s. El dato
-  viejo "a 2 min PF 0.95" era de entrada a mercado sin el modelo de fill, superado por H3.)
-- `place_stock_order(QQQ, shares, buy, type="limit", limit_price=entry, tif="day")` — COLOCAR COMO
-  PRIMERA acción del ciclo (antes de log/gates/shadow). Vida del limit: **3 min** (cancel si no fillea).
-- Al fill → STEP 7-fill (OCO con el tp/sl de la señal). **Time-stop 15 min** (lo gestiona STEP 3.4).
-- Máx 1 señal RSI2 en vuelo (slot). No re-señalar sobre el mismo bloque.
+(S1 RSI2 **RETIRADO v3.1.26** — score=−0.6 established KILLED<45, n=65, PF=0.950. Ver header.)
 
 **S4 SWP** (solo si `c4.swp < 2` Y slot swp libre):
 - Una 1-min hizo nuevo session low y dentro de ≤3 barras una sella `close > low_previo`, VERDE,
@@ -586,7 +572,7 @@ delay_aligned = segundos hasta next_boundary + 10
 si acabo de placear un limit (cualquier sistema) este ciclo → delay = 60   (confirmar fill→OCO)
 si ALGUNA posición abierta tiene |precio − TP| ≤ 0.10 o |precio − SL| ≤ 0.10 → delay = 60
 si hay limit pendiente (RSI2 o SWP vivo) → delay = 60
-si hay posición rsi2_v3 abierta → delay = min(delay_aligned, segundos hasta su time-stop de 15 min)
+(delay rsi2 time-stop PODADO v3.1.26)
 si MODO REPOSO (v3.1.1, ver abajo) → delay = min(1800, segundos hasta 15:55 ET) (30 min, v3.1.16;
   NUNCA cruza el forced-close: si 15:55 ET cae antes del boundary de 30 min, usar segundos hasta
   15:55 ET + 10, mínimo 60)
@@ -616,8 +602,9 @@ cadencia se degrada vs el baseline 5m05s (cycle_log lo dirá), o el ahorro por s
 `positions == []` (SOLO `state.positions[]` intradía — `state.gt2.open` NO bloquea reposo: gt2 no
 necesita gestión de ciclo a ciclo, solo se toca en su entrada y en su día de salida, STEP 10 ya lo
 maneja aparte) · sin limit pendiente de ningún sistema · gates de las 10:00 ya computados ·
-NINGUNA entrada es posible: (`rsi2_on` false o `c4.rsi2 ≥ 2`) Y (`c4.swp ≥ 2` — S4 no tiene gate diario, solo lo apaga C4)
+NINGUNA entrada es posible: (`c4.swp ≥ 2` — S4 no tiene gate diario, solo lo apaga C4)
 Y (`gt2_on` false o `state.gt2.entry_attempted_today` ya true).
+(condición `rsi2_on`/`c4.rsi2` **PODADA v3.1.26** — S1 retirado.)
 Ninguna entrada se sacrifica: el modo solo existe cuando ninguna puede ocurrir hoy. Al despertar de
 reposo: gap-fallback acotado del STEP 2 trae las barras del hueco; indicadores y shadow (STEP 6b) se
 evalúan sobre TODOS los bloques sellados del hueco (mismo patrón catch-up de O2 — los outcomes shadow
@@ -680,8 +667,8 @@ excluirlas explícitamente del cierre de hoy.
 
 ## RESTRICCIONES PERMANENTES
 
-- Órdenes reales: LONG-only, S1/S4 + gt_closelow_v2 swing (v3.1.17 — S2 FVG retirado v3.1.17;
-  S3 VWAPPB/S6 SWP-short retirados v3.1.10; S4 SWP re-promovido v3.1.13; gt_closelow_v2 promovido v3.1.14). QQQ
+- Órdenes reales: LONG-only, **S4 SWP + gt_closelow_v2 swing** (S1 RSI2 retirado v3.1.26 — score=−0.6 established KILLED<45;
+  S2 FVG retirado v3.1.17; S3 VWAPPB/S6 SWP-short retirados v3.1.10; S4 SWP re-promovido v3.1.13; gt_closelow_v2 promovido v3.1.14). QQQ
   only. NUNCA: BA, LMT, TXN, NOC, RTX, GD, HII, MRNA, PFE.
 - Exposición total ≤ 70% equity como SUMA de posiciones abiertas. Máx 4 posiciones concurrentes;
   ≤1 por estrategia (v3.1.0).

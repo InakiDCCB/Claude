@@ -1,5 +1,39 @@
 # Pulse — historial de versiones del cycle_prompt
 
+## v3.1.26 (2026-10-16) — S1 RSI2 RETIRADO de LIVE
+
+**Motivación:** rsi2_v3 alcanza tier=established (n=65) con score=−0.6 < KILL<45. Override de 2026-09-09 (n=22, score=−7.4) establecía revisión al llegar a established negativo — condición cumplida. exp_lb=−0.10, PF=0.950, wr=58.5%. H1 3/3 completado.
+
+**Cambios:**
+- STEP 6: bloque S1 RSI2 reemplazado por nota de retirado
+- STEP 3.4: time-stop S1 podado
+- Wakeup rule: delay rsi2 time-stop podado
+- MODO REPOSO: condición `rsi2_on`/`c4.rsi2` eliminada (S1 el único consumidor)
+- Gates H1/H2: sin consumidor — podados del cuerpo (su evaluación era solo para S1)
+- RESTRICCIONES: actualizadas a S4 SWP + gt_closelow_v2 swing
+
+`rsi2_v3` → `status='archived'` en strategy_registry. Solo quedan **S4 SWP** + **gt_closelow_v2 swing** como sistemas LIVE.
+
+---
+
+## v3.1.25 (2026-10-13) — Gate H2: S1 RSI2 bloqueado en gaps bajistas extremos
+
+**Motivación:** lab TOD×régimen (`tools/lab/tod_regime_lab.py`) identifica bucket gap<−0.3% AND k≤41 (señales antes de 12:00 ET en día de gap bajista marcado) como el peor bucket de S1 RSI2 (PF<0.90, ~8% de señales).
+
+**Evidencia:** backtest 2016-2026, ~2k señales filtradas. PF baseline 1.081 → PF con H2 activo: mejora en 9/11 años en ese bucket. Peor año: flat.
+
+**Cambio:** STEP 6 S1 RSI2 — añadido gate H2: `gap_pct < −0.3 AND k ≤ 41` → bloquear entrada. Complementa H1 (k≥29). Nota: H2 quedó moot con el retiro de S1 en v3.1.26.
+
+---
+
+## v3.1.24 (2026-10-13) — Sizing revertido de 10% a 8%
+
+**Motivación:** sizing 10% fue subido en v3.1.19 sin edge confirmado. rsi2_v3 llega a established con score=1.2 KILLED<45 y exp_lb negativo. swp_v3 n=10 insufficient_data. Ningún sistema activo ha cruzado score≥45.
+
+**Cambio:** sizing revertido de 10% a 8% en STEP 7-fill. Congelado en 8% hasta que ≥1 sistema cruce score≥45 (provisional→established positivo).
+
+---
+
 ## v3.1.23 (2026-10-05) — Gate H1: S1 RSI2 solo desde 12:00 ET
 
 **Motivación:** rsi2_v3 llega a tier=established (n=52) con score=14.0 < KILL<45. Exploración de nuevos indicadores (14 señales nuevas: IBS 5m, ORB, PDL reclaim, RSI2 variantes) confirma que no hay edge intraday sin explotar — todos KILLED. H1 es la única mejora pendiente con respaldo empírico.
