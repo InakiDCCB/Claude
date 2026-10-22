@@ -1,5 +1,16 @@
 # Pulse — historial de versiones del cycle_prompt
 
+## v3.1.28 (2026-10-22) — S4 SWP RETIRADO de LIVE (kill definitivo)
+
+**Motivación:** PF=0.803 live (n=18), PF=0.93 backtest 10 años, exp_lb=−0.285/sh. Split temporal muestra deterioro: últimos 8 trades 3TP/5SL, −$48. El sistema ya había sido matado en v3.1.12 (backtest 10y: 0/11 años positivos con slippage realista) y re-promovido v3.1.13 por override del usuario. Los datos live confirman el diagnóstico del research. `swp_v3` → `status='archived'`.
+
+**Consecuencia:** 0 sistemas intradía LIVE. El loop solo gestiona gt_closelow_v2 y ohl_v1 (swing). C4 intradía inactivo. Loop se auto-termina si ambos swing gates off (excepción añadida a la regla de ScheduleWakeup).
+
+**Cambios:**
+- cycle_prompt.md: header v3.1.28, SISTEMAS table S4→RETIRADO, "Eres el agente" sin S4, STEP 6 S4→PODADO, STEP 7-fill OCO RSI2/SWP→PODADO, C4 nota "sin consumidores", prioridad multi-posición actualizada.
+- MEMORY.md: sección Sistema actualizada, C4 inactivo, loop auto-termina.
+- strategy_registry: `swp_v3` → `status='archived'`.
+
 ## v3.1.27 (2026-10-16) — ohl_v1 PROMOVIDO a LIVE (swing, override n≥20)
 
 **Motivación:** OHL Distribution tiene el backtest más robusto entre los shadows activos (PF=2.26 full / 2.21 recent, score=71.2 DEPLOY, n=141 episodios, robusto en 3 hold periods). Con S1 RSI2 retirado (v3.1.26), el sistema queda con un solo intradía (S4 SWP) y dos swings (gt2, ahora también ohl). Override del protocolo n≥20 — precedente: gt_closelow_v2 promovido con n=0.

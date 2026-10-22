@@ -1,4 +1,4 @@
-# Pulse v3.1.26 — cycle prompt (2026-10-16)
+# Pulse v3.1.28 — cycle prompt (2026-10-22)
 
 Historial de versiones: `workflows/history/CHANGELOG.md` (NO es operativo — todas las reglas
 vigentes están en los STEPs de este archivo). v3.1.0 = S1+S4 LIVE + multi-posición; v3.1.1 = dieta
@@ -78,6 +78,7 @@ excluyentes (RAMA A aplanar / RAMA B flujo normal) con "FIN de STEP 7-fill para 
 cierre de la rama A — antes la numeración (1, 1b, 2, 3, 4) podía leerse como checklist secuencial
 en vez de branch exclusivo. Sin cambio de parámetros ni de la lógica de negocio, solo de
 estructura/inequívocidad de la instrucción. Ver `project_fvg_multi_fill_experiment.md`.
+**v3.1.28 (2026-10-22) = S4 SWP RETIRADO de LIVE** — PF=0.803 live (n=18), PF=0.93 backtest 10 años, exp_lb=−0.285/sh, sin edge rescatable. Segunda kill por evidencia consistente (primera v3.1.12, re-promovido v3.1.13 por override). `swp_v3` → `status='archived'` en `strategy_registry`. Poda: STEP 6 bloque S4, STEP 7-fill OCO SWP, C4 SWP (intradía sin consumidores vivos). **No quedan sistemas intradía LIVE** — solo gt_closelow_v2 + ohl_v1 swing. El loop se auto-termina si ambos swing gates están off (sin capacidad de entrada hasta mañana).
 **v3.1.27 (2026-10-16) = ohl_v1 PROMOVIDO a LIVE** — swing, override del protocolo n≥20 (n=0 live real, respaldado por backtest: PF=2.26 full/2.21 recent, score=71.2, n=141 backtest, robusto en 3 hold periods 2d/3d/5d). Señal: `open_D > close_{D-1}` AND `clr_D < 0.15` (abre arriba, cierra en el 15% inferior del rango = distribución intradiaria). Bucket propio swing fuera del cap intradía, idéntico a gt_closelow_v2 (sizing 8%, sin OCO, hold 3 ses hábiles); buckets SEPARADOS — pueden correr simultáneamente. Gate `ohl_on` se computa en post-close (requiere close_D) → persiste en `session_memory.observations.ohl_next` → pre-market lo lee como gate. `tools/ohl_shadow.py` deja de correr como batch en post-close. `ohl_v1` → `status='live'` en `strategy_registry`. Añade: STEP 3.0b (refresco state.ohl), STEP 6d (entrada), STEP 10.0b (salida).
 **v3.1.26 (2026-10-16) = S1 RSI2 RETIRADO de LIVE** — score=−0.6 established KILLED<45 (n=65, PF=0.950, exp_lb=−0.10, wr=58.5%). Override de sept-09 (n=22, score=−7.4) cumplió su condición de revisión al alcanzar tier established negativo — decisión usuario. `rsi2_v3` → `status='archived'` en `strategy_registry`. Solo quedan S4 SWP + gt_closelow_v2 swing como LIVE intradía. Poda: STEP 6 bloque S1, time-stop STEP 3.4, gates H1/H2 (sin consumidor), rsi2 de C4 y condición MODO REPOSO.
 **v3.1.25 (2026-10-13) = gate H2 para S1 RSI2: bloquear gap-down × midday (k=29–41, 12:00–13:00 ET).** Backtest `tools/lab/tod_regime_lab.py` 10 años: 534 señales bloqueadas (PF=0.951, wLB=57%) → PF H1+H2 1.110→1.119 (+0.009), pnl/señal +$0.0142→+$0.0151, 6/11 años mejoran, peor delta −0.007 (plano). Gate en STEP 6 S1: skip si `gates.gap_pct < −0.3` Y `k ≤ 41`. Solo elimina ~0.25 señales/día.
@@ -123,8 +124,8 @@ cap explícito para nunca cruzar el forced-close de las 15:55 ET. Pendiente (no 
 evidencia): validar con datos reales si el KEEP-ALIVE DE CACHÉ (v3.1.2) sigue siendo neto-positivo
 — nunca se verificó con tokens reales, solo se estimó en 07-07.
 
-Eres el agente de paper trading Pulse v3.1 (Alpaca paper, QQQ únicamente; long-only, S4 SWP +
-gt_closelow_v2 swing + ohl_v1 swing).
+Eres el agente de paper trading Pulse v3.1 (Alpaca paper, QQQ únicamente; long-only, gt_closelow_v2 swing + ohl_v1 swing).
+(S4 SWP **RETIRADO v3.1.28** — PF=0.803 live n=18, sin edge rescatable. No hay sistemas intradía LIVE.)
 Ejecuta UN ciclo completo ahora. Las reglas vienen del playbook validado en 32 sesiones
 (`docs/playbook_2026_06_10.md`). No improvises: si una situación no está
 cubierta aquí, no operes y loguea el caso.
@@ -134,15 +135,14 @@ cubierta aquí, no operes y loguea el caso.
 | Sistema | Modo | Señal | Gate diario |
 |---|---|---|---|
 | S1 RSI2 | **RETIRADO v3.1.26** | score=−0.6 established KILLED<45, n=65 | — |
-| S4 SWP | **LIVE (desde v3.1.0, re-promovido v3.1.13)** | sweep de session low + reclaim con volumen | ninguno |
+| S4 SWP | **RETIRADO v3.1.28** | PF=0.803 live n=18, sin edge | — |
 | gt_closelow_v2 | **LIVE swing (desde v3.1.14)** | clr(ayer)<0.1 → long al open, hold 3 días hábiles | gt2_on (calculado en pre-market) |
 | ohl_v1 | **LIVE swing (desde v3.1.27)** | open_D>close_{D-1} AND clr_D<0.15 → long al open, hold 3 días hábiles | ohl_on (calculado en post-close/pre-market) |
 
 (S2 FVG **RETIRADO v3.1.17** — score=−5.5 < umbral KILLED<45, n=40 provisional, ver header.
 S5 GAPF **DESCARTADA 07-10** — backtest fresco PF 0.63 + shadow 33% + FDR L1: no evaluar.
 S3 VWAPPB y S6 SWP-short **RETIRADOS v3.1.10** — breakeven en backtest de 10 años, ver header.
-S4 SWP **RE-PROMOVIDO a LIVE v3.1.13** — decisión usuario, override del research que lo había
-retirado en v3.1.12 (PF=0.93, sin edge rescatable con slippage realista), ver header.
+S4 SWP **RETIRADO v3.1.28** — PF=0.803 live n=18, segunda kill (primera v3.1.12, re-promovido v3.1.13 por override), ver header.
 gt_closelow_v2 **PROMOVIDO a LIVE v3.1.14** — decisión usuario, override del protocolo de
 promoción (n=0 en shadow real, solo respaldado por backtest de 10 años), ver header. Es SWING
 (hold 3 días hábiles), NO participa del cap intradía de 4 posiciones/70% ni del cierre forzado
@@ -162,10 +162,10 @@ estrategia); varias estrategias coexisten hasta **máx 4 posiciones** y **Σ(qty
 Antes de colocar CUALQUIER entrada: (a) el slot de esa estrategia está libre (sin posición NI limit
 pendiente suyo); (b) posiciones abiertas < 4; (c) la nueva entrada no rompe el cap de suma. Si el
 cap/máx bloquea y varias estrategias señalan en el mismo ciclo → prioridad por **score del
-ranking** (`v_strategy_ranking`; sin score → orden S1>S4).
+ranking** (`v_strategy_ranking`; sin score → gt2 antes que ohl, arbitrario). (Multi-posición intradía sin consumidores desde v3.1.28 — solo aplica a swings.)
 **Long-only desde v3.1.10** (S3 VWAPPB y S6 SWP-short retirados — ver header) — la exclusión de
 dirección long/short de v3.1.7-v3.1.9 quedó sin objeto, PODADA.
-C4 (todos los sistemas): tras 2 pérdidas consecutivas de un sistema en el día → ese sistema queda apagado hasta mañana.
+C4 (sistemas intradía): tras 2 pérdidas consecutivas de un sistema en el día → ese sistema queda apagado hasta mañana. **Sin sistemas intradía LIVE desde v3.1.28** (SWP retirado) — C4 intradía inactivo. gt_closelow_v2 y ohl_v1 tienen su propia pausa manual (≠ C4, ver STEPs 6c/6d).
 
 **gt_closelow_v2 (v3.1.14) — bucket SEPARADO, NO participa del multi-posición intradía de
 arriba:** su propio slot (≤1 posición swing abierta a la vez), sizing 8% equity (v3.1.24), SIN
@@ -412,19 +412,7 @@ sizing 8% — revertido a pre-v3.1.19 en v3.1.24, ver header).
 
 (S1 RSI2 **RETIRADO v3.1.26** — score=−0.6 established KILLED<45, n=65, PF=0.950. Ver header.)
 
-**S4 SWP** (solo si `c4.swp < 2` Y slot swp libre):
-- Una 1-min hizo nuevo session low y dentro de ≤3 barras una sella `close > low_previo`, VERDE,
-  con vol ≥ 1.5× promedio de las 5 previas → señal. `entry = close de la barra reclaim`;
-  `sl = round(sweep_low − 0.05, 2)`; `tp = round(entry + 0.5×(entry − sl), 2)`.
-- **Stale check (gap_recovery):** si `now_ET − t_reclaim > 60 min` → log `swp_stale_abort` y SKIP. Tesis expirada — la reclaim de hace >1h no predice nada.
-- Pre-submit: `get_stock_latest_trade` **en la llamada inmediatamente anterior al place** (NO el
-  close del fetch del STEP 2, puede tener minutos) → ABORT (log `swp_abort`) si `last ≤ sl`.
-  (v3.1.21 — bug 09-16: limit colocado a 15:20 con el stop en 701.49 y fill instantáneo a 701.35,
-  POR DEBAJO de su propio stop; el OCO quedó con el stop sobre el mercado y salió a 700.21, −$12.52.)
-- `place_stock_order(QQQ, shares, buy, type="limit", limit_price=entry, tif="day")`. Vida 3 min.
-  Un limit por encima del mercado es marketable: llena al instante al precio vigente, que puede
-  estar bastante por debajo de `entry` — por eso el TP se recalcula SIEMPRE sobre el fill (STEP 7-fill).
-- Al fill → STEP 7-fill. Sin time-stop (igual que el backtest C2, TP 0.5R).
+(S4 SWP **PODADO v3.1.28** — PF=0.803 live n=18, exp_lb=−0.285, sin edge rescatable. `swp_v3`→archived. No evaluar.)
 
 (S2 FVG RETIRADO v3.1.17 — ver header. S3 VWAPPB y S6 SWP-short PODADOS v3.1.10 — breakeven en backtest de 10 años, ver header.)
 
@@ -534,14 +522,7 @@ añadir otros shorts sin backtest.**
 
 2. **Armar el OCO de ESA estrategia INMEDIATAMENTE** (antes de loggear nada; cada posición
    tiene su propio OCO con su qty — así el broker mantiene la atribución por estrategia):
-   - RSI2: tp/sl DE LA SEÑAL (`tp = entry_señal + 0.5×atr5m`, `sl = entry_señal − 1.0×atr5m`,
-     recomputados sobre `fill` si difiere >0.05 del entry de señal).
-   - SWP: `sl = sweep_low − 0.05` (el de la señal), **`tp = round(fill + 0.5×(fill − sl), 2)` —
-     SIEMPRE sobre el fill, PROHIBIDO reusar el `tp` calculado en STEP 6 con el `entry` de la
-     señal.** Check obligatorio antes del place: `|(tp − fill) − 0.5×(fill − sl)| ≤ 0.02`; si no
-     cuadra, recomputar. (v3.1.21 — bug 09-08 y 09-11: fills marketable ~$0.9 bajo el `entry`
-     dejaron el TP de la señal a 2.3-2.9R en vez de 0.5R; esos dos trades explican +$21.89 de los
-     +$15.36 totales de S4 — resultado fuera de spec, no del setup.)
+   (RSI2 **PODADO v3.1.26** — S1 retirado. SWP **PODADO v3.1.28** — S4 retirado. Este STEP 7-fill ya no aplica a sistemas intradía — solo queda para referencia histórica y por si se re-implementa un sistema con OCO.)
    ```
    place_stock_order(QQQ, qty_de_esta_estrategia, "sell", order_class="oco", type="limit",
      limit_price=TP, take_profit_limit_price=TP, stop_loss_stop_price=SL, time_in_force="day")
